@@ -27,7 +27,7 @@ The local-dev container can be started with:
 from __future__ import annotations
 
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 
 import pytest
 import pytest_asyncio
@@ -63,17 +63,19 @@ def database_url() -> str:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _apply_migrations(database_url: str) -> None:
+def _apply_migrations(database_url: str) -> Iterator[None]:
     """Apply Alembic migrations once per session.
 
     Skips the entire integration tier if the DB is unreachable; lets
     real pgvector-missing errors surface so the acceptance check
     ("refuses cleanly when pgvector is unavailable") is exercised.
+
+    Restores the pre-fixture value of ``KILN_DATABASE_URL`` (or unsets
+    it if it wasn't set) on teardown so a follow-on unit-test run in
+    the same pytest invocation can't accidentally observe the test DB.
     """
     cfg = Config("alembic.ini")
-    # The env.py honors KILN_DATABASE_URL via resolve_database_url. The
-    # api.app module imports already triggered a get_settings() at
-    # collection time, so we clear the cache after mutating the env.
+    saved = os.environ.get("KILN_DATABASE_URL")
     os.environ["KILN_DATABASE_URL"] = database_url
     get_settings.cache_clear()
     try:
@@ -84,6 +86,14 @@ def _apply_migrations(database_url: str) -> None:
             f"{database_url}. Migration failed with: {exc}",
             allow_module_level=True,
         )
+    try:
+        yield
+    finally:
+        if saved is None:
+            os.environ.pop("KILN_DATABASE_URL", None)
+        else:
+            os.environ["KILN_DATABASE_URL"] = saved
+        get_settings.cache_clear()
 
 
 @pytest_asyncio.fixture

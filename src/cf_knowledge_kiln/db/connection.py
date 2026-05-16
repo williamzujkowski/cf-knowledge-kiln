@@ -16,6 +16,7 @@ This module does **not** create the engine on import. The
 from __future__ import annotations
 
 import json
+import logging
 import os
 from typing import Any, Final
 
@@ -29,6 +30,8 @@ from sqlalchemy.ext.asyncio import (
 
 from cf_knowledge_kiln.config import Settings
 
+logger = logging.getLogger(__name__)
+
 _ASYNC_SCHEME: Final = "postgresql+asyncpg"
 
 
@@ -36,14 +39,15 @@ def _normalize_dsn(url: str) -> str:
     """Return ``url`` as ``postgresql+asyncpg://...`` regardless of input scheme.
 
     Accepts ``postgres://``, ``postgresql://``, or already-async URLs.
+    An unrecognized scheme is returned unchanged — the engine will fail
+    at connect time with a clear SQLAlchemy error, which is preferable
+    to silently guessing here.
     """
     if url.startswith(f"{_ASYNC_SCHEME}://"):
         return url
     for legacy in ("postgresql://", "postgres://"):
         if url.startswith(legacy):
             return f"{_ASYNC_SCHEME}://{url[len(legacy) :]}"
-    # Unrecognized scheme — let SQLAlchemy surface the error at engine
-    # creation time rather than guessing here.
     return url
 
 
@@ -74,8 +78,12 @@ def parse_vcap_services(vcap_json: str | None, service_name: str) -> str | None:
     """Extract an async Postgres DSN from a VCAP_SERVICES blob.
 
     Returns ``None`` if the env var is unset/empty or no binding matches
-    ``service_name``. Raises ``ValueError`` if the blob is unparseable or
-    the matched binding has malformed credentials.
+    ``service_name``. Raises ``ValueError`` if:
+
+    * the blob is unparseable,
+    * the matched binding has malformed credentials, OR
+    * more than one binding shares ``service_name`` across labels (CF
+      allows this; we refuse to guess which one the operator meant).
     """
     if not vcap_json:
         return None
@@ -85,21 +93,24 @@ def parse_vcap_services(vcap_json: str | None, service_name: str) -> str | None:
         raise ValueError(f"VCAP_SERVICES is not valid JSON: {exc}") from exc
     if not isinstance(parsed, dict):
         raise ValueError("VCAP_SERVICES must be a JSON object keyed by service label.")
+    matches: list[dict[str, Any]] = []
     for bindings in parsed.values():
         if not isinstance(bindings, list):
             continue
         for binding in bindings:
-            if not isinstance(binding, dict):
-                continue
-            if binding.get("name") != service_name:
-                continue
-            creds = binding.get("credentials")
-            if not isinstance(creds, dict):
-                raise ValueError(
-                    f"VCAP_SERVICES binding {service_name!r} is missing 'credentials'."
-                )
-            return _dsn_from_credentials(creds, service_name)
-    return None
+            if isinstance(binding, dict) and binding.get("name") == service_name:
+                matches.append(binding)
+    if not matches:
+        return None
+    if len(matches) > 1:
+        raise ValueError(
+            f"VCAP_SERVICES contains {len(matches)} bindings named {service_name!r}; "
+            f"expected exactly one. Rename or remove the duplicates."
+        )
+    creds = matches[0].get("credentials")
+    if not isinstance(creds, dict):
+        raise ValueError(f"VCAP_SERVICES binding {service_name!r} is missing 'credentials'.")
+    return _dsn_from_credentials(creds, service_name)
 
 
 def resolve_database_url(settings: Settings) -> str | None:
@@ -143,13 +154,21 @@ class Database:
         return self._sessionmaker()
 
     async def ping(self) -> bool:
-        """Return True iff a ``SELECT 1`` round-trip succeeds."""
+        """Return True iff a ``SELECT 1`` round-trip succeeds.
+
+        Failures are logged at WARNING (with traceback) so operators can
+        see misconfiguration without grepping uvicorn's stderr — but the
+        exception is *not* re-raised: ``/readyz`` reports ``failing``
+        and CF retains the route. Re-raising would 500 the probe and
+        deregister the route on the foundation.
+        """
         try:
             async with self._engine.connect() as conn:
                 await conn.execute(text("SELECT 1"))
-            return True
         except Exception:
+            logger.warning("Postgres readiness ping failed", exc_info=True)
             return False
+        return True
 
     async def dispose(self) -> None:
         """Close the underlying pool. Idempotent."""
