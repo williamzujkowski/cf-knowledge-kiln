@@ -8,38 +8,65 @@ This is the operator's guide. For architectural context, see
 
 - `cf` CLI installed and logged in to your foundation.
 - Target org and space already exist (`cf target -o <org> -s <space>`).
-- A **standard Postgres** reachable from your CF org/space. No special
-  extensions required for the MVP — [ADR-0007](./adr/0007-fts-first-embeddings-deferred.md)
-  defers embeddings (and therefore pgvector) until Phase 5.5. Any CF
-  Postgres binding works: a broker-provided service, a UPSI, a
-  BOSH-deployed Postgres, or a managed cloud DB.
+- A **pgvector-enabled** Postgres reachable from your CF org/space.
+  Per [ADR-0002](./adr/0002-postgres-pgvector.md) / [ADR-0008](./adr/0008-pgvector-mvp-critical.md),
+  kiln's MVP uses hybrid retrieval (pgvector + FTS); the bound
+  database must have `CREATE EXTENSION vector` already run against
+  it. The app does not have CREATE EXTENSION privilege at runtime,
+  by design.
 
-### Binding Postgres
+### Recommended path (homelab BOSH foundation)
+
+1. Deploy [`bosh-pgvector-release`](https://github.com/williamzujkowski/bosh-pgvector-release)
+   on the BOSH director per its
+   [#3 runbook](https://github.com/williamzujkowski/bosh-pgvector-release/issues/3).
+2. Push [`cf-local-service-broker`](https://github.com/williamzujkowski/cf-local-service-broker)
+   as a CF app, point it at the pgvector Postgres VM, register with CF.
+3. Bind kiln:
+
+   ```bash
+   cf create-service postgresql-local pgvector cf-knowledge-kiln-db
+   cf bind-service cf-knowledge-kiln-api    cf-knowledge-kiln-db
+   cf bind-service cf-knowledge-kiln-worker cf-knowledge-kiln-db
+   ```
+
+The broker creates a database AND runs `CREATE EXTENSION vector` at
+provision time. The app reads `VCAP_SERVICES` and connects.
+
+### Alternative paths
+
+Any pgvector-capable Postgres works as long as the bound database has
+the extension installed:
 
 ```bash
-# If your foundation has a Postgres broker:
-cf create-service <broker> <plan> cf-knowledge-kiln-db
+# Broker (other flavor) with a pgvector plan:
+cf create-service <broker> pgvector cf-knowledge-kiln-db
 
-# Or a user-provided service over an out-of-band Postgres:
-cf cups cf-knowledge-kiln-db -p '{"uri":"postgres://user:pass@host:5432/dbname"}'
-
-# Either way:
-cf bind-service cf-knowledge-kiln-api    cf-knowledge-kiln-db
-cf bind-service cf-knowledge-kiln-worker cf-knowledge-kiln-db
-cf services
+# User-provided service over a managed cloud Postgres (RDS / Cloud SQL /
+# Crunchy Bridge) or a container you operate yourself:
+cf cups cf-knowledge-kiln-db -p '{"uri":"postgres://USER:PASSWORD@HOST:5432/DBNAME"}'  <!-- pragma: allowlist secret -->
+# (Run `CREATE EXTENSION vector` against the database before binding.)
 ```
 
 The bound service name (`cf-knowledge-kiln-db`) must match
 `KILN_PG_SERVICE_NAME`. Change both together if you rename.
 
-### When Phase 5.5 adds embeddings
+### Local dev
 
-The Phase 9 eval harness is the gate. If the eval shows retrieval
-quality below target on your corpus, Phase 5.5 adds pgvector. At that
-point you'll need a pgvector-enabled Postgres. The companion
-[`bosh-pgvector-release`](https://github.com/williamzujkowski/bosh-pgvector-release)
-provides a BOSH release for this; any other source of pgvector
-Postgres (cloud-managed, container, etc.) works too.
+For local development and CI, use the pgvector Docker image directly:
+
+```bash
+docker run -d --name kiln-pg \
+  -e POSTGRES_PASSWORD=kiln \
+  -e POSTGRES_USER=kiln \
+  -e POSTGRES_DB=kiln \
+  -p 5432:5432 \
+  pgvector/pgvector:pg16
+
+export KILN_DATABASE_URL=postgresql+asyncpg://kiln:kiln@localhost:5432/kiln  # pragma: allowlist secret
+make migrate
+make run
+```
 
 ## Push
 

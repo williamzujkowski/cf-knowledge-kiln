@@ -8,10 +8,10 @@
 
 A reusable, forkable knowledge app for Cloud Foundry teams that need:
 
-- keyword search + rich metadata filtering across internal documentation (Postgres FTS for MVP; embeddings deferred to Phase 5.5 per [ADR-0007](./docs/adr/0007-fts-first-embeddings-deferred.md))
+- hybrid retrieval (pgvector + Postgres FTS) + rich metadata filtering across internal documentation
 - **cited** retrieval for humans (no uncited answers)
 - structured **context packs** for AI agents (bounded token budget, structured evidence, explicit uncertainty)
-- Postgres for retrieval (any standard Postgres binding; no pgvector required for MVP)
+- Postgres + pgvector for retrieval (see [ADR-0002](./docs/adr/0002-postgres-pgvector.md) / [ADR-0008](./docs/adr/0008-pgvector-mvp-critical.md))
 - OpenAPI-documented HTTP API
 - secure-by-default Cloud Foundry deployment (manifest, Procfile, health checks, service bindings)
 

@@ -25,11 +25,13 @@ Pre-implementation discovery of the surrounding repos, conducted on
 - **No pgvector-enabled BOSH Postgres release** existed publicly when
   this report was first written (May 2026). The companion
   [`bosh-pgvector-release`](https://github.com/williamzujkowski/bosh-pgvector-release)
-  was built in parallel ([PR #1](https://github.com/williamzujkowski/bosh-pgvector-release/pull/1))
-  to fill that gap as a reusable CF community pattern, but **kiln
-  does not block on it** — [ADR-0007](./adr/0007-fts-first-embeddings-deferred.md)
-  defers embeddings to Phase 5.5, so any standard Postgres binding
-  satisfies the MVP.
+  was built ([PR #1](https://github.com/williamzujkowski/bosh-pgvector-release/pull/1),
+  merged) to fill that gap. Per [ADR-0002](./adr/0002-postgres-pgvector.md)
+  (reaffirmed by [ADR-0008](./adr/0008-pgvector-mvp-critical.md)),
+  kiln's MVP requires pgvector — the BOSH release is the recommended
+  source on the homelab CF foundation. Operator deployment work is
+  tracked in [bosh-pgvector-release#3](https://github.com/williamzujkowski/bosh-pgvector-release/issues/3);
+  kiln's `cf push` blocks on that until it lands.
 - **Existing Postgres pattern in homelab-iac:** Authentik runs as a
   Podman container on `pi-a` with `container-authentik-postgres.service`.
   Mentioned for completeness; kiln's MVP only needs stock Postgres,

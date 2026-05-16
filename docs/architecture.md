@@ -21,22 +21,21 @@ own retrieval logic.
 │   src/cf_knowledge_kiln/retrieval/                         │
 │   - Query normalization                                    │
 │   - Metadata filtering                                     │
-│   - Postgres FTS (tsvector) ranking                        │
+│   - Hybrid retrieval: pgvector similarity + Postgres FTS   │
+│   - Rank fusion (reciprocal-rank / weighted)               │
 │   - Authority / freshness / status weighting               │
 │   - Conflict and stale-source detection                    │
 │   - Context-pack assembly + token budgeting                │
-│   - Embeddings deferred to Phase 5.5 — see ADR-0007        │
 └──────────────────────────┬─────────────────────────────────┘
                            │
 ┌──────────────────────────▼─────────────────────────────────┐
 │ Knowledge Index                                            │
 │   src/cf_knowledge_kiln/db/                                │
-│   - Postgres (single DB; pgvector not required for MVP)    │
-│   - documents, document_chunks, rag_queries,               │
-│     rag_feedback, ingestion_runs, data_sources,            │
-│     context_packs (7 tables)                               │
-│   - chunk_embeddings + model_registry land in Phase 5.5    │
-│     if embeddings get the green light from Phase 9 eval    │
+│   - Postgres + pgvector (single DB)                        │
+│   - documents, document_chunks, chunk_embeddings,          │
+│     rag_queries, rag_feedback, ingestion_runs,             │
+│     data_sources, model_registry, context_packs            │
+│     (9 tables; chunk_embeddings.dimensions per-row)        │
 └──────────────────────────┬─────────────────────────────────┘
                            │
 ┌──────────────────────────▼─────────────────────────────────┐
@@ -69,7 +68,9 @@ api/ ─── normalize → orchestrator
                        │
                        ├── apply metadata filters (status, authority,
                        │      owner, freshness, control_id, tags, ...)
-                       ├── Postgres FTS scoring (ts_rank_cd)
+                       ├── pgvector similarity  ──┐
+                       ├── Postgres FTS scoring  ──┤ merge (rank fusion)
+                       │                           │
                        ├── authority/freshness/status weighting
                        ├── conflict detection (same heading_path,
                        │      conflicting active sources)
@@ -82,10 +83,12 @@ api/ ─── normalize → orchestrator
                   return; audit-log the query
 ```
 
-**Why no vector step in MVP:** seven of nine ranking signals the plan
-calls out are metadata, one is FTS, one is semantic similarity. Phase 9's
-eval harness decides whether the missing semantic step is worth the
-infrastructure cost of adding pgvector. See [ADR-0007](./adr/0007-fts-first-embeddings-deferred.md).
+Hybrid retrieval is MVP per [ADR-0002](./adr/0002-postgres-pgvector.md)
+(reaffirmed by [ADR-0008](./adr/0008-pgvector-mvp-critical.md)). Bound
+Postgres must have the `vector` extension enabled — the
+cf-local-service-broker `pgvector` plan handles `CREATE EXTENSION` at
+provision time when the broker is pointed at a pgvector-capable
+backing Postgres (e.g. via [bosh-pgvector-release](https://github.com/williamzujkowski/bosh-pgvector-release)).
 
 ## Anti-patterns we are deliberately avoiding
 
@@ -99,8 +102,7 @@ These are inherited from the plan and enforced by review:
 - Treating draft/deprecated docs the same as approved docs in default retrieval.
 - Indexing everything; no source allowlist.
 - Returning uncited answers.
-- **Adding embeddings before evidence shows we need them** (ADR-0007).
-- Assuming one embedding dimension forever (when embeddings are eventually added, dimensions are per-row).
+- Assuming one embedding dimension forever (dimensions are per-row in `chunk_embeddings`).
 - Assuming one model provider forever.
 - Making humans and agents consume the same response shape.
 
@@ -114,7 +116,7 @@ These are inherited from the plan and enforced by review:
 | `src/cf_knowledge_kiln/config/settings.py`        | Pydantic settings (env-first)                          |
 | `src/cf_knowledge_kiln/retrieval/`                | Empty in Phase 1; Phase 5 lands implementation         |
 | `src/cf_knowledge_kiln/ingestion/`                | Empty in Phase 1; Phase 3 lands implementation         |
-| `src/cf_knowledge_kiln/db/`                       | Empty in Phase 1; Phase 2 lands core schema (7 tables, no embeddings) |
+| `src/cf_knowledge_kiln/db/`                       | Empty in Phase 1; Phase 2 lands the 9-table schema + `CREATE EXTENSION vector` |
 | `openapi/openapi.yaml`                            | Hand-authored OpenAPI 3.1 contract                     |
 | `manifest.yml`, `Procfile`, `scripts/start-*.sh`  | Cloud Foundry deployment                               |
 | `config/*.example.yaml`                           | Model / source / security config templates             |

@@ -4,20 +4,25 @@
 # Two apps: a request-serving API and an ingestion worker. The worker
 # has no route — it pulls work from a queue / cron, not from HTTP.
 #
-# Bind any standard Postgres service before pushing. The MVP uses
-# Postgres FTS only — no pgvector required (ADR-0007). Examples:
+# Bind a pgvector-enabled Postgres service before pushing. The MVP
+# uses hybrid retrieval (vector + FTS) per ADR-0002/0008, so the bound
+# database must have the `vector` extension installed.
 #
-#   # Via a Postgres broker your foundation exposes:
-#   cf create-service <broker> <plan> cf-knowledge-kiln-db
+# Recommended path on the homelab BOSH foundation:
 #
-#   # Or via a user-provided service:
-#   cf cups cf-knowledge-kiln-db -p '{"uri":"postgres://user:pass@host:5432/db"}'
+#   cf create-service postgresql-local pgvector cf-knowledge-kiln-db
 #
-#   cf bind-service cf-knowledge-kiln-api    cf-knowledge-kiln-db
-#   cf bind-service cf-knowledge-kiln-worker cf-knowledge-kiln-db
+# This uses the cf-local-service-broker pgvector plan against a
+# Postgres VM deployed via bosh-pgvector-release. The broker creates
+# the database AND runs CREATE EXTENSION vector at provision time.
 #
-# Phase 5.5 may add pgvector; if it does, the companion
-# bosh-pgvector-release provides the BOSH path for that.
+# Deploy gate: blocked on bosh-pgvector-release#3 — the BOSH director
+# must have a pgvector-enabled Postgres deployed and registered as a
+# CF service before `cf push -f manifest.yml` succeeds end-to-end on
+# the homelab foundation.
+#
+# Local dev and CI work against any pgvector-capable Postgres (e.g.
+# `docker run pgvector/pgvector:pg16`).
 #
 # Customize ROUTE_DOMAIN / org-specific values before pushing.
 

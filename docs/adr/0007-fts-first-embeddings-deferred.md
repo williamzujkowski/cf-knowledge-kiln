@@ -1,12 +1,21 @@
 ---
 id: ADR-0007
 title: Hybrid retrieval starts with BM25 + metadata; embeddings deferred to a Phase 5.5 decision
-status: accepted
+status: superseded
 date: 2026-05-16
 deciders: william
 supersedes: ADR-0002
-superseded_by: null
+superseded_by: ADR-0008
 ---
+
+> **Superseded by [ADR-0008](./0008-pgvector-mvp-critical.md)** on the
+> same day. Owner clarified that kiln is intended to ship as a
+> pgvector-backed RAG CF app from MVP, not as a metadata-and-FTS app
+> that adds vectors later. The BOSH release ([bosh-pgvector-release](https://github.com/williamzujkowski/bosh-pgvector-release))
+> also shipped today, dropping pgvector deployment cost from
+> "multi-week packaging" to "operator runbook". ADR-0002 is the active
+> retrieval-store decision again. The reasoning below is preserved
+> as a record of the temporarily-considered alternative.
 
 ## Context
 

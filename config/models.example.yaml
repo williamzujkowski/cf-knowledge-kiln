@@ -11,27 +11,24 @@
 # DeepSeek, BAAI/BGE). See docs/model-providers.md for the rationale
 # and the active allowlist.
 #
-# MVP scope (ADR-0007): retrieval is FTS-only. The embedding section
-# below is staged for Phase 5.5 — present in the schema so adding it
-# later is a config change, but `enabled: false` until the Phase 9 eval
-# triggers the embeddings decision.
+# MVP scope (ADR-0002, reaffirmed by ADR-0008): hybrid retrieval over
+# Postgres + pgvector. The embedding model below is MVP-active.
 
 models:
   embedding:
     provider: local                       # local | openai-compatible
     name: nomic-embed-text-v1.5
     dimensions: 768
-    enabled: false                        # Phase 5.5+ — see ADR-0007
+    enabled: true
     notes: |
       Apache 2.0 license. US-origin. Subject to provenance/license
-      review per ADR-0005. Stays disabled until Phase 9 eval surfaces
-      a quality gap that embeddings would close.
+      review per ADR-0005.
 
   generator:
     provider: openai-compatible           # local | openai-compatible
     name: phi-4-mini-instruct
     base_url_env: KILN_GENERATOR_BASE_URL
-    api_key_env: KILN_GENERATOR_API_KEY
+    api_key_env: KILN_GENERATOR_API_KEY  # pragma: allowlist secret
     enabled: false                        # Phase 5+ /v1/answer
     default_temperature: 0
     notes: |
