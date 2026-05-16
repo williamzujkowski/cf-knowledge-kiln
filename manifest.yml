@@ -36,7 +36,10 @@ applications:
     env:
       KILN_ENV: production
       KILN_LOG_LEVEL: INFO
-      KILN_AUTH_MODE: bearer
+      # KILN_AUTH_MODE intentionally unset — auth middleware lands in
+      # Phase 8 (epic #7). Setting `bearer` here today would lie:
+      # nothing in src/cf_knowledge_kiln/api/ reads it yet. Until the
+      # middleware lands, deploy with care behind a trusted route.
       PYTHONUNBUFFERED: "1"
     services:
       - cf-knowledge-kiln-db

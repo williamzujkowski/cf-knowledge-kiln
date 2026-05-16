@@ -23,7 +23,10 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_serve = sub.add_parser("serve", help="Start the API server")
-    p_serve.add_argument("--host", default="0.0.0.0", help="Bind host")  # noqa: S104
+    # Local default is loopback only. CF's start-api.sh binds 0.0.0.0
+    # explicitly. Defaulting to 0.0.0.0 here would expose dev laptops
+    # to the LAN unintentionally.
+    p_serve.add_argument("--host", default="127.0.0.1", help="Bind host (use 0.0.0.0 to expose)")
     p_serve.add_argument("--port", type=int, default=None, help="Bind port (overrides settings)")
     p_serve.add_argument("--reload", action="store_true", help="Auto-reload (dev only)")
 

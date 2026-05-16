@@ -47,6 +47,12 @@ jobs:
       - name: OpenAPI lint
         run: python scripts/lint_openapi.py openapi/openapi.yaml
 
+      - name: Security — bandit
+        run: bandit -c pyproject.toml -q -r src
+
+      - name: Security — pip-audit
+        run: pip-audit --strict --skip-editable
+
   secrets-scan:
     name: gitleaks
     runs-on: ubuntu-latest
