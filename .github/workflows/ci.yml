@@ -51,7 +51,10 @@ jobs:
         run: bandit -c pyproject.toml -q -r src
 
       - name: Security — pip-audit
-        run: pip-audit --strict --skip-editable
+        # --strict refuses to tolerate editable installs even with
+        # --skip-editable; we run without strict so our own editable
+        # package is silently skipped while every other dep is audited.
+        run: pip-audit --skip-editable
 
   secrets-scan:
     name: gitleaks
