@@ -2,7 +2,7 @@
 
 > Cloud Foundry-ready RAG knowledge substrate. Hybrid search over your internal docs, cited answers for humans, bounded context packs for agents.
 
-**Status:** Phase 1 skeleton. Not yet production-ready. See [plans/cf-rag-plan.md](./plans/cf-rag-plan.md) for the full implementation plan and [docs/INDEX.md](./docs/INDEX.md) for documentation entry points.
+**Status:** Phase 1 skeleton. Not yet production-ready. See [HANDOFF.md](./HANDOFF.md) for the current state of the work and the next concrete chunk to pick up, [plans/cf-rag-plan.md](./plans/cf-rag-plan.md) for the full implementation plan, and [docs/INDEX.md](./docs/INDEX.md) for documentation entry points.
 
 ## What this is
 

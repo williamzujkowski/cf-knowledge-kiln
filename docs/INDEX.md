@@ -5,6 +5,7 @@ This is the starting point for all cf-knowledge-kiln documentation.
 ## Read-first
 
 - [README.md](../README.md) — what this is and how to start.
+- [HANDOFF.md](../HANDOFF.md) — current state, next chunk of work, key decisions, traps to avoid.
 - [AGENTS.md](../AGENTS.md) — instructions for AI coding agents (also linked as `CLAUDE.md`).
 - [SECURITY.md](../SECURITY.md) — security policy and threat-model summary.
 
