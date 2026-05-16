@@ -10,16 +10,22 @@
 # Provenance note: the MVP avoids China-origin model families (Qwen,
 # DeepSeek, BAAI/BGE). See docs/model-providers.md for the rationale
 # and the active allowlist.
+#
+# MVP scope (ADR-0007): retrieval is FTS-only. The embedding section
+# below is staged for Phase 5.5 — present in the schema so adding it
+# later is a config change, but `enabled: false` until the Phase 9 eval
+# triggers the embeddings decision.
 
 models:
   embedding:
     provider: local                       # local | openai-compatible
     name: nomic-embed-text-v1.5
     dimensions: 768
-    enabled: true
+    enabled: false                        # Phase 5.5+ — see ADR-0007
     notes: |
       Apache 2.0 license. US-origin. Subject to provenance/license
-      review per ADR-0005.
+      review per ADR-0005. Stays disabled until Phase 9 eval surfaces
+      a quality gap that embeddings would close.
 
   generator:
     provider: openai-compatible           # local | openai-compatible
@@ -30,7 +36,9 @@ models:
     default_temperature: 0
     notes: |
       Phi-4-mini-instruct (Microsoft). Disabled in MVP until Phase 5
-      lands the /v1/answer synthesis endpoint.
+      lands the /v1/answer synthesis endpoint. Could double as a
+      cross-encoder reranker if Phase 5.5 explores that path before
+      committing to embeddings.
 
 providers:
   openai_compatible:

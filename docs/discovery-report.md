@@ -21,15 +21,18 @@ Pre-implementation discovery of the surrounding repos, conducted on
   kind, so the broker is not in the deployment path for this app.
   PR [cf-local-service-broker#2](https://github.com/williamzujkowski/cf-local-service-broker/pull/2)
   added a pgvector plan there for kind-cluster consumers; it stays
-  open but is not load-bearing for Phase 2.
-- **No pgvector-enabled BOSH Postgres release** exists publicly as of
-  May 2026 (canonical `cloudfoundry/postgres-release` lacks it; the
-  docker-based community release is archived). Decision tracked in
-  [#35](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/35).
+  open but is not load-bearing for kiln.
+- **No pgvector-enabled BOSH Postgres release** existed publicly when
+  this report was first written (May 2026). The companion
+  [`bosh-pgvector-release`](https://github.com/williamzujkowski/bosh-pgvector-release)
+  is being built in parallel to fill that gap, but **kiln does not
+  block on it** — [ADR-0007](./adr/0007-fts-first-embeddings-deferred.md)
+  defers embeddings to Phase 5.5, so any standard Postgres binding
+  satisfies the MVP.
 - **Existing Postgres pattern in homelab-iac:** Authentik runs as a
   Podman container on `pi-a` with `container-authentik-postgres.service`.
-  This is a viable pattern to mirror if we go the user-provided-service
-  route for kiln's Postgres.
+  Mentioned for completeness; kiln's MVP only needs stock Postgres,
+  which any of the existing BOSH/Podman/managed options satisfies.
 
 ## Cloud Foundry patterns found
 

@@ -4,20 +4,20 @@
 # Two apps: a request-serving API and an ingestion worker. The worker
 # has no route — it pulls work from a queue / cron, not from HTTP.
 #
-# Bind a pgvector-enabled Postgres service before pushing. The exact
-# command depends on how your Cloud Foundry exposes Postgres:
+# Bind any standard Postgres service before pushing. The MVP uses
+# Postgres FTS only — no pgvector required (ADR-0007). Examples:
 #
-#   # If you have a Postgres broker with a pgvector plan:
-#   cf create-service <broker> pgvector cf-knowledge-kiln-db
+#   # Via a Postgres broker your foundation exposes:
+#   cf create-service <broker> <plan> cf-knowledge-kiln-db
 #
-#   # If you have a standalone pgvector Postgres and no broker (UPSI):
+#   # Or via a user-provided service:
 #   cf cups cf-knowledge-kiln-db -p '{"uri":"postgres://user:pass@host:5432/db"}'
 #
 #   cf bind-service cf-knowledge-kiln-api    cf-knowledge-kiln-db
 #   cf bind-service cf-knowledge-kiln-worker cf-knowledge-kiln-db
 #
-# The infra decision for the homelab BOSH-deployed CF is tracked in
-# cf-knowledge-kiln issue #35.
+# Phase 5.5 may add pgvector; if it does, the companion
+# bosh-pgvector-release provides the BOSH path for that.
 #
 # Customize ROUTE_DOMAIN / org-specific values before pushing.
 

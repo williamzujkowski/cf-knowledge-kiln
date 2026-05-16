@@ -1,10 +1,18 @@
 ---
 id: ADR-0002
 title: Postgres + pgvector as the vector store
-status: accepted
+status: superseded
 date: 2026-05-16
 deciders: william
+superseded_by: ADR-0007
 ---
+
+> **Superseded by [ADR-0007](./0007-fts-first-embeddings-deferred.md)** (2026-05-16).
+> The MVP ships with Postgres FTS + metadata only; embeddings are
+> deferred to a Phase 5.5 decision gated on the Phase 9 eval harness.
+> The reasoning below remains valid as the *eventual* architecture if
+> Phase 5.5 picks embeddings; ADR-0007 explains why we don't commit
+> now.
 
 ## Context
 

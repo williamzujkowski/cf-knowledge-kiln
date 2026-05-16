@@ -21,19 +21,22 @@ own retrieval logic.
 │   src/cf_knowledge_kiln/retrieval/                         │
 │   - Query normalization                                    │
 │   - Metadata filtering                                     │
-│   - Hybrid retrieval (vector + FTS) + merge                │
-│   - Ranking + authority/freshness weighting                │
+│   - Postgres FTS (tsvector) ranking                        │
+│   - Authority / freshness / status weighting               │
 │   - Conflict and stale-source detection                    │
 │   - Context-pack assembly + token budgeting                │
+│   - Embeddings deferred to Phase 5.5 — see ADR-0007        │
 └──────────────────────────┬─────────────────────────────────┘
                            │
 ┌──────────────────────────▼─────────────────────────────────┐
 │ Knowledge Index                                            │
 │   src/cf_knowledge_kiln/db/                                │
-│   - Postgres + pgvector (single DB)                        │
-│   - documents, document_chunks, chunk_embeddings,          │
-│     rag_queries, rag_feedback, ingestion_runs,             │
-│     data_sources, model_registry, context_packs            │
+│   - Postgres (single DB; pgvector not required for MVP)    │
+│   - documents, document_chunks, rag_queries,               │
+│     rag_feedback, ingestion_runs, data_sources,            │
+│     context_packs (7 tables)                               │
+│   - chunk_embeddings + model_registry land in Phase 5.5    │
+│     if embeddings get the green light from Phase 9 eval    │
 └──────────────────────────┬─────────────────────────────────┘
                            │
 ┌──────────────────────────▼─────────────────────────────────┐
@@ -64,12 +67,12 @@ client request
   ▼
 api/ ─── normalize → orchestrator
                        │
-                       ├── apply metadata filters
-                       ├── vector search    ──┐
-                       ├── FTS search       ──┤ merge + rank
-                       │                      │
-                       ├── authority/freshness weighting
-                       ├── conflict detection
+                       ├── apply metadata filters (status, authority,
+                       │      owner, freshness, control_id, tags, ...)
+                       ├── Postgres FTS scoring (ts_rank_cd)
+                       ├── authority/freshness/status weighting
+                       ├── conflict detection (same heading_path,
+                       │      conflicting active sources)
                        ├── token budgeting (agent only)
                        │
                        ▼
@@ -78,6 +81,11 @@ api/ ─── normalize → orchestrator
                        ▼
                   return; audit-log the query
 ```
+
+**Why no vector step in MVP:** seven of nine ranking signals the plan
+calls out are metadata, one is FTS, one is semantic similarity. Phase 9's
+eval harness decides whether the missing semantic step is worth the
+infrastructure cost of adding pgvector. See [ADR-0007](./adr/0007-fts-first-embeddings-deferred.md).
 
 ## Anti-patterns we are deliberately avoiding
 
@@ -91,8 +99,8 @@ These are inherited from the plan and enforced by review:
 - Treating draft/deprecated docs the same as approved docs in default retrieval.
 - Indexing everything; no source allowlist.
 - Returning uncited answers.
-- Relying on vector search alone.
-- Assuming one embedding dimension forever.
+- **Adding embeddings before evidence shows we need them** (ADR-0007).
+- Assuming one embedding dimension forever (when embeddings are eventually added, dimensions are per-row).
 - Assuming one model provider forever.
 - Making humans and agents consume the same response shape.
 
@@ -106,7 +114,7 @@ These are inherited from the plan and enforced by review:
 | `src/cf_knowledge_kiln/config/settings.py`        | Pydantic settings (env-first)                          |
 | `src/cf_knowledge_kiln/retrieval/`                | Empty in Phase 1; Phase 5 lands implementation         |
 | `src/cf_knowledge_kiln/ingestion/`                | Empty in Phase 1; Phase 3 lands implementation         |
-| `src/cf_knowledge_kiln/db/`                       | Empty in Phase 1; Phase 2 lands implementation         |
+| `src/cf_knowledge_kiln/db/`                       | Empty in Phase 1; Phase 2 lands core schema (7 tables, no embeddings) |
 | `openapi/openapi.yaml`                            | Hand-authored OpenAPI 3.1 contract                     |
 | `manifest.yml`, `Procfile`, `scripts/start-*.sh`  | Cloud Foundry deployment                               |
 | `config/*.example.yaml`                           | Model / source / security config templates             |

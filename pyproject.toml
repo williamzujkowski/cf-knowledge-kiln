@@ -36,6 +36,10 @@ db = [
   "asyncpg>=0.30,<1.0",
   "sqlalchemy>=2.0,<3.0",
   "alembic>=1.13,<2.0",
+]
+# Added only if Phase 5.5 picks embeddings (ADR-0007). Decoupled from
+# the `db` extra so the MVP install footprint stays minimal.
+embeddings = [
   "pgvector>=0.3,<1.0",
 ]
 ingestion = [

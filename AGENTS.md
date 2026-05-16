@@ -82,10 +82,10 @@ Four-layer separation. **Do not** let the UI, agent API, or ingestion layer own 
 
 ```text
 Experience  → src/cf_knowledge_kiln/api/          (FastAPI routes; human + agent shapes)
-Retrieval   → src/cf_knowledge_kiln/retrieval/    (hybrid search, ranking, context packs)
-Index       → src/cf_knowledge_kiln/db/           (asyncpg + pgvector + Alembic)
-Ingestion   → src/cf_knowledge_kiln/ingestion/    (sources, chunking, embedding)
-Config      → src/cf_knowledge_kiln/config/       (settings, model registry, source registry)
+Retrieval   → src/cf_knowledge_kiln/retrieval/    (FTS + metadata ranking; embeddings deferred — ADR-0007)
+Index       → src/cf_knowledge_kiln/db/           (asyncpg + Alembic; pgvector only if Phase 5.5 adds it)
+Ingestion   → src/cf_knowledge_kiln/ingestion/    (sources, chunking; embedding generation is Phase 5.5+)
+Config      → src/cf_knowledge_kiln/config/       (settings, source registry; model registry only when embeddings land)
 ```
 
 Two response shapes, one retrieval engine:

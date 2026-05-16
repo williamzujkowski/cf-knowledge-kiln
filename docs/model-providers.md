@@ -8,7 +8,7 @@ for the architectural rationale.
 
 | Role        | Name                              | Provider/Origin    | License                      | Status (MVP) |
 | ----------- | --------------------------------- | ------------------ | ---------------------------- | ------------ |
-| Embedding   | `nomic-embed-text-v1.5`           | Nomic AI (US)      | Apache 2.0                   | Active       |
+| Embedding   | `nomic-embed-text-v1.5`           | Nomic AI (US)      | Apache 2.0                   | Disabled until Phase 5.5 (per [ADR-0007](./adr/0007-fts-first-embeddings-deferred.md)) |
 | Generator   | `microsoft/Phi-4-mini-instruct`   | Microsoft (US)     | Microsoft Research License   | Disabled until Phase 5 lands `/v1/answer` |
 
 ## Possible additions, subject to provenance review

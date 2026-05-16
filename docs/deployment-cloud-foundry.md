@@ -8,42 +8,22 @@ This is the operator's guide. For architectural context, see
 
 - `cf` CLI installed and logged in to your foundation.
 - Target org and space already exist (`cf target -o <org> -s <space>`).
-- A **pgvector-enabled** Postgres reachable from your CF org/space.
-  Phase 2's migrations require `CREATE EXTENSION IF NOT EXISTS vector`
-  to have already succeeded against the bound database — the app does
-  not have CREATE EXTENSION privilege at runtime, by design.
+- A **standard Postgres** reachable from your CF org/space. No special
+  extensions required for the MVP — [ADR-0007](./adr/0007-fts-first-embeddings-deferred.md)
+  defers embeddings (and therefore pgvector) until Phase 5.5. Any CF
+  Postgres binding works: a broker-provided service, a UPSI, a
+  BOSH-deployed Postgres, or a managed cloud DB.
 
-### Picking a Postgres path
-
-Two flavors, depending on what your foundation already exposes:
-
-1. **Postgres service broker with a pgvector plan.** Whoever runs the
-   broker is responsible for `CREATE EXTENSION vector` at provision
-   time. You bind normally:
-
-   ```bash
-   cf create-service <broker> pgvector cf-knowledge-kiln-db
-   ```
-
-2. **User-provided service over a standalone pgvector Postgres.** You
-   point CF at an out-of-band-managed database (BOSH-deployed VM,
-   Incus/Podman container on a Pi, managed cloud DB, etc.):
-
-   ```bash
-   cf cups cf-knowledge-kiln-db -p '{"uri":"postgres://user:pass@host:5432/dbname"}'
-   ```
-
-   You're on the hook for installing pgvector on that Postgres before
-   binding.
-
-For the homelab BOSH-deployed CF specifically, there is no off-the-shelf
-pgvector-enabled BOSH Postgres release as of 2026-05; the infra decision
-is tracked in [issue #35](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/35).
-
-## One-time setup
+### Binding Postgres
 
 ```bash
-# Pick one of the two paths above, then:
+# If your foundation has a Postgres broker:
+cf create-service <broker> <plan> cf-knowledge-kiln-db
+
+# Or a user-provided service over an out-of-band Postgres:
+cf cups cf-knowledge-kiln-db -p '{"uri":"postgres://user:pass@host:5432/dbname"}'
+
+# Either way:
 cf bind-service cf-knowledge-kiln-api    cf-knowledge-kiln-db
 cf bind-service cf-knowledge-kiln-worker cf-knowledge-kiln-db
 cf services
@@ -51,6 +31,15 @@ cf services
 
 The bound service name (`cf-knowledge-kiln-db`) must match
 `KILN_PG_SERVICE_NAME`. Change both together if you rename.
+
+### When Phase 5.5 adds embeddings
+
+The Phase 9 eval harness is the gate. If the eval shows retrieval
+quality below target on your corpus, Phase 5.5 adds pgvector. At that
+point you'll need a pgvector-enabled Postgres. The companion
+[`bosh-pgvector-release`](https://github.com/williamzujkowski/bosh-pgvector-release)
+provides a BOSH release for this; any other source of pgvector
+Postgres (cloud-managed, container, etc.) works too.
 
 ## Push
 
