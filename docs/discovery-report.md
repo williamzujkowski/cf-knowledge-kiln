@@ -25,8 +25,9 @@ Pre-implementation discovery of the surrounding repos, conducted on
 - **No pgvector-enabled BOSH Postgres release** existed publicly when
   this report was first written (May 2026). The companion
   [`bosh-pgvector-release`](https://github.com/williamzujkowski/bosh-pgvector-release)
-  is being built in parallel to fill that gap, but **kiln does not
-  block on it** — [ADR-0007](./adr/0007-fts-first-embeddings-deferred.md)
+  was built in parallel ([PR #1](https://github.com/williamzujkowski/bosh-pgvector-release/pull/1))
+  to fill that gap as a reusable CF community pattern, but **kiln
+  does not block on it** — [ADR-0007](./adr/0007-fts-first-embeddings-deferred.md)
   defers embeddings to Phase 5.5, so any standard Postgres binding
   satisfies the MVP.
 - **Existing Postgres pattern in homelab-iac:** Authentik runs as a

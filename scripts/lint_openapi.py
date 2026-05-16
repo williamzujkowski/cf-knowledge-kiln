@@ -61,7 +61,16 @@ def main(argv: list[str]) -> int:
         for method, op in ops.items():
             if method in {"$ref", "summary", "description", "parameters", "servers"}:
                 continue
-            if method.lower() not in {"get", "post", "put", "patch", "delete", "head", "options", "trace"}:
+            if method.lower() not in {
+                "get",
+                "post",
+                "put",
+                "patch",
+                "delete",
+                "head",
+                "options",
+                "trace",
+            }:
                 fail(f"unknown HTTP method {method!r} on path {route!r}")
             if not isinstance(op, dict):
                 fail(f"operation {method.upper()} {route} must be an object")

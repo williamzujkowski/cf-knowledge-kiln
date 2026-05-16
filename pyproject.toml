@@ -146,3 +146,13 @@ exclude_lines = [
   "if TYPE_CHECKING:",
   "raise NotImplementedError",
 ]
+
+# ─── bandit ──────────────────────────────────────────────────────────
+[tool.bandit]
+# Bandit B101 (assert_used) is fine in tests; the per-file ruff config
+# already exempts them. Other quality-of-life skips:
+skips = [
+  "B101",  # assert_used — tests legitimately use asserts
+  "B104",  # hardcoded_bind_all_interfaces — cli/serve uses 0.0.0.0 by design
+]
+exclude_dirs = ["tests", ".venv", "build", "dist"]

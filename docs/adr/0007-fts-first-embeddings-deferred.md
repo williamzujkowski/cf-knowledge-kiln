@@ -71,11 +71,16 @@ evidence. No public-API breakage.
 
 A separate repository,
 [`bosh-pgvector-release`](https://github.com/williamzujkowski/bosh-pgvector-release),
-is being built in parallel as a reusable BOSH release for any CF team
-that needs pgvector. It is **not a dependency of this app's MVP**. It
-will become the deployment path for Phase 5.5 if/when embeddings get
-the green light from the eval harness. Until then, the two repos are
-fully decoupled.
+exists in parallel as a reusable BOSH release for any CF team that
+needs pgvector. As of [PR #1](https://github.com/williamzujkowski/bosh-pgvector-release/pull/1)
+(2026-05-16) it produces a buildable 93 MB release tarball with
+pgvector compiled against the bundled postgres-15, postgres-16, and
+postgres-17 packages, ready for `bosh upload-release`. It is **not a
+dependency of this app's MVP**. It will become the deployment path
+for Phase 5.5 if/when embeddings get the green light from the eval
+harness. Until then, the two repos are fully decoupled — kiln ships
+on stock CF Postgres, and the BOSH release stands on its own merit
+for the community.
 
 ## Consequences
 
