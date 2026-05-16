@@ -23,6 +23,13 @@ def _clear_settings_cache() -> Iterator[None]:
 
 
 @pytest.fixture
-def client() -> TestClient:
-    """A fresh TestClient bound to a fresh app."""
-    return TestClient(create_app())
+def client() -> Iterator[TestClient]:
+    """A fresh TestClient bound to a fresh app.
+
+    Uses ``with`` so the FastAPI lifespan (DB engine startup / shutdown)
+    actually runs. Tests that need a configured DB should set
+    ``KILN_DATABASE_URL`` via ``monkeypatch.setenv`` before requesting
+    this fixture.
+    """
+    with TestClient(create_app()) as c:
+        yield c

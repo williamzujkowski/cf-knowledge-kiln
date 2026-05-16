@@ -1,7 +1,7 @@
 # Handoff notes
 
 **As of:** 2026-05-16
-**Status:** Phase 0 + Phase 1 complete; Phase 2 ready to start. CI green on `main`.
+**Status:** Phase 0–2 complete; Phase 3 (ingestion) ready to start. CI green on `main`.
 
 This file is the "where we are, what's next, what's been decided" briefing. For *how* to work in the repo, read [AGENTS.md](./AGENTS.md). For *what* the project is, read [README.md](./README.md). For *the plan*, read [plans/cf-rag-plan.md](./plans/cf-rag-plan.md).
 
@@ -11,9 +11,9 @@ This file is the "where we are, what's next, what's been decided" briefing. For 
 
 cf-knowledge-kiln is a Cloud Foundry RAG knowledge app — a `cf push`'d Python/FastAPI app that binds to a Postgres + pgvector service and serves cited retrieval to humans (search UI) and AI agents (bounded context packs). Architecture is hybrid retrieval (pgvector similarity + Postgres FTS + metadata ranking) per [ADR-0002](./docs/adr/0002-postgres-pgvector.md) (reaffirmed by [ADR-0008](./docs/adr/0008-pgvector-mvp-critical.md)).
 
-Phase 1 scaffold landed today: FastAPI skeleton with `/healthz`/`/readyz`/`/version`, settings loader, OpenAPI 3.1 contract, CF manifest + Procfile + start scripts, 24-hook pre-commit, GitHub Actions CI, ADRs 0001–0005 + 0007 (superseded) + 0008. Eleven unit tests pass; CI green.
+Phase 2 (database) landed: asyncpg pool with `VCAP_SERVICES` parsing, `/readyz` Postgres ping, Alembic initial migration covering all 9 plan tables + pgvector + FTS GIN + HNSW partial index, SQLAlchemy 2.x ORM models, 9 thin repositories. CI now runs a pgvector-backed integration tier. 30 unit + 23 integration tests green.
 
-Next concrete chunk of work: Phase 2 (database). Three child issues, do them in order: [#10](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/10) → [#11](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/11) → [#12](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/12).
+Next concrete chunk of work: Phase 3 (ingestion). Epic [#2](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/2). Local-dev path is unblocked; the CF deploy gate still depends on [bosh-pgvector-release#3](https://github.com/williamzujkowski/bosh-pgvector-release/issues/3) (operator runbook).
 
 ---
 
@@ -39,7 +39,7 @@ Local dev and CI sidestep all of this with `docker run pgvector/pgvector:pg16`.
 
 ---
 
-## What's done (Phase 0 + Phase 1)
+## What's done (Phase 0 + Phase 1 + Phase 2)
 
 ### Phase 0 — Discovery
 
@@ -60,17 +60,33 @@ Local dev and CI sidestep all of this with `docker run pgvector/pgvector:pg16`.
 - `AGENTS.md` (canonical) + `CLAUDE.md` symlink mirroring homelab-iac.
 - Plan copied to `plans/cf-rag-plan.md` for in-repo reference.
 
+### Phase 2 — Database
+
+- **Connection layer** (`src/cf_knowledge_kiln/db/connection.py`) — asyncpg-backed SQLAlchemy async engine, `parse_vcap_services()` for CF bindings, `resolve_database_url()` with explicit-setting > VCAP precedence, `Database` class with `ping()`/`session()`/`dispose()`. Lifespan wiring in `api/app.py` starts/stops the pool around the FastAPI app.
+- **`/readyz` Postgres check** — reports `{checks: {postgres: ok|failing}, status: ready|degraded}`. Verified live against direct URL **and** synthetic `VCAP_SERVICES` against a local `pgvector/pgvector:pg16` container.
+- **Alembic initial migration** (`alembic/versions/0001_initial_schema.py`) — `CREATE EXTENSION IF NOT EXISTS vector`, all 9 plan tables (`data_sources`, `model_registry`, `documents`, `ingestion_runs`, `document_chunks`, `chunk_embeddings`, `rag_queries`, `rag_feedback`, `context_packs`), FTS GIN on `document_chunks.content`, HNSW partial index on `chunk_embeddings.embedding::vector(768)` for the default model dimension. Reversible `downgrade()`. Refuses cleanly against a non-pgvector Postgres (verified: *"extension 'vector' is not available"*).
+- **`vector` column policy** — unconstrained `vector` type so multiple embedding models can coexist; queries filter on `dimensions = N` and cast. Additional partial HNSW indexes per registered model dimension are added in follow-up migrations.
+- **SQLAlchemy 2.x ORM models** (`db/models.py`) — typed `DeclarativeBase` mirroring the migration; `pgvector.sqlalchemy.Vector` for the embedding column.
+- **9 thin repositories** under `db/repositories/` — `catalog.py`, `documents.py`, `operations.py`, `_base.py`. Each repo exposes `create` / `get` / `list(filters...)` / `delete`. Sessions are owned by the caller for transaction composition.
+- **CI integration tier** — new `integration` job in `.github/workflows/ci.yml` provisions `pgvector/pgvector:pg16` as a service container and runs `pytest tests/integration`.
+- **Tests** — 30 unit + 23 integration green. Integration tests cover migration schema + a document/chunk/embedding round-trip + per-repo CRUD.
+
 ---
 
 ## What's next (in order)
 
-### Immediate (Phase 2 — Database)
+### Immediate (Phase 3 — Ingestion)
 
-1. **[#10](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/10)** — asyncpg connection pool + `VCAP_SERVICES` parsing. Local dev reads `KILN_DATABASE_URL`; CF reads the bound service named by `KILN_PG_SERVICE_NAME`. Light up `/readyz` to ping the DB.
-2. **[#11](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/11)** — Alembic migrations for the 9 plan-defined tables (`data_sources`, `documents`, `document_chunks`, `chunk_embeddings`, `rag_queries`, `rag_feedback`, `ingestion_runs`, `model_registry`, `context_packs`) + `CREATE EXTENSION IF NOT EXISTS vector` + FTS GIN index + pgvector ANN index.
-3. **[#12](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/12)** — Repository layer + integration tests against a real pgvector Postgres (in CI via a service container).
+Epic [#2](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/2). Scope per the plan:
 
-These three can land independently against local-dev pgvector. They do **not** block on the BOSH operator runbook.
+- git/local file source connector against allowlisted sources in `config/sources.yaml`.
+- Markdown parser with frontmatter extraction (python-frontmatter + mistune).
+- Structure-aware chunking (H2/H3, preserve tables/code/lists, 300–800 token targets).
+- Content hashing so re-ingestion is a no-op when content is unchanged.
+- `ingestion_runs` tracking + the maintainer ingestion summary (files scanned, indexed, skipped with reasons; chunks created/updated/unchanged; warnings; errors; duration).
+- Tests with fixture docs.
+
+This is unblocked by Phase 2: the `data_sources`, `documents`, `document_chunks`, and `ingestion_runs` tables + their repositories are ready.
 
 ### Parallel (operator track)
 
@@ -116,30 +132,28 @@ The ADR-0007 file is preserved on disk as a historical record of the temporarily
 
 ---
 
-## How to start working (Phase 2)
+## How to start working (Phase 3)
 
 ```bash
 cd /home/william/git/cf-knowledge-kiln
 git pull origin main
-git checkout -b feat/10-pg-connection-pool
+git checkout -b feat/phase-3-ingestion
 
-# Local dev with pgvector
-docker run -d --name kiln-pg \
-  -e POSTGRES_PASSWORD=kiln \
-  -e POSTGRES_USER=kiln \
-  -e POSTGRES_DB=kiln \
-  -p 5432:5432 \
-  pgvector/pgvector:pg16
+# Local dev with pgvector (already created in Phase 2; re-start if stopped)
+docker start kiln-pg
 export KILN_DATABASE_URL=postgresql+asyncpg://kiln:kiln@localhost:5432/kiln  # pragma: allowlist secret
 
-# Install with the new db extra
-.venv/bin/pip install -e ".[dev,db]"
+# Install the ingestion extra (already in pyproject.toml under [project.optional-dependencies.ingestion])
+.venv/bin/pip install -e ".[dev,db,ingestion]"
 
-# Now write the failing test first, then the code (TDD per AGENTS.md)
-# tests/unit/test_db_connection.py — pool startup, VCAP_SERVICES parser, /readyz ping
+# Apply migrations (idempotent if already at head)
+.venv/bin/python -m alembic upgrade head
+
+# TDD per AGENTS.md — failing test first
+# tests/unit/test_chunking.py, tests/unit/test_frontmatter.py, etc.
 ```
 
-`make verify` should be green before every commit. `pre-commit run --all-files` is also useful but slower.
+`make verify` should be green before every commit. `pre-commit run --all-files` is also useful but slower. Integration tests run via `pytest tests/integration -q` against the live `kiln-pg` container.
 
 ---
 
@@ -181,8 +195,8 @@ These are tracked omnibus issues from the 2026-05-16 code-reviewer pass. Refer t
 
 ```bash
 cd /home/william/git/cf-knowledge-kiln
-gh issue view 10
-git checkout -b feat/10-pg-connection-pool
+gh issue view 2  # Phase 3 epic — ingestion
+git checkout -b feat/phase-3-ingestion
 ```
 
 Or, to start the operator track in parallel:

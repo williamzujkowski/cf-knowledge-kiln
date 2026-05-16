@@ -113,11 +113,10 @@ disallow_untyped_decorators = true
 no_implicit_reexport = true
 show_error_codes = true
 
-# Re-enable these once Phase 2 (db) / Phase 3 (ingestion) install
-# pgvector and mistune as runtime deps.
-# [[tool.mypy.overrides]]
-# module = ["pgvector.*", "mistune.*"]
-# ignore_missing_imports = true
+# pgvector ships without py.typed (mistune override returns in Phase 3).
+[[tool.mypy.overrides]]
+module = ["pgvector.*"]
+ignore_missing_imports = true
 
 # ─── pytest ──────────────────────────────────────────────────────────
 [tool.pytest.ini_options]
