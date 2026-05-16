@@ -4,14 +4,20 @@
 # Two apps: a request-serving API and an ingestion worker. The worker
 # has no route — it pulls work from a queue / cron, not from HTTP.
 #
-# Bind a pgvector-enabled Postgres service before pushing. The `pgvector`
-# plan from cf-local-service-broker (PR williamzujkowski/cf-local-service-broker#2)
-# runs CREATE EXTENSION vector at provision time. Any other broker is fine
-# too, as long as the resulting database has the pgvector extension enabled.
+# Bind a pgvector-enabled Postgres service before pushing. The exact
+# command depends on how your Cloud Foundry exposes Postgres:
 #
-#   cf create-service postgresql-local pgvector cf-knowledge-kiln-db
-#   cf bind-service cf-knowledge-kiln-api cf-knowledge-kiln-db
+#   # If you have a Postgres broker with a pgvector plan:
+#   cf create-service <broker> pgvector cf-knowledge-kiln-db
+#
+#   # If you have a standalone pgvector Postgres and no broker (UPSI):
+#   cf cups cf-knowledge-kiln-db -p '{"uri":"postgres://user:pass@host:5432/db"}'
+#
+#   cf bind-service cf-knowledge-kiln-api    cf-knowledge-kiln-db
 #   cf bind-service cf-knowledge-kiln-worker cf-knowledge-kiln-db
+#
+# The infra decision for the homelab BOSH-deployed CF is tracked in
+# cf-knowledge-kiln issue #35.
 #
 # Customize ROUTE_DOMAIN / org-specific values before pushing.
 

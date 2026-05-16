@@ -15,13 +15,21 @@ Pre-implementation discovery of the surrounding repos, conducted on
   the canonical-surface, harness-neutral version of the agent
   guidance, deliberately mirrored across `.cursor`, `.continue`, etc.
   We adopt the same pattern.
-- **`cf-local-service-broker/`** provides PostgreSQL via OSBAPI v2.
-  This is the direct upstream for our `cf bind-service` flow. At
-  discovery time it shipped a single `shared` plan that creates a
-  database but doesn't install extensions; pgvector is added in
-  [PR #2](https://github.com/williamzujkowski/cf-local-service-broker/pull/2)
-  as a second `pgvector` plan. Phase 2 here depends on that plan
-  (or any equivalent broker that hands us a `vector`-enabled DB).
+- **`cf-local-service-broker/`** provides PostgreSQL via OSBAPI v2,
+  but is scoped to a CF-on-kind environment. The user's actual CF is
+  **BOSH-on-Incus** (15 CF VMs + 3 Concourse VMs on the R910), not
+  kind, so the broker is not in the deployment path for this app.
+  PR [cf-local-service-broker#2](https://github.com/williamzujkowski/cf-local-service-broker/pull/2)
+  added a pgvector plan there for kind-cluster consumers; it stays
+  open but is not load-bearing for Phase 2.
+- **No pgvector-enabled BOSH Postgres release** exists publicly as of
+  May 2026 (canonical `cloudfoundry/postgres-release` lacks it; the
+  docker-based community release is archived). Decision tracked in
+  [#35](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/35).
+- **Existing Postgres pattern in homelab-iac:** Authentik runs as a
+  Podman container on `pi-a` with `container-authentik-postgres.service`.
+  This is a viable pattern to mirror if we go the user-provided-service
+  route for kiln's Postgres.
 
 ## Cloud Foundry patterns found
 

@@ -8,27 +8,49 @@ This is the operator's guide. For architectural context, see
 
 - `cf` CLI installed and logged in to your foundation.
 - Target org and space already exist (`cf target -o <org> -s <space>`).
-- A **pgvector-enabled** Postgres service plan available. Locally we use the
-  [`cf-local-service-broker`](https://github.com/williamzujkowski/cf-local-service-broker)
-  `pgvector` plan, which runs `CREATE EXTENSION vector` at provision time
-  (added in [PR #2](https://github.com/williamzujkowski/cf-local-service-broker/pull/2)).
-  Any broker is fine as long as the resulting database has the `vector`
-  extension enabled — Phase 2's migrations require it.
+- A **pgvector-enabled** Postgres reachable from your CF org/space.
+  Phase 2's migrations require `CREATE EXTENSION IF NOT EXISTS vector`
+  to have already succeeded against the bound database — the app does
+  not have CREATE EXTENSION privilege at runtime, by design.
+
+### Picking a Postgres path
+
+Two flavors, depending on what your foundation already exposes:
+
+1. **Postgres service broker with a pgvector plan.** Whoever runs the
+   broker is responsible for `CREATE EXTENSION vector` at provision
+   time. You bind normally:
+
+   ```bash
+   cf create-service <broker> pgvector cf-knowledge-kiln-db
+   ```
+
+2. **User-provided service over a standalone pgvector Postgres.** You
+   point CF at an out-of-band-managed database (BOSH-deployed VM,
+   Incus/Podman container on a Pi, managed cloud DB, etc.):
+
+   ```bash
+   cf cups cf-knowledge-kiln-db -p '{"uri":"postgres://user:pass@host:5432/dbname"}'
+   ```
+
+   You're on the hook for installing pgvector on that Postgres before
+   binding.
+
+For the homelab BOSH-deployed CF specifically, there is no off-the-shelf
+pgvector-enabled BOSH Postgres release as of 2026-05; the infra decision
+is tracked in [issue #35](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/35).
 
 ## One-time setup
 
 ```bash
-# Create the bound Postgres service. The name is the binding key the
-# app expects; you can change it but must also change KILN_PG_SERVICE_NAME.
-cf create-service postgresql-local pgvector cf-knowledge-kiln-db
-
-# Verify it's up.
+# Pick one of the two paths above, then:
+cf bind-service cf-knowledge-kiln-api    cf-knowledge-kiln-db
+cf bind-service cf-knowledge-kiln-worker cf-knowledge-kiln-db
 cf services
 ```
 
-If your broker exposes a different service/plan pair, substitute accordingly.
-The only hard requirement is that the bound database has `CREATE EXTENSION
-IF NOT EXISTS vector` already run against it.
+The bound service name (`cf-knowledge-kiln-db`) must match
+`KILN_PG_SERVICE_NAME`. Change both together if you rename.
 
 ## Push
 
