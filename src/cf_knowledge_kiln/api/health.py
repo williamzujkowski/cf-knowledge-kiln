@@ -1,46 +1,43 @@
 """Liveness, readiness, and version endpoints.
 
 - ``/healthz`` is the cheap liveness probe. It must not touch the DB.
-- ``/readyz`` is the readiness probe. From Phase 2 onward it verifies
-  the Postgres connection; for now it returns ``ready: true`` because
-  the API has no external dependencies wired in.
+- ``/readyz`` reports per-dependency status. From Phase 2 it pings
+  Postgres and surfaces ``postgres: ok | failing``.
 - ``/version`` reports the package version.
 
-These shapes are stable. CF health checks point at ``/healthz``.
+CF health checks point at ``/healthz``; readiness consumers (load
+balancers, ops dashboards) call ``/readyz``.
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter, status
+from typing import Literal
+
+from fastapi import APIRouter, Request, status
 from pydantic import BaseModel
 
 from cf_knowledge_kiln import __version__
+from cf_knowledge_kiln.db import Database
 
 router = APIRouter(tags=["health"])
 
+CheckValue = Literal["ok", "failing"]
+ReadyStatus = Literal["ready", "degraded"]
+
 
 class HealthResponse(BaseModel):
-    """Liveness response shape."""
-
     status: str
     service: str
 
 
 class ReadyResponse(BaseModel):
-    """Readiness response shape.
+    """Readiness response: per-dependency check map + roll-up status."""
 
-    ``checks`` maps each dependency name to ``ok`` or ``failing``. An
-    empty map means the service has no external dependencies wired in
-    yet.
-    """
-
-    status: str
-    checks: dict[str, str]
+    status: ReadyStatus
+    checks: dict[str, CheckValue]
 
 
 class VersionResponse(BaseModel):
-    """Version response shape."""
-
     version: str
 
 
@@ -61,14 +58,20 @@ async def healthz() -> HealthResponse:
     status_code=status.HTTP_200_OK,
     summary="Readiness probe",
 )
-async def readyz() -> ReadyResponse:
-    """Return readiness.
+async def readyz(request: Request) -> ReadyResponse:
+    """Return readiness with a Postgres ping.
 
-    Phase 2 will populate ``checks`` with a Postgres ping. Until then,
-    the endpoint exists so CF / load balancers can be wired correctly
-    from day one.
+    ``postgres`` is ``failing`` when the pool is not configured (no URL,
+    no VCAP binding) or when the ``SELECT 1`` round-trip fails.
     """
-    return ReadyResponse(status="ready", checks={})
+    db: Database | None = getattr(request.app.state, "db", None)
+    if db is None:
+        postgres: CheckValue = "failing"
+    else:
+        postgres = "ok" if await db.ping() else "failing"
+    checks: dict[str, CheckValue] = {"postgres": postgres}
+    overall: ReadyStatus = "ready" if postgres == "ok" else "degraded"
+    return ReadyResponse(status=overall, checks=checks)
 
 
 @router.get(

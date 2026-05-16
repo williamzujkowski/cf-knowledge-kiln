@@ -14,13 +14,14 @@ def test_healthz_returns_ok(client: TestClient) -> None:
     assert body == {"status": "ok", "service": "cf-knowledge-kiln"}
 
 
-def test_readyz_returns_ready_with_empty_checks(client: TestClient) -> None:
-    """Phase 1: no dependencies wired; readiness is trivially ready."""
+def test_readyz_includes_postgres_check(client: TestClient) -> None:
+    """Phase 2: readiness must surface the Postgres check."""
     response = client.get("/readyz")
     assert response.status_code == 200
     body = response.json()
-    assert body["status"] == "ready"
-    assert body["checks"] == {}
+    assert "postgres" in body["checks"]
+    assert body["checks"]["postgres"] in {"ok", "failing"}
+    assert body["status"] in {"ready", "degraded"}
 
 
 def test_version_returns_package_version(client: TestClient) -> None:

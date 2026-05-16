@@ -100,6 +100,11 @@ repos:
           - "uvicorn[standard]>=0.32"
           - structlog>=24.4
           - httpx>=0.27
+          # Phase 2 (db) extras — keep in sync with [project.optional-dependencies.db]
+          - asyncpg>=0.30
+          - sqlalchemy>=2.0
+          - alembic>=1.13
+          - pgvector>=0.3
         args: [--config-file=pyproject.toml]
         files: ^src/
 

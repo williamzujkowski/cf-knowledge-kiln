@@ -56,10 +56,53 @@ jobs:
         # package is silently skipped while every other dep is audited.
         run: pip-audit --skip-editable
 
+  integration:
+    name: integration (pgvector)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: kiln
+          POSTGRES_PASSWORD: kiln  # pragma: allowlist secret
+          POSTGRES_DB: kiln
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U kiln -d kiln"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      KILN_TEST_DATABASE_URL: postgresql+asyncpg://kiln:kiln@localhost:5432/kiln  # pragma: allowlist secret
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,db,ingestion]"
+
+      - name: Integration tests (pytest)
+        run: pytest tests/integration -q
+
   secrets-scan:
     name: gitleaks
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # gitleaks-action posts a comment on PR scans, so it needs read
+    # access to commits and write access to PR comments. Without these
+    # the action 403s on /pulls/<n>/commits.
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
         with:
