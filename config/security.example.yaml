@@ -1,0 +1,43 @@
+---
+# Security configuration. Copy to config/security.yaml (gitignored).
+#
+# Controls content filtering during ingestion and warning emission
+# during retrieval. None of these settings substitute for proper
+# source allowlisting, secret scanning at ingest time, or RBAC at the
+# API layer.
+
+content_filters:
+  # If a chunk contains any of these phrases (case-insensitive), it is
+  # marked with a `prompt_injection_pattern` warning when returned to
+  # agent consumers. Ingestion does NOT drop the chunk; humans may
+  # still find it useful to read.
+  prompt_injection_phrases:
+    - "ignore previous instructions"
+    - "ignore prior instructions"
+    - "disregard the system prompt"
+    - "you are now"
+    - "developer message"
+    - "you must comply"
+
+  # If a chunk matches any of these regexes, it is marked
+  # `sensitive_content` and excluded from /v1/agent/* responses by
+  # default. Humans see it with a redaction notice.
+  sensitive_patterns:
+    - 'AKIA[0-9A-Z]{16}'                 # AWS access key id
+    - 'xox[baprs]-[0-9a-zA-Z]{10,}'      # Slack tokens
+    - 'gh[ps]_[0-9a-zA-Z]{36,}'          # GitHub PAT / installation token
+
+freshness:
+  # Documents not reviewed within this many days are flagged
+  # `stale_source` in warnings.
+  stale_after_days: 365
+
+retrieval:
+  # Default ordering preference. Higher = stronger preference.
+  status_weights:
+    active: 1.0
+    approved: 0.95
+    draft: 0.5
+    deprecated: 0.2
+    archived: 0.1
+    superseded: 0.05

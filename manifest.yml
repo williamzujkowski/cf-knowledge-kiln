@@ -1,0 +1,50 @@
+---
+# Cloud Foundry deployment manifest.
+#
+# Two apps: a request-serving API and an ingestion worker. The worker
+# has no route — it pulls work from a queue / cron, not from HTTP.
+#
+# Bind a Postgres service before pushing:
+#
+#   cf create-service postgresql shared cf-knowledge-kiln-db
+#   cf bind-service cf-knowledge-kiln-api cf-knowledge-kiln-db
+#   cf bind-service cf-knowledge-kiln-worker cf-knowledge-kiln-db
+#
+# Customize ROUTE_DOMAIN / org-specific values before pushing.
+
+applications:
+  - name: cf-knowledge-kiln-api
+    memory: 1G
+    disk_quota: 1G
+    instances: 1
+    buildpacks:
+      - python_buildpack
+    command: ./scripts/start-api.sh
+    health-check-type: http
+    health-check-http-endpoint: /healthz
+    health-check-invocation-timeout: 10
+    timeout: 120
+    env:
+      KILN_ENV: production
+      KILN_LOG_LEVEL: INFO
+      KILN_AUTH_MODE: bearer
+      PYTHONUNBUFFERED: "1"
+    services:
+      - cf-knowledge-kiln-db
+
+  - name: cf-knowledge-kiln-worker
+    memory: 1G
+    disk_quota: 2G
+    instances: 1
+    buildpacks:
+      - python_buildpack
+    command: ./scripts/start-worker.sh
+    no-route: true
+    health-check-type: process
+    env:
+      KILN_ENV: production
+      KILN_LOG_LEVEL: INFO
+      KILN_INGEST_CONCURRENCY: "4"
+      PYTHONUNBUFFERED: "1"
+    services:
+      - cf-knowledge-kiln-db

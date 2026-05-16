@@ -1,0 +1,84 @@
+# cf-knowledge-kiln pre-commit configuration.
+# Install: pip install pre-commit && pre-commit install
+# Run all: pre-commit run --all-files
+# Skip:    SKIP=gitleaks git commit ...
+#
+# Versions mirror homelab-iac where the same hook is used, for consistency
+# across the user's Cloud Foundry repos.
+
+repos:
+  # ─── Secrets scanning ───────────────────────────────────────────────
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.24.2
+    hooks:
+      - id: gitleaks
+
+  # ─── Generic hygiene ────────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-json
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: detect-private-key
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+  # ─── YAML / shell / markdown linting (matches homelab-iac) ──────────
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.37.0
+    hooks:
+      - id: yamllint
+        args: [-c, .yamllint.yml]
+        types: [yaml]
+        # Skip the docker compose / CF manifest until we settle on a style.
+        exclude: ^(manifest\.yml|docker-compose\.yml)$
+
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.10.0.1
+    hooks:
+      - id: shellcheck
+        args: [--severity=warning]
+
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.42.0
+    hooks:
+      - id: markdownlint
+        args: [--config, .markdownlint.json]
+        # README is allowed long lines; AGENTS.md too.
+        exclude: ^(plans/|node_modules/)
+
+  # ─── Python ────────────────────────────────────────────────────────
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.7.4
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.13.0
+    hooks:
+      - id: mypy
+        additional_dependencies:
+          - pydantic>=2.9
+          - pydantic-settings>=2.5
+          - types-PyYAML
+        args: [--config-file=pyproject.toml]
+        files: ^src/
+
+  # ─── Local hooks ────────────────────────────────────────────────────
+  - repo: local
+    hooks:
+      - id: openapi-lint
+        name: validate OpenAPI 3.1 spec
+        entry: python3 scripts/lint_openapi.py openapi/openapi.yaml
+        language: system
+        files: ^openapi/openapi\.yaml$
+        pass_filenames: false

@@ -1,0 +1,81 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtualenv / uv
+.venv/
+venv/
+.python-version
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+.hypothesis/
+.tox/
+.nox/
+
+# Type checkers / linters
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets / local config (NEVER commit)
+.env
+.env.*
+!.env.example
+config/models.yaml
+config/sources.yaml
+config/security.yaml
+.security-discoveries.jsonl
+
+# CF / build artifacts
+*.tar.gz
+*.zip
+sbom.json
+sbom.spdx.json
+grype-report.json
+manifest.local.yml
+
+# Logs
+*.log
+logs/
+
+# Local DB fixtures
+*.sqlite
+*.db
+
+# Direnv
+.envrc

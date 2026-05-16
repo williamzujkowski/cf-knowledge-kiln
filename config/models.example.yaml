@@ -1,0 +1,38 @@
+---
+# Model registry. Copy to config/models.yaml (gitignored) and customize.
+# This file is *config*, not code: changing the active model never
+# requires a code change.
+#
+# Secret-bearing fields (api_key) are NEVER in this file. They live in
+# environment variables (KILN_EMBEDDING_API_KEY, KILN_GENERATOR_API_KEY)
+# or CF service bindings.
+#
+# Provenance note: the MVP avoids China-origin model families (Qwen,
+# DeepSeek, BAAI/BGE). See docs/model-providers.md for the rationale
+# and the active allowlist.
+
+models:
+  embedding:
+    provider: local                       # local | openai-compatible
+    name: nomic-embed-text-v1.5
+    dimensions: 768
+    enabled: true
+    notes: |
+      Apache 2.0 license. US-origin. Subject to provenance/license
+      review per ADR-0005.
+
+  generator:
+    provider: openai-compatible           # local | openai-compatible
+    name: phi-4-mini-instruct
+    base_url_env: KILN_GENERATOR_BASE_URL
+    api_key_env: KILN_GENERATOR_API_KEY
+    enabled: false                        # Phase 5+ /v1/answer
+    default_temperature: 0
+    notes: |
+      Phi-4-mini-instruct (Microsoft). Disabled in MVP until Phase 5
+      lands the /v1/answer synthesis endpoint.
+
+providers:
+  openai_compatible:
+    timeout_seconds: 60
+    max_retries: 2

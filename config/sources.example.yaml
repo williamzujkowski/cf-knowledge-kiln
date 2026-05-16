@@ -1,0 +1,39 @@
+---
+# Source allowlist. Copy to config/sources.yaml (gitignored) and customize.
+# Ingestion will refuse to fetch sources not listed here.
+#
+# Each source must declare its trust level. Sources without a status
+# are treated as `draft` and de-prioritized in retrieval.
+
+sources:
+  - name: internal-docs
+    type: git
+    repo: owner/internal-docs            # change to your repo
+    branch: main
+    include:
+      - "docs/**/*.md"
+      - "README.md"
+    exclude:
+      - "**/node_modules/**"
+      - "**/.git/**"
+      - "**/*draft*.md"
+    status: active
+    authority: standard
+    default_owner: platform
+    default_sensitivity: internal
+    last_reviewed_required: false
+
+  - name: homelab-iac-docs
+    type: git
+    repo: williamzujkowski/homelab-iac
+    branch: main
+    include:
+      - "docs/**/*.md"
+      - "docs/components/**/*.md"
+      - "AGENTS.md"
+    exclude:
+      - "docs/generated/**"
+    status: active
+    authority: standard
+    default_owner: platform
+    default_sensitivity: internal
