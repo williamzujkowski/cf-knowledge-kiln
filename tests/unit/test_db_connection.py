@@ -125,6 +125,32 @@ def test_parse_vcap_searches_across_labels() -> None:
     assert parse_vcap_services(vcap, "cf-knowledge-kiln-db") == "postgresql+asyncpg://u:p@h:5432/d"
 
 
+def test_parse_vcap_raises_when_name_collides_across_bindings() -> None:
+    """Two bindings sharing a name across labels is ambiguous — refuse to guess."""
+    vcap = json.dumps(
+        {
+            "postgresql-local": [
+                {
+                    "name": "cf-knowledge-kiln-db",
+                    "credentials": {
+                        "uri": "postgresql://a:b@h1:5432/d"
+                    },  # pragma: allowlist secret
+                }
+            ],
+            "user-provided": [
+                {
+                    "name": "cf-knowledge-kiln-db",
+                    "credentials": {
+                        "uri": "postgresql://c:d@h2:5432/d"
+                    },  # pragma: allowlist secret
+                }
+            ],
+        }
+    )
+    with pytest.raises(ValueError, match="2 bindings"):
+        parse_vcap_services(vcap, "cf-knowledge-kiln-db")
+
+
 def test_parse_vcap_raises_when_credentials_missing_required_fields() -> None:
     vcap = json.dumps(
         {

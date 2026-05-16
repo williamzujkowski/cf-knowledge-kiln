@@ -90,6 +90,41 @@ cf-local-service-broker `pgvector` plan handles `CREATE EXTENSION` at
 provision time when the broker is pointed at a pgvector-capable
 backing Postgres (e.g. via [bosh-pgvector-release](https://github.com/williamzujkowski/bosh-pgvector-release)).
 
+## Embedding index strategy (per-dimension HNSW)
+
+`chunk_embeddings.embedding` is an unconstrained `vector` column so the
+table can hold embeddings from multiple models simultaneously, with
+per-row dimensions recorded in `chunk_embeddings.dimensions`. HNSW
+indexes, however, require a fixed dimension. The strategy is:
+
+- **One HNSW partial index per registered model dimension**, keyed by
+  the predicate `WHERE dimensions = N` and the expression
+  `(embedding::vector(N)) vector_cosine_ops`. The initial migration
+  creates the `_768` index for the default model
+  (`nomic-embed-text-v1.5`); operators add `_<N>` indexes in follow-up
+  migrations when they enable a non-768 model in `model_registry`.
+
+- **Retrieval queries always include `WHERE dimensions = N` and a cast
+  `embedding::vector(N) <=> $query`** so the planner can match the
+  partial index. The repository layer (in `db/repositories/`) is the
+  natural place to enforce this contract; retrieval (Phase 5) will
+  call into it with the active model's dimensions from settings.
+
+- **The index name is a contract.** Names follow
+  `ix_chunk_embeddings_hnsw_<dim>` so the schema is self-documenting and
+  cross-references the active model's dimension. Renaming this scheme
+  requires updating the operator runbook for adding a new model.
+
+- **Sequential scan is the fallback** for dimensions without a matching
+  partial index (e.g. during a re-embedding migration when both the
+  old and new model coexist transiently). This is acceptable for
+  small temporary windows; long-lived multi-model deployments must
+  carry an HNSW per active dimension.
+
+The HNSW index is empty until embeddings are ingested (Phase 3/4), so
+the cost of creating it in the initial migration is zero. The benefit
+is that the schema's contract is visible from day one.
+
 ## Anti-patterns we are deliberately avoiding
 
 These are inherited from the plan and enforced by review:
