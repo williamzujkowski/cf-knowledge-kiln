@@ -15,7 +15,7 @@ the manifest.
 | ------------------------------------- | ------------------------ | ------------------------------------------------------------------ |
 | `KILN_APP_NAME`                       | `cf-knowledge-kiln`      | Used in logs and the FastAPI title.                                |
 | `KILN_ENV`                            | `development`            | One of `development`, `staging`, `production`.                     |
-| `KILN_LOG_LEVEL`                      | `INFO`                   | `DEBUG | INFO | WARNING | ERROR`.                                  |
+| `KILN_LOG_LEVEL`                      | `INFO`                   | `DEBUG` / `INFO` / `WARNING` / `ERROR`.                            |
 | `KILN_HTTP_PORT`                      | `8080`                   | Local bind port. CF overrides with `$PORT`.                        |
 | `KILN_DATABASE_URL`                   | *(unset in CF)*          | Direct DB URL. In CF, leave unset and bind a Postgres service.     |
 | `KILN_PG_SERVICE_NAME`                | `cf-knowledge-kiln-db`   | Name to look up in `VCAP_SERVICES`.                                |

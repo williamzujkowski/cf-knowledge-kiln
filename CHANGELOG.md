@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
 - Phase 0: Discovery report (homelab-iac CF patterns, pre-commit baseline, ADR conventions).
 - Phase 1: Repo scaffold — README, AGENTS.md, SECURITY.md, CONTRIBUTING.md, Makefile, pyproject.toml, pre-commit config.
 - Phase 1: FastAPI skeleton with `/healthz`, `/readyz`, `/version` endpoints.

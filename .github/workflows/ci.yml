@@ -82,4 +82,5 @@ jobs:
             **/*.md
             !node_modules/**
             !plans/**
+            !.venv/**
           config: .markdownlint.json

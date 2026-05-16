@@ -10,7 +10,7 @@ Canonical instructions for AI coding agents (Claude Code, Cursor, Codex, OpenCod
 
 ## Prime directive
 
-```
+```text
 correctness > simplicity > performance > cleverness
 ```
 
@@ -159,7 +159,7 @@ See [docs/security.md](./docs/security.md) for the full threat model.
 
 Before uncertain actions, use the Q protocol:
 
-```
+```text
 DOING:   <action>
 EXPECT:  <outcome>
 IF YES:  <next step>
@@ -208,4 +208,4 @@ Max 5 auto-filed issues per session. Security findings go to a gitignored `.secu
 
 ---
 
-_Standards governance: this AGENTS.md is the single source of truth. Other harness configs (`.cursor/rules/`, `.continue/rules/`, etc.) should be one-line redirects if they exist, never duplicated content._
+*Standards governance: this AGENTS.md is the single source of truth. Other harness configs (`.cursor/rules/`, `.continue/rules/`, etc.) should be one-line redirects if they exist, never duplicated content.*
