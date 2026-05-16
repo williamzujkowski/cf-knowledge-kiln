@@ -16,7 +16,12 @@ Pre-implementation discovery of the surrounding repos, conducted on
   guidance, deliberately mirrored across `.cursor`, `.continue`, etc.
   We adopt the same pattern.
 - **`cf-local-service-broker/`** provides PostgreSQL via OSBAPI v2.
-  This is the direct upstream for our `cf bind-service` flow.
+  This is the direct upstream for our `cf bind-service` flow. At
+  discovery time it shipped a single `shared` plan that creates a
+  database but doesn't install extensions; pgvector is added in
+  [PR #2](https://github.com/williamzujkowski/cf-local-service-broker/pull/2)
+  as a second `pgvector` plan. Phase 2 here depends on that plan
+  (or any equivalent broker that hands us a `vector`-enabled DB).
 
 ## Cloud Foundry patterns found
 

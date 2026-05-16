@@ -8,20 +8,27 @@ This is the operator's guide. For architectural context, see
 
 - `cf` CLI installed and logged in to your foundation.
 - Target org and space already exist (`cf target -o <org> -s <space>`).
-- A Postgres service plan available — locally we use the user's
+- A **pgvector-enabled** Postgres service plan available. Locally we use the
   [`cf-local-service-broker`](https://github.com/williamzujkowski/cf-local-service-broker)
-  which exposes a `postgresql` service. Any CF Postgres broker works.
+  `pgvector` plan, which runs `CREATE EXTENSION vector` at provision time
+  (added in [PR #2](https://github.com/williamzujkowski/cf-local-service-broker/pull/2)).
+  Any broker is fine as long as the resulting database has the `vector`
+  extension enabled — Phase 2's migrations require it.
 
 ## One-time setup
 
 ```bash
 # Create the bound Postgres service. The name is the binding key the
 # app expects; you can change it but must also change KILN_PG_SERVICE_NAME.
-cf create-service postgresql shared cf-knowledge-kiln-db
+cf create-service postgresql-local pgvector cf-knowledge-kiln-db
 
 # Verify it's up.
 cf services
 ```
+
+If your broker exposes a different service/plan pair, substitute accordingly.
+The only hard requirement is that the bound database has `CREATE EXTENSION
+IF NOT EXISTS vector` already run against it.
 
 ## Push
 

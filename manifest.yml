@@ -4,9 +4,12 @@
 # Two apps: a request-serving API and an ingestion worker. The worker
 # has no route — it pulls work from a queue / cron, not from HTTP.
 #
-# Bind a Postgres service before pushing:
+# Bind a pgvector-enabled Postgres service before pushing. The `pgvector`
+# plan from cf-local-service-broker (PR williamzujkowski/cf-local-service-broker#2)
+# runs CREATE EXTENSION vector at provision time. Any other broker is fine
+# too, as long as the resulting database has the pgvector extension enabled.
 #
-#   cf create-service postgresql shared cf-knowledge-kiln-db
+#   cf create-service postgresql-local pgvector cf-knowledge-kiln-db
 #   cf bind-service cf-knowledge-kiln-api cf-knowledge-kiln-db
 #   cf bind-service cf-knowledge-kiln-worker cf-knowledge-kiln-db
 #
