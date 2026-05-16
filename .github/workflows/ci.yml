@@ -97,6 +97,12 @@ jobs:
     name: gitleaks
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # gitleaks-action posts a comment on PR scans, so it needs read
+    # access to commits and write access to PR comments. Without these
+    # the action 403s on /pulls/<n>/commits.
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
         with:
