@@ -78,7 +78,7 @@ This repo is designed to be forked by another team and adapted to their corpus +
 5. **Push.** `make cf-push` deploys the two-process layout from `manifest.yml` (`cf-knowledge-kiln-api` + `cf-knowledge-kiln-worker`). `make ingest` enqueues an initial corpus build.
 6. **Verify.** `scripts/smoke-test.sh` posts a query to the deployed API; `make eval` runs the retrieval-quality harness against your seeded corpus.
 
-This README walks the happy path. The expanded forking guide (deeper troubleshooting, CF-foundation variations, ingest tuning) lands as part of Phase 9 (#32).
+This README walks the happy path. The expanded [forking guide](./docs/forking-guide.md) covers CF-foundation variations, model migration, the cutover checklist, and common gotchas.
 
 ## License
 
