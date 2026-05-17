@@ -112,6 +112,17 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SearchResponse"
+        "429":
+          description: |
+            Rate limit exceeded. Per-IP token bucket (default 60 req/min,
+            tunable via `KILN_RATE_LIMIT_SEARCH_PER_MIN`). Response carries
+            a `Retry-After` header in seconds.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+              description: Seconds until the next token is available.
 
   /v1/agent/context-pack:
     post:
@@ -135,6 +146,16 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ContextPackResponse"
+        "429":
+          description: |
+            Rate limit exceeded. Shares the search limiter (default
+            60 req/min). Response carries a `Retry-After` header.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+              description: Seconds until the next token is available.
 
 components:
   schemas:

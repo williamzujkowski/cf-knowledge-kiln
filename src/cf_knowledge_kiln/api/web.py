@@ -27,7 +27,14 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from cf_knowledge_kiln.api.dependencies import get_hybrid_retriever, get_session
+from cf_knowledge_kiln.api.dependencies import (
+    get_feedback_limiter,
+    get_hybrid_retriever,
+    get_search_limiter,
+    get_session,
+    get_trust_xff,
+)
+from cf_knowledge_kiln.api.rate_limit import TokenBucketLimiter, client_ip
 from cf_knowledge_kiln.db.repositories import FeedbackRepository, QueriesRepository
 from cf_knowledge_kiln.retrieval import HybridRetriever, RetrievalFilters, Status
 
@@ -58,6 +65,8 @@ async def search_partial(
     request: Request,
     retriever: Annotated[HybridRetriever, Depends(get_hybrid_retriever)],
     session: Annotated[AsyncSession, Depends(get_session)],
+    limiter: Annotated[TokenBucketLimiter, Depends(get_search_limiter)],
+    trust_xff: Annotated[bool, Depends(get_trust_xff)],
     query: Annotated[str, Form()] = "",
     status: Annotated[list[str] | None, Form()] = None,
     filters_set: Annotated[str | None, Form(alias="_filters_set")] = None,
@@ -73,6 +82,17 @@ async def search_partial(
     friendly message into ``#results`` instead of FastAPI's bare
     500 body. Telemetry stays best-effort.
     """
+    key = client_ip(request, trust_xff=trust_xff)
+    if not limiter.hit(key):
+        # HTMX-friendly fragment with the same template the error path uses.
+        retry = limiter.retry_after(key)
+        return templates.TemplateResponse(
+            request,
+            "_error.html",
+            {"message": f"Too many requests. Please retry in {retry}s."},
+            status_code=429,
+            headers={"Retry-After": str(retry)},
+        )
     query = query.strip()
     if not query:
         return templates.TemplateResponse(
@@ -143,6 +163,8 @@ beyond what the user voluntarily enters."""
 async def submit_feedback(
     request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
+    limiter: Annotated[TokenBucketLimiter, Depends(get_feedback_limiter)],
+    trust_xff: Annotated[bool, Depends(get_trust_xff)],
     query_id: Annotated[str, Form()],
     chunk_id: Annotated[str, Form()],
     signal: Annotated[str, Form()],
@@ -155,18 +177,24 @@ async def submit_feedback(
     page reload. Validation errors return a small inline error so
     the user can correct + resubmit.
 
-    NOTE — no CSRF token here. Defensible for slice-1:
+    NOTE — no CSRF token here. Defensible:
 
     * /feedback writes operator telemetry, not user account state.
     * A cross-origin POST can pollute the signal stream with noise
       but cannot corrupt records, trigger XSS, or escalate privileges
       (autoescape + FK ON DELETE SET NULL + savepoint isolation).
-    * Phase 8 bearer auth (#77) protects the JSON API; the web UI is
-      explicitly behind the same auth in production
-      (`KILN_AUTH_MODE=bearer`). Dev mode is the only window where
-      drive-by POSTs work, and dev instances aren't internet-facing.
-    * No rate limit yet — filed for follow-up (see issue tracker).
+    * Phase 8 bearer auth (#77) protects the API in production.
+    * Per-IP rate limit (issue #79) caps feedback noise; see below.
     """
+    key = client_ip(request, trust_xff=trust_xff)
+    if not limiter.hit(key):
+        retry = limiter.retry_after(key)
+        return _feedback_error_with_status(
+            request,
+            f"Too many feedback submissions. Try again in {retry}s.",
+            status_code=429,
+            headers={"Retry-After": str(retry)},
+        )
     if signal not in _FEEDBACK_TYPES:
         return _feedback_error(request, "Unknown feedback type.")
     qid = _parse_uuid(query_id)
@@ -194,6 +222,22 @@ async def submit_feedback(
 def _feedback_error(request: Request, message: str) -> HTMLResponse:
     return templates.TemplateResponse(
         request, "_feedback_error.html", {"message": message}, status_code=400
+    )
+
+
+def _feedback_error_with_status(
+    request: Request,
+    message: str,
+    *,
+    status_code: int,
+    headers: dict[str, str] | None = None,
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "_feedback_error.html",
+        {"message": message},
+        status_code=status_code,
+        headers=headers,
     )
 
 

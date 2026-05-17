@@ -50,6 +50,15 @@ def test_lifespan_attaches_embedding_provider_when_configured(
         assert provider.dimensions == 768
 
 
+def test_lifespan_attaches_rate_limiters(models_config: Path) -> None:
+    """#79: both rate limiters are bound to app.state by the lifespan."""
+    from cf_knowledge_kiln.api.rate_limit import TokenBucketLimiter
+
+    with TestClient(create_app()) as client:
+        assert isinstance(client.app.state.search_limiter, TokenBucketLimiter)
+        assert isinstance(client.app.state.feedback_limiter, TokenBucketLimiter)
+
+
 def test_lifespan_attaches_none_when_config_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -19,6 +19,7 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from cf_knowledge_kiln.api.rate_limit import TokenBucketLimiter
 from cf_knowledge_kiln.config import Settings, get_settings
 from cf_knowledge_kiln.db.connection import Database
 from cf_knowledge_kiln.ingestion.embedding import EmbeddingProvider
@@ -98,10 +99,43 @@ def get_hybrid_retriever(
     )
 
 
+def get_search_limiter(request: Request) -> TokenBucketLimiter:
+    """Per-IP rate limiter for /v1/search and /search (#79)."""
+    limiter = getattr(request.app.state, "search_limiter", None)
+    if limiter is None:
+        # Lifespan ran without setting state — should never happen
+        # outside test fixtures that build a bare app.
+        raise HTTPException(status_code=500, detail="rate limiter not initialized")
+    assert isinstance(limiter, TokenBucketLimiter)
+    return limiter
+
+
+def get_feedback_limiter(request: Request) -> TokenBucketLimiter:
+    """Per-IP rate limiter for /feedback (#79)."""
+    limiter = getattr(request.app.state, "feedback_limiter", None)
+    if limiter is None:
+        raise HTTPException(status_code=500, detail="rate limiter not initialized")
+    assert isinstance(limiter, TokenBucketLimiter)
+    return limiter
+
+
+def get_trust_xff(
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> bool:
+    """Whether to honor X-Forwarded-For for client-IP keying (#79).
+
+    Default off; flip on in CF where the gorouter sets XFF reliably.
+    """
+    return settings.trust_forwarded_for
+
+
 __all__ = [
     "get_db",
     "get_embedding_provider",
+    "get_feedback_limiter",
     "get_hybrid_retriever",
     "get_retrieval_config",
+    "get_search_limiter",
     "get_session",
+    "get_trust_xff",
 ]

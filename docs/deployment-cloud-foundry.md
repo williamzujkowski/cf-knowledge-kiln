@@ -94,6 +94,40 @@ cf restage cf-knowledge-kiln-api
 
 Full env reference: [configuration.md](./configuration.md).
 
+## Rate limiting
+
+The API has an in-process per-IP token-bucket gate on `/v1/search`,
+`/v1/agent/context-pack`, `/search`, and `/feedback`. Both buckets are
+configurable via env:
+
+```bash
+cf set-env cf-knowledge-kiln-api KILN_RATE_LIMIT_SEARCH_PER_MIN '60'
+cf set-env cf-knowledge-kiln-api KILN_RATE_LIMIT_FEEDBACK_PER_MIN '30'
+# Trust CF gorouter's X-Forwarded-For for client-IP keying.
+cf set-env cf-knowledge-kiln-api KILN_TRUST_FORWARDED_FOR 'true'
+cf restage cf-knowledge-kiln-api
+```
+
+Caveats:
+
+- **In-process, single-instance only.** Buckets live in the dyno's
+  memory. If you `cf scale -i 2`, each instance enforces its own
+  limit, so the effective ceiling is `instances × per_min`. Real
+  multi-instance rate limiting needs a shared backend (separate
+  follow-up; not in scope for the MVP gate).
+- `KILN_TRUST_FORWARDED_FOR` must be **off** for any deployment where
+  callers can reach the dyno directly (no upstream proxy stripping
+  XFF). In CF behind the gorouter, leave it on so per-IP keying tracks
+  the real client and not all-of-gorouter.
+- The limiter caps its bucket dict at 50k distinct keys with LRU
+  eviction. An attacker spraying random XFF values will not exhaust
+  memory; an evicted bucket simply resets to full on its next hit.
+
+Rate-limit responses carry `Retry-After: <seconds>`. JSON routes
+return `429 Too Many Requests`; the HTMX form routes (`/search`,
+`/feedback`) render a swap-friendly fragment with the same status, so
+the UI shows the limit message inline instead of a silent no-op.
+
 ## Health checks
 
 | Endpoint   | Used for           | What it checks                                  |
