@@ -26,6 +26,7 @@ middleware, not in prompts."
 from __future__ import annotations
 
 import logging
+import posixpath
 from secrets import compare_digest
 
 from fastapi import FastAPI
@@ -34,6 +35,21 @@ from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from cf_knowledge_kiln.config import Settings
+
+# Minimum bearer token length. 32 chars is roughly 192 bits of entropy
+# for a base64 random token — enough headroom that brute-force is not
+# the easy path. Operators who want a different threshold can override
+# at deployment with their own token-generation policy; we just gate
+# against trivially-short tokens like "x" or "test".
+_MIN_BEARER_LENGTH: int = 32
+
+# OpenAPI surface is public by design: `ultrareview` and similar
+# introspection tooling depend on it, the contract is meant to be
+# discoverable, and the schema doesn't expose data — only shapes.
+# Operators who want to hide the surface can disable openapi_url in
+# create_app() for their deployment.
+#
+# Schema discovery is NOT a "secret"; it's documentation.
 
 logger = logging.getLogger(__name__)
 
@@ -58,11 +74,15 @@ def configure_auth(app: FastAPI, settings: Settings) -> None:
     """
     mode = settings.auth_mode
     if mode == "none":
-        if settings.env == "production":
+        # Refuse for staging AND production. Staging often mirrors
+        # production data and is exposed to broader audiences than
+        # dev; an unauthenticated staging instance is almost always
+        # an operator mistake.
+        if settings.env in ("production", "staging"):
             raise RuntimeError(
-                "KILN_AUTH_MODE=none is refused when KILN_ENV=production. "
-                "Set KILN_AUTH_MODE=bearer + KILN_BEARER_TOKEN, or set "
-                "KILN_ENV to a non-production value if you really need this."
+                f"KILN_AUTH_MODE=none is refused when KILN_ENV={settings.env}. "
+                f"Set KILN_AUTH_MODE=bearer + KILN_BEARER_TOKEN, or set "
+                f"KILN_ENV=development if you really need an open instance."
             )
         logger.warning(
             "auth: KILN_AUTH_MODE=none — every endpoint is unauthenticated. "
@@ -78,6 +98,12 @@ def configure_auth(app: FastAPI, settings: Settings) -> None:
         token = settings.bearer_token
         if not token:
             raise RuntimeError("KILN_AUTH_MODE=bearer requires KILN_BEARER_TOKEN to be set.")
+        if len(token) < _MIN_BEARER_LENGTH:
+            raise RuntimeError(
+                f"KILN_BEARER_TOKEN is too short ({len(token)} chars); "
+                f"minimum is {_MIN_BEARER_LENGTH}. Generate one with "
+                f'`python -c "import secrets; print(secrets.token_urlsafe(32))"`.'
+            )
         app.add_middleware(_BearerAuthMiddleware, expected_token=token)
         logger.info("auth: KILN_AUTH_MODE=bearer wired (token length=%d)", len(token))
         return
@@ -87,10 +113,26 @@ def configure_auth(app: FastAPI, settings: Settings) -> None:
 
 
 def _is_public(path: str) -> bool:
-    """Return True iff this path bypasses auth in every mode."""
-    if path in _PUBLIC_PATHS:
+    """Return True iff this path bypasses auth in every mode.
+
+    Normalizes ``..`` and ``//`` BEFORE matching so an attacker can't
+    reach protected routes via ``/static/../v1/search`` — the raw
+    request path passes the prefix check, then Starlette's router
+    resolves the literal path against its routes, and any bypass-then-
+    route mismatch silently leaks the bypass to the application's
+    rear without ever surfacing as a 401.
+
+    Defense in depth: refuse to bypass anything that still contains
+    a ``..`` segment after normalization (would only happen for
+    relative paths like ``../x``, which a well-formed HTTP request
+    can't produce — but the cost of being wrong is full bypass).
+    """
+    normalized = posixpath.normpath(path or "/")
+    if ".." in normalized.split("/"):
+        return False
+    if normalized in _PUBLIC_PATHS:
         return True
-    return any(path.startswith(p) for p in _PUBLIC_PREFIXES)
+    return any(normalized.startswith(p) for p in _PUBLIC_PREFIXES)
 
 
 class _BearerAuthMiddleware:
