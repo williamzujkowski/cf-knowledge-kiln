@@ -1,0 +1,69 @@
+version: 1
+# Bootstrap golden set: queries against the repo's own docs/ tree.
+#
+# corpus: docs/  (ingested via LocalSource named "cf-knowledge-kiln")
+#
+# Schema (see src/cf_knowledge_kiln/eval/dataset.py for the dataclass):
+#
+#   cases:
+#     - case_id: <unique slug>           # required
+#       query: <free text>               # required
+#       filters: {<RetrievalFilters>}    # optional, default {}
+#       expected:                        # required, non-empty
+#         - repo: <stable repo label>
+#           path: <relative POSIX path>
+#           heading_path: [H1, H2, ...]  # optional; [] = "any chunk
+#                                        #   in this document"
+#                                        #   (doc-anywhere wildcard)
+#           must_appear_within_k: <int>  # optional, default 10
+#
+# Thresholds are deliberately loose at bootstrap. The harness runs
+# under MockEmbeddingProvider in pytest, so the vector arm is noise;
+# what we measure here is FTS + RRF stability over time. Raise the
+# per-case must_appear_within_k caps and the BOOTSTRAP_*_FLOOR
+# constants in tests/eval/test_golden.py as the set grows.
+cases:
+  - case_id: arch-four-layer
+    query: "four-layer architecture experience retrieval index ingestion"
+    filters: {status: [active]}
+    expected:
+      - repo: cf-knowledge-kiln
+        path: architecture.md
+        heading_path: []
+        must_appear_within_k: 10
+
+  - case_id: untrusted-input-policy
+    query: "untrusted input handling indexed content markers"
+    filters: {status: [active]}
+    expected:
+      - repo: cf-knowledge-kiln
+        path: security.md
+        heading_path: []
+        must_appear_within_k: 10
+
+  - case_id: configuration-env-vars
+    query: "KILN environment variables configuration precedence"
+    filters: {status: [active]}
+    expected:
+      - repo: cf-knowledge-kiln
+        path: configuration.md
+        heading_path: []
+        must_appear_within_k: 10
+
+  - case_id: cf-deployment-manifest
+    query: "Cloud Foundry deployment manifest cf push two apps"
+    filters: {status: [active]}
+    expected:
+      - repo: cf-knowledge-kiln
+        path: deployment-cloud-foundry.md
+        heading_path: []
+        must_appear_within_k: 10
+
+  - case_id: data-sources-allowlist
+    query: "ingestion source allowlist configuration repo path"
+    filters: {status: [active]}
+    expected:
+      - repo: cf-knowledge-kiln
+        path: data-sources.md
+        heading_path: []
+        must_appear_within_k: 10

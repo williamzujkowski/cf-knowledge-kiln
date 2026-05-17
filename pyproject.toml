@@ -146,6 +146,7 @@ asyncio_mode = "auto"
 addopts = "-ra --strict-markers --strict-config"
 markers = [
   "integration: marks tests that require a real Postgres+pgvector instance",
+  "eval: marks retrieval-quality evaluation tests (requires Postgres+pgvector and a seeded docs corpus)",
 ]
 
 # ─── coverage ────────────────────────────────────────────────────────

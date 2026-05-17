@@ -79,3 +79,8 @@ logs/
 
 # Direnv
 .envrc
+
+# Eval reports — generated artifacts; never committed.
+tests/eval/reports/*
+!tests/eval/reports/.gitkeep
+.claude/

@@ -63,6 +63,9 @@ make migrate-down     # roll back one revision
 # Ingestion (Phase 3+)
 make ingest           # run ingestion against configured sources
 
+# Eval (Phase 9+)
+make eval             # retrieval eval harness (opt-in; requires DB)
+
 # Runtime
 make run              # API on :8080
 make run-worker       # ingestion worker
