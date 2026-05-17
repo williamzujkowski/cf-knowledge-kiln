@@ -54,6 +54,9 @@ class Settings(BaseSettings):
     # Ingestion.
     ingest_concurrency: int = 4
     ingest_max_file_bytes: int = 1_048_576
+    ingest_max_files: int = 10_000
+    ingest_max_repo_bytes: int = 100 * 1_048_576
+    ingest_poll_interval_seconds: float = 5.0
 
     # Retrieval defaults.
     default_max_chunks: int = 8

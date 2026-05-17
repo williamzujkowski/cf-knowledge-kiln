@@ -1,7 +1,7 @@
 # Handoff notes
 
 **As of:** 2026-05-16
-**Status:** Phase 0–2 complete; Phase 3 (ingestion) ready to start. CI green on `main`.
+**Status:** Phase 0–3 complete; Phase 4 (embeddings) ready to start. CI green on `main`.
 
 This file is the "where we are, what's next, what's been decided" briefing. For *how* to work in the repo, read [AGENTS.md](./AGENTS.md). For *what* the project is, read [README.md](./README.md). For *the plan*, read [plans/cf-rag-plan.md](./plans/cf-rag-plan.md).
 
@@ -11,9 +11,9 @@ This file is the "where we are, what's next, what's been decided" briefing. For 
 
 cf-knowledge-kiln is a Cloud Foundry RAG knowledge app — a `cf push`'d Python/FastAPI app that binds to a Postgres + pgvector service and serves cited retrieval to humans (search UI) and AI agents (bounded context packs). Architecture is hybrid retrieval (pgvector similarity + Postgres FTS + metadata ranking) per [ADR-0002](./docs/adr/0002-postgres-pgvector.md) (reaffirmed by [ADR-0008](./docs/adr/0008-pgvector-mvp-critical.md)).
 
-Phase 2 (database) landed: asyncpg pool with `VCAP_SERVICES` parsing, `/readyz` Postgres ping, Alembic initial migration covering all 9 plan tables + pgvector + FTS GIN + HNSW partial index, SQLAlchemy 2.x ORM models, 9 thin repositories. CI now runs a pgvector-backed integration tier. 30 unit + 23 integration tests green.
+Phase 3 (ingestion) landed: allowlist-gated source loader (git + local), connectors with size/file-count caps + typed skip reasons, structure-aware Markdown chunking with tiktoken, Postgres-backed `ingestion_jobs` queue with `FOR UPDATE SKIP LOCKED`, polling worker with SIGTERM-safe shutdown, end-to-end pipeline that upserts documents/chunks with content-hash dedup. 83 unit + 28 integration tests green.
 
-Next concrete chunk of work: Phase 3 (ingestion). Epic [#2](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/2). Local-dev path is unblocked; the CF deploy gate still depends on [bosh-pgvector-release#3](https://github.com/williamzujkowski/bosh-pgvector-release/issues/3) (operator runbook).
+Next concrete chunk of work: Phase 4 (embeddings). Epic [#3](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/3). Phase 2 already created the `chunk_embeddings` table + HNSW partial index for 768-dim; Phase 4 wires the embedding-provider abstraction and the re-embed-on-hash-change logic. The CF deploy gate still depends on [bosh-pgvector-release#3](https://github.com/williamzujkowski/bosh-pgvector-release/issues/3) (operator runbook).
 
 ---
 
@@ -69,24 +69,33 @@ Local dev and CI sidestep all of this with `docker run pgvector/pgvector:pg16`.
 - **SQLAlchemy 2.x ORM models** (`db/models.py`) — typed `DeclarativeBase` mirroring the migration; `pgvector.sqlalchemy.Vector` for the embedding column.
 - **9 thin repositories** under `db/repositories/` — `catalog.py`, `documents.py`, `operations.py`, `_base.py`. Each repo exposes `create` / `get` / `list(filters...)` / `delete`. Sessions are owned by the caller for transaction composition.
 - **CI integration tier** — new `integration` job in `.github/workflows/ci.yml` provisions `pgvector/pgvector:pg16` as a service container and runs `pytest tests/integration`.
-- **Tests** — 30 unit + 23 integration green. Integration tests cover migration schema + a document/chunk/embedding round-trip + per-repo CRUD.
+
+### Phase 3 — Ingestion
+
+- **Source allowlist** (`ingestion/sources.py`) — Pydantic schema for `config/sources.yaml`. Two source types: `git` (repo + branch) and `local` (filesystem path). `SourceAllowlist.from_yaml()` validates structure, rejects duplicate names, and raises a typed `SourceAllowlistError` on bad input. `.get(name)` is the refusal-by-default gate — unlisted names raise `SourceNotAllowedError`.
+- **Connectors** (`ingestion/connectors.py`) — `LocalConnector` (directory walk) and `GitConnector` (shallow clone, `--depth=1 --single-branch`). Both enforce per-file size, total repo size, and file-count caps; abort with `IngestionCapExceeded` rather than partially indexing. Non-Markdown files are skipped with typed `SkipReason` (`unsupported_file_type`, `too_large`, `excluded_by_pattern`, `binary_content`).
+- **Markdown parsing + chunking** (`ingestion/chunking.py`, `ingestion/tokens.py`) — python-frontmatter for frontmatter, tiktoken (`cl100k_base`) for deterministic token counts, mistune for parse-time validation. Line-based block scanner treats fenced code, GFM tables, list groups, and paragraphs as atomic. Chunks are bounded by H1/H2/H3 boundaries with a configurable 800-token target; oversized sections greedy-pack into multiple chunks without splitting atomic blocks. Every chunk carries `heading_path`, `content_tokens`, and `content_hash` (sha256).
+- **Postgres queue** (`alembic/versions/0002_ingestion_jobs.py`, `IngestionJobsRepository`) — new `ingestion_jobs` table + `claim_one()` using `SELECT … FOR UPDATE SKIP LOCKED` so concurrent workers can't double-process a row. Status transitions: queued → running → succeeded | failed (retryable via `requeue`).
+- **Worker** (`ingestion/worker.py`) — async polling loop that claims one job per tick, runs the full pipeline (connector → parse → upsert document → upsert chunks with hash-dedup → write ingestion_runs), and marks the job done. SIGTERM-safe (uses `asyncio.Event` shutdown signal).
+- **CLI** (`ingestion/cli.py`) — `python -m cf_knowledge_kiln.ingestion {validate | ingest | serve-worker}`. `validate` is the cheap fail-fast for CI / pre-deploy; `ingest` enqueues one `full_resync` job per active allowlisted source; `serve-worker` runs the polling worker.
+- **Settings** — three new env vars: `KILN_INGEST_MAX_FILES` (default 10000), `KILN_INGEST_MAX_REPO_BYTES` (default 100 MiB), `KILN_INGEST_POLL_INTERVAL_SECONDS` (default 5.0).
+- **Tests** — 83 unit + 28 integration green. Integration tests cover end-to-end local-source ingest (3 markdown files → 3 documents + N chunks → ingestion_runs row), idempotency on unchanged content (re-run does zero chunk creation), cap-violation handling (run marked failed), and SKIP LOCKED concurrency (two sessions each claim a different row).
 
 ---
 
 ## What's next (in order)
 
-### Immediate (Phase 3 — Ingestion)
+### Immediate (Phase 4 — Embeddings)
 
-Epic [#2](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/2). Scope per the plan:
+Epic [#3](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/3). Scope per the plan:
 
-- git/local file source connector against allowlisted sources in `config/sources.yaml`.
-- Markdown parser with frontmatter extraction (python-frontmatter + mistune).
-- Structure-aware chunking (H2/H3, preserve tables/code/lists, 300–800 token targets).
-- Content hashing so re-ingestion is a no-op when content is unchanged.
-- `ingestion_runs` tracking + the maintainer ingestion summary (files scanned, indexed, skipped with reasons; chunks created/updated/unchanged; warnings; errors; duration).
-- Tests with fixture docs.
+- Embedding-provider abstraction (`src/cf_knowledge_kiln/agent/embeddings/` or similar) — provider interface + at least the MVP provider per `docs/model-providers.md`.
+- Mock provider for tests (so unit tests don't call out to the real model).
+- Re-embed only when `content_hash` changes (Phase 3 already produces stable hashes; Phase 4 wires the skip path).
+- Per-row dimensions stored on each `chunk_embeddings` row (schema already supports it).
+- Wire embedding generation into `ingestion/pipeline.py` after the chunk upsert.
 
-This is unblocked by Phase 2: the `data_sources`, `documents`, `document_chunks`, and `ingestion_runs` tables + their repositories are ready.
+This is unblocked by Phase 3: ingestion produces hashed chunks ready for embedding.
 
 ### Parallel (operator track)
 
@@ -132,25 +141,25 @@ The ADR-0007 file is preserved on disk as a historical record of the temporarily
 
 ---
 
-## How to start working (Phase 3)
+## How to start working (Phase 4)
 
 ```bash
 cd /home/william/git/cf-knowledge-kiln
 git pull origin main
-git checkout -b feat/phase-3-ingestion
+git checkout -b feat/phase-4-embeddings
 
 # Local dev with pgvector (already created in Phase 2; re-start if stopped)
 docker start kiln-pg
 export KILN_DATABASE_URL=postgresql+asyncpg://kiln:kiln@localhost:5432/kiln  # pragma: allowlist secret
 
-# Install the ingestion extra (already in pyproject.toml under [project.optional-dependencies.ingestion])
+# Phase 4 may add a dep extra (e.g. `embeddings` for nomic / openai-compatible clients).
 .venv/bin/pip install -e ".[dev,db,ingestion]"
 
 # Apply migrations (idempotent if already at head)
 .venv/bin/python -m alembic upgrade head
 
-# TDD per AGENTS.md — failing test first
-# tests/unit/test_chunking.py, tests/unit/test_frontmatter.py, etc.
+# Smoke-test the ingestion pipeline against fixtures
+.venv/bin/python -m cf_knowledge_kiln.ingestion validate --config config/sources.example.yaml
 ```
 
 `make verify` should be green before every commit. `pre-commit run --all-files` is also useful but slower. Integration tests run via `pytest tests/integration -q` against the live `kiln-pg` container.
@@ -195,8 +204,8 @@ These are tracked omnibus issues from the 2026-05-16 code-reviewer pass. Refer t
 
 ```bash
 cd /home/william/git/cf-knowledge-kiln
-gh issue view 2  # Phase 3 epic — ingestion
-git checkout -b feat/phase-3-ingestion
+gh issue view 3  # Phase 4 epic — embeddings
+git checkout -b feat/phase-4-embeddings
 ```
 
 Or, to start the operator track in parallel:

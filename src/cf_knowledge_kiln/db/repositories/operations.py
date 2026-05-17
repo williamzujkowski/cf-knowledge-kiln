@@ -7,10 +7,11 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select, update
 
 from cf_knowledge_kiln.db.models import (
     ContextPack,
+    IngestionJob,
     IngestionRun,
     RagFeedback,
     RagQuery,
@@ -209,3 +210,96 @@ class ContextPacksRepository(BaseRepository):
 
     async def delete(self, id: UUID) -> None:
         await self._session.execute(delete(ContextPack).where(ContextPack.id == id))
+
+
+class IngestionJobsRepository(BaseRepository):
+    """Queue repository for the ingestion worker.
+
+    ``claim_one`` uses ``SELECT ... FOR UPDATE SKIP LOCKED`` so multiple
+    workers polling the same queue never double-process a row.
+    """
+
+    async def create(
+        self,
+        *,
+        source_id: UUID | None = None,
+        kind: str = "full_resync",
+        payload: dict[str, Any] | None = None,
+    ) -> IngestionJob:
+        row = IngestionJob(source_id=source_id, kind=kind, payload=payload or {})
+        self._session.add(row)
+        await self._session.flush()
+        await self._session.refresh(row)
+        return row
+
+    async def get(self, id: UUID) -> IngestionJob | None:
+        return await self._session.get(IngestionJob, id)
+
+    async def list(
+        self,
+        *,
+        status: str | None = None,
+        source_id: UUID | None = None,
+        limit: int | None = None,
+    ) -> Sequence[IngestionJob]:
+        stmt = select(IngestionJob)
+        if status is not None:
+            stmt = stmt.where(IngestionJob.status == status)
+        if source_id is not None:
+            stmt = stmt.where(IngestionJob.source_id == source_id)
+        stmt = stmt.order_by(IngestionJob.enqueued_at.desc())
+        if limit is not None:
+            stmt = stmt.limit(limit)
+        return (await self._session.execute(stmt)).scalars().all()
+
+    async def delete(self, id: UUID) -> None:
+        await self._session.execute(delete(IngestionJob).where(IngestionJob.id == id))
+
+    async def claim_one(self) -> IngestionJob | None:
+        """Atomically claim the oldest queued job for this worker.
+
+        Uses ``FOR UPDATE SKIP LOCKED`` to ensure two workers polling
+        simultaneously each get a different row (or None). The claimed
+        row transitions to ``running`` with ``started_at = now()``.
+        Returns ``None`` if the queue is empty.
+        """
+        stmt = (
+            select(IngestionJob)
+            .where(IngestionJob.status == "queued")
+            .order_by(IngestionJob.enqueued_at)
+            .limit(1)
+            .with_for_update(skip_locked=True)
+        )
+        job = (await self._session.execute(stmt)).scalar_one_or_none()
+        if job is None:
+            return None
+        await self._session.execute(
+            update(IngestionJob)
+            .where(IngestionJob.id == job.id)
+            .values(status="running", started_at=func.now(), attempts=IngestionJob.attempts + 1)
+        )
+        await self._session.flush()
+        await self._session.refresh(job)
+        return job
+
+    async def mark_done(self, id: UUID, *, result_run_id: UUID | None = None) -> None:
+        await self._session.execute(
+            update(IngestionJob)
+            .where(IngestionJob.id == id)
+            .values(status="succeeded", finished_at=func.now(), result_run_id=result_run_id)
+        )
+
+    async def mark_failed(self, id: UUID, *, error: str) -> None:
+        await self._session.execute(
+            update(IngestionJob)
+            .where(IngestionJob.id == id)
+            .values(status="failed", finished_at=func.now(), last_error=error)
+        )
+
+    async def requeue(self, id: UUID) -> None:
+        """Reset a failed job back to ``queued`` so it can be retried."""
+        await self._session.execute(
+            update(IngestionJob)
+            .where(IngestionJob.id == id)
+            .values(status="queued", started_at=None, finished_at=None, last_error=None)
+        )

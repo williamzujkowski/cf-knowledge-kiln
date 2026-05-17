@@ -41,6 +41,7 @@ db = [
 ingestion = [
   "python-frontmatter>=1.1,<2.0",
   "mistune>=3.0,<4.0",
+  "tiktoken>=0.8,<1.0",
 ]
 dev = [
   "ruff>=0.7,<1.0",
@@ -95,7 +96,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["S101", "ARG", "S105", "S106"]
+"tests/**/*.py" = ["S101", "ARG", "S105", "S106", "S603", "S607"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -113,9 +114,9 @@ disallow_untyped_decorators = true
 no_implicit_reexport = true
 show_error_codes = true
 
-# pgvector ships without py.typed (mistune override returns in Phase 3).
+# Third-party libs without py.typed markers.
 [[tool.mypy.overrides]]
-module = ["pgvector.*"]
+module = ["pgvector.*", "frontmatter.*", "mistune.*", "tiktoken.*"]
 ignore_missing_imports = true
 
 # ─── pytest ──────────────────────────────────────────────────────────
@@ -149,5 +150,8 @@ exclude_lines = [
 skips = [
   "B101",  # assert_used — tests legitimately use asserts
   "B104",  # hardcoded_bind_all_interfaces — cli/serve uses 0.0.0.0 by design
+  "B404",  # import_subprocess — ingestion uses subprocess for `git clone`.
+  "B603",  # subprocess_without_shell_equals_true — we never use shell=True.
+  "B607",  # start_process_with_partial_path — `git` is on every supported host.
 ]
 exclude_dirs = ["tests", ".venv", "build", "dist"]

@@ -231,3 +231,37 @@ class ContextPack(Base):
         Boolean, nullable=False, server_default="false"
     )
     created_at: Mapped[datetime] = _ts()
+
+
+class IngestionJob(Base):
+    __tablename__ = "ingestion_jobs"
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('full_resync', 'incremental', 'single_doc')",
+            name="ck_ingestion_jobs_kind",
+        ),
+        CheckConstraint(
+            "status IN ('queued', 'running', 'succeeded', 'failed', 'cancelled')",
+            name="ck_ingestion_jobs_status",
+        ),
+    )
+
+    id: Mapped[UUID] = _pk()
+    source_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("data_sources.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    kind: Mapped[str] = mapped_column(Text, nullable=False, server_default="full_resync")
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default="queued")
+    enqueued_at: Mapped[datetime] = _ts()
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default="{}")
+    result_run_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("ingestion_runs.id", ondelete="SET NULL"),
+        nullable=True,
+    )
