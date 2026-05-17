@@ -25,12 +25,12 @@ from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from cf_knowledge_kiln.config import Settings
-from cf_knowledge_kiln.db.models import Document, DocumentChunk
+from cf_knowledge_kiln.db.models import Document, DocumentChunk, IngestionRun
 from cf_knowledge_kiln.db.repositories import (
     DataSourcesRepository,
     IngestionRunsRepository,
@@ -109,6 +109,20 @@ async def _existing_chunks_by_index(
     return {idx: (chunk_id, h) for chunk_id, idx, h in (await session.execute(stmt)).all()}
 
 
+def _resolve_doc_defaults(metadata: dict[str, Any], source_defaults: Source) -> dict[str, Any]:
+    """Frontmatter wins; source defaults backfill missing keys.
+
+    Pulled out of :func:`_upsert_document` so the SQL upsert stays
+    readable top-to-bottom (#53 cleanup).
+    """
+    return {
+        "status": metadata.get("status") or source_defaults.status,
+        "owner": metadata.get("owner") or source_defaults.default_owner,
+        "authority": metadata.get("authority") or source_defaults.authority,
+        "sensitivity": metadata.get("sensitivity") or source_defaults.default_sensitivity,
+    }
+
+
 async def _upsert_document(
     session: AsyncSession,
     *,
@@ -123,16 +137,10 @@ async def _upsert_document(
 
     Uses ``INSERT ... ON CONFLICT (repo, path) DO UPDATE`` so two
     concurrent workers (or a retry after crash) can't race the
-    SELECT-then-INSERT pattern into an ``IntegrityError``. We address
-    columns via ``Document.__table__`` so the SQL column name
-    ``metadata`` doesn't collide with SQLAlchemy's reserved
-    ``Base.metadata`` attribute.
+    SELECT-then-INSERT pattern into an ``IntegrityError``.
     """
     table = Document.__table__
-    status = metadata.get("status") or source_defaults.status
-    owner = metadata.get("owner") or source_defaults.default_owner
-    authority = metadata.get("authority") or source_defaults.authority
-    sensitivity = metadata.get("sensitivity") or source_defaults.default_sensitivity
+    defaults = _resolve_doc_defaults(metadata, source_defaults)
     insert_stmt = pg_insert(table).values(  # type: ignore[arg-type]
         {
             table.c.repo: repo,
@@ -140,10 +148,7 @@ async def _upsert_document(
             table.c.title: title,
             table.c.metadata: metadata,
             table.c.commit_sha: commit_sha,
-            table.c.status: status,
-            table.c.owner: owner,
-            table.c.authority: authority,
-            table.c.sensitivity: sensitivity,
+            **{table.c[k]: v for k, v in defaults.items()},
         }
     )
     upsert_stmt = insert_stmt.on_conflict_do_update(
@@ -152,14 +157,79 @@ async def _upsert_document(
             "title": insert_stmt.excluded.title,
             "metadata": insert_stmt.excluded.metadata,
             "commit_sha": insert_stmt.excluded.commit_sha,
-            "status": insert_stmt.excluded.status,
-            "owner": insert_stmt.excluded.owner,
-            "authority": insert_stmt.excluded.authority,
-            "sensitivity": insert_stmt.excluded.sensitivity,
+            **{k: insert_stmt.excluded[k] for k in defaults},
         },
     ).returning(table.c.id)
     doc_id = (await session.execute(upsert_stmt)).scalar_one()
     return (await session.execute(select(Document).where(Document.id == doc_id))).scalar_one()
+
+
+def _chunk_security_metadata(
+    content: str,
+    summary: IngestionSummary,
+    *,
+    prompt_injection_phrases: list[str] | None,
+) -> dict[str, Any]:
+    """Stamp ingest-time security markers on chunk metadata.
+
+    Pulled out of :func:`_process_file` (#53 cleanup). The retrieval
+    path emits ``prompt_injection_pattern`` warnings in O(1) per chunk
+    using these markers — see #57. Empty phrase list → empty dict.
+    """
+    if not prompt_injection_phrases:
+        return {}
+    match = scan_prompt_injection(content, prompt_injection_phrases)
+    if match is None:
+        return {}
+    summary.chunks_with_prompt_injection += 1
+    return {
+        "has_prompt_injection": True,
+        "matched_pattern": match["matched_pattern"],
+    }
+
+
+async def _upsert_chunk(
+    session: AsyncSession,
+    *,
+    doc_id: UUID,
+    chunk: Any,  # parsed chunk; structural, not nominal
+    summary: IngestionSummary,
+    prompt_injection_phrases: list[str] | None,
+) -> None:
+    """Upsert one chunk row. Used by :func:`_process_file` (#53 cleanup).
+
+    Upsert on ``(document_id, chunk_index)``: a content edit replaces
+    the row in place so the chunk's UUID is stable. That stable ID is
+    what ``chunk_embeddings`` references; the embedding pass will
+    notice the ``content_hash`` drift and re-embed.
+    """
+    table = DocumentChunk.__table__
+    chunk_extra = _chunk_security_metadata(
+        chunk.content, summary, prompt_injection_phrases=prompt_injection_phrases
+    )
+    insert_stmt = pg_insert(table).values(  # type: ignore[arg-type]
+        {
+            table.c.document_id: doc_id,
+            table.c.chunk_index: chunk.chunk_index,
+            table.c.content: chunk.content,
+            table.c.content_tokens: chunk.content_tokens,
+            table.c.content_hash: chunk.content_hash,
+            table.c.heading_path: chunk.heading_path,
+            table.c.metadata: chunk_extra,
+        }
+    )
+    upsert_stmt = insert_stmt.on_conflict_do_update(
+        constraint="uq_chunks_doc_index",
+        set_={
+            "content": insert_stmt.excluded.content,
+            "content_tokens": insert_stmt.excluded.content_tokens,
+            "content_hash": insert_stmt.excluded.content_hash,
+            "heading_path": insert_stmt.excluded.heading_path,
+            "metadata": insert_stmt.excluded.metadata,
+        },
+    )
+    await session.execute(upsert_stmt)
+    summary.chunks_created += 1
 
 
 async def _process_file(
@@ -184,12 +254,11 @@ async def _process_file(
         summary.warnings.append(f"{file.path}: no chunks (empty or parse error)")
         summary.files_skipped += 1
         return
-    title = parsed.title or file.path
     doc = await _upsert_document(
         session,
         repo=_repo_label(source),
         path=file.path,
-        title=title,
+        title=parsed.title or file.path,
         metadata=parsed.meta,
         commit_sha=file.commit_sha,
         source_defaults=source,
@@ -197,52 +266,19 @@ async def _process_file(
     touched_doc_ids.add(doc.id)
     existing_by_index = await _existing_chunks_by_index(session, doc.id)
     seen_indices: set[int] = set()
-    chunks_table = DocumentChunk.__table__
     for chunk in parsed.chunks:
         seen_indices.add(chunk.chunk_index)
         prev = existing_by_index.get(chunk.chunk_index)
         if prev is not None and prev[1] == chunk.content_hash:
             summary.chunks_unchanged += 1
             continue
-        # Stamp ingest-time security markers on chunk metadata so the
-        # retrieval path can emit prompt_injection_pattern warnings in
-        # O(1) per chunk (#57). The matcher returns the first match;
-        # we record it as evidence for the warning. Empty phrase list
-        # (no security config) → no metadata change.
-        chunk_extra: dict[str, Any] = {}
-        if prompt_injection_phrases:
-            match = scan_prompt_injection(chunk.content, prompt_injection_phrases)
-            if match is not None:
-                chunk_extra["has_prompt_injection"] = True
-                chunk_extra["matched_pattern"] = match["matched_pattern"]
-                summary.chunks_with_prompt_injection += 1
-        # Upsert on (document_id, chunk_index): a content edit replaces
-        # the row in place so the chunk's UUID is stable. That stable ID
-        # is what chunk_embeddings references; the embedding pass will
-        # then notice the content_hash drift and re-embed.
-        insert_stmt = pg_insert(chunks_table).values(  # type: ignore[arg-type]
-            {
-                chunks_table.c.document_id: doc.id,
-                chunks_table.c.chunk_index: chunk.chunk_index,
-                chunks_table.c.content: chunk.content,
-                chunks_table.c.content_tokens: chunk.content_tokens,
-                chunks_table.c.content_hash: chunk.content_hash,
-                chunks_table.c.heading_path: chunk.heading_path,
-                chunks_table.c.metadata: chunk_extra,
-            }
+        await _upsert_chunk(
+            session,
+            doc_id=doc.id,
+            chunk=chunk,
+            summary=summary,
+            prompt_injection_phrases=prompt_injection_phrases,
         )
-        upsert_stmt = insert_stmt.on_conflict_do_update(
-            constraint="uq_chunks_doc_index",
-            set_={
-                "content": insert_stmt.excluded.content,
-                "content_tokens": insert_stmt.excluded.content_tokens,
-                "content_hash": insert_stmt.excluded.content_hash,
-                "heading_path": insert_stmt.excluded.heading_path,
-                "metadata": insert_stmt.excluded.metadata,
-            },
-        )
-        await session.execute(upsert_stmt)
-        summary.chunks_created += 1
     orphan_ids = [
         chunk_id for idx, (chunk_id, _h) in existing_by_index.items() if idx not in seen_indices
     ]
@@ -367,10 +403,6 @@ def _runs_update(
     errors: list[str] | None = None,
     commit_sha: str | None = None,
 ) -> Any:
-    from sqlalchemy import func, update
-
-    from cf_knowledge_kiln.db.models import IngestionRun
-
     return (
         update(IngestionRun)
         .where(IngestionRun.id == run_id)
