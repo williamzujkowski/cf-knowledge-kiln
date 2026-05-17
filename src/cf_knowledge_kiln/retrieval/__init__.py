@@ -16,9 +16,9 @@ Public surface:
 * :mod:`~cf_knowledge_kiln.retrieval.ranking` — :class:`RankedChunk`,
   RRF fusion, boost application, warning emission, conflict detection,
   and the single :func:`requires_human_review` decision function.
-
-The DB-touching engine (:class:`HybridRetriever`) lands in slice 2;
-this slice is pure-logic and unit-testable without a database.
+* :class:`~cf_knowledge_kiln.retrieval.engine.HybridRetriever` (slice
+  2) — DB-touching engine that wires the CTE in
+  :class:`ChunksRepository.hybrid_search` to ranking + warnings.
 """
 
 from cf_knowledge_kiln.retrieval.config import (
@@ -27,6 +27,11 @@ from cf_knowledge_kiln.retrieval.config import (
     RetrievalConfig,
     RetrievalConfigError,
     load_retrieval_config,
+)
+from cf_knowledge_kiln.retrieval.engine import (
+    EmbeddingProvider,
+    HybridRetriever,
+    SearchResult,
 )
 from cf_knowledge_kiln.retrieval.filters import build_predicates
 from cf_knowledge_kiln.retrieval.ranking import (
@@ -56,10 +61,13 @@ __all__ = [
     "DEFAULT_STATUS_WEIGHTS",
     "WEAK_EVIDENCE_SCORE_THRESHOLD",
     "Conflict",
+    "EmbeddingProvider",
+    "HybridRetriever",
     "RankedChunk",
     "RetrievalConfig",
     "RetrievalConfigError",
     "RetrievalFilters",
+    "SearchResult",
     "Status",
     "Warning",
     "WarningType",

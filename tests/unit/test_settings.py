@@ -16,6 +16,12 @@ def test_settings_defaults() -> None:
     assert settings.auth_mode == "none"
     assert settings.default_max_chunks == 8
     assert settings.default_max_tokens == 3000
+    assert settings.hnsw_ef_search == 200
+
+
+def test_hnsw_ef_search_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("KILN_HNSW_EF_SEARCH", "300")
+    assert Settings().hnsw_ef_search == 300
 
 
 def test_status_preference_list_parses_csv() -> None:
