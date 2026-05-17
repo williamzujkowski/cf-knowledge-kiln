@@ -22,6 +22,10 @@
 
     <fieldset class="filters">
       <legend>Filters</legend>
+      {# A hidden marker so the handler can tell "user unchecked all
+         status boxes" (POST with `_filters_set=1` + status=[]) from
+         "no form submitted yet" (no _filters_set field at all). #}
+      <input type="hidden" name="_filters_set" value="1">
       <label>
         <input type="checkbox" name="status" value="active" checked> Active
       </label>

@@ -250,3 +250,12 @@ footer {
   text-align: center;
   margin: 2rem 0;
 }
+
+.error-fragment {
+  background: #f8d7da;
+  color: #842029;
+  border-left: 3px solid #b02a37;
+  padding: 0.75rem 1rem;
+  border-radius: 4px;
+  margin: 1rem 0;
+}

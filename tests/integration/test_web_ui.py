@@ -187,6 +187,70 @@ async def _set_status(session: AsyncSession, path: str, new_status: str) -> None
 # ─── Telemetry persistence ──────────────────────────────────────────
 
 
+def test_search_post_unchecking_all_filters_returns_zero_results(
+    client: TestClient, session: AsyncSession, small_corpus: Path
+) -> None:
+    """User unchecks every status filter → zero results (not default-fallback).
+
+    Slice-6 reviewer caught: the original code treated `status=[]` from
+    the form the same as 'no form submitted' and fell back to the
+    default `["active", "approved"]` — silently overriding the user's
+    explicit choice. The hidden `_filters_set` marker now disambiguates.
+    """
+    asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
+    response = client.post(
+        "/search",
+        # `_filters_set` arrived but no `status` — user unchecked all.
+        data={"query": "widgets", "_filters_set": "1"},
+    )
+    assert response.status_code == 200
+    # No result cards because no status passes the (empty) filter.
+    assert "result-card" not in response.text
+    assert "No results" in response.text
+
+
+def test_search_post_programmatic_no_marker_falls_back_to_defaults(
+    client: TestClient, session: AsyncSession, small_corpus: Path
+) -> None:
+    """A programmatic POST without _filters_set still gets default statuses.
+
+    Counterpart to the test above — ensures the disambiguation only
+    triggers for explicit form submissions, not for callers that
+    haven't been updated to include the marker.
+    """
+    asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
+    response = client.post("/search", data={"query": "widgets"})
+    assert response.status_code == 200
+    # Defaults apply → active doc 'beta.md' surfaces.
+    assert "result-card" in response.text
+    assert "Beta" in response.text
+
+
+def test_search_post_returns_error_fragment_on_retrieval_failure(
+    client: TestClient, session: AsyncSession, small_corpus: Path
+) -> None:
+    """A retrieval-side exception must render the error fragment, not 500.
+
+    Slice-6 reviewer LOW finding: an HTMX swap of a FastAPI 500
+    body looks broken in #results. Patch the retriever to raise
+    and assert the user sees the friendly fragment.
+    """
+    from unittest.mock import patch
+
+    asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
+    with patch(
+        "cf_knowledge_kiln.retrieval.engine.HybridRetriever.search",
+        side_effect=RuntimeError("simulated DB outage"),
+    ):
+        response = client.post(
+            "/search",
+            data={"query": "widgets", "_filters_set": "1", "status": "active"},
+        )
+    assert response.status_code == 503
+    assert "error-fragment" in response.text
+    assert "Search is temporarily unavailable" in response.text
+
+
 def test_web_search_persists_rag_query_with_human_consumer(
     client: TestClient, session: AsyncSession, small_corpus: Path, engine: AsyncEngine
 ) -> None:
