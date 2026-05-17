@@ -2,7 +2,7 @@
 
 > Cloud Foundry-ready RAG knowledge substrate. Hybrid search over your internal docs, cited answers for humans, bounded context packs for agents.
 
-**Status:** Phase 0–4 complete (scaffold, Postgres+pgvector data layer, ingestion pipeline, embedding providers). Phase 5 (hybrid retrieval + agent endpoints) is the next chunk; until then, the API exposes only health endpoints. See [HANDOFF.md](./HANDOFF.md) for the live status, [plans/cf-rag-plan.md](./plans/cf-rag-plan.md) for the full implementation plan, and [docs/INDEX.md](./docs/INDEX.md) for documentation entry points.
+**Status:** Phases 0–8 complete: scaffold, Postgres+pgvector data layer, ingestion pipeline (Git/HTTP/Local sources with SSRF guard + DNS pinning), embedding providers, hybrid retrieval engine, `/v1/search` + `/v1/agent/context-pack` JSON APIs, server-rendered HTMX search UI with feedback, bearer-token auth middleware, per-IP rate limiting, SBOM + grype scan in CI. Phase 9 (eval harness, forking guide) is in progress — the retrieval eval is live (`make eval`). See [HANDOFF.md](./HANDOFF.md) for the live status, [plans/cf-rag-plan.md](./plans/cf-rag-plan.md) for the full implementation plan, and [docs/INDEX.md](./docs/INDEX.md) for documentation entry points.
 
 ## What this is
 
@@ -59,6 +59,19 @@ Four layers, kept apart on purpose. See [docs/architecture.md](./docs/architectu
 ```
 
 UI, agent API, and ingestion do **not** own retrieval logic. Retrieval is centralized.
+
+## Fork & repurpose
+
+This repo is designed to be forked by another team and adapted to their corpus + Cloud Foundry foundation. The minimum path:
+
+1. **Fork**. Update `AGENTS.md` (`Repository:` and `Owner:` fields), `pyproject.toml` (`Homepage` / `Issues` / `Repository`), and `manifest.yml` (app name, route, memory quota).
+2. **Configure sources.** Copy `config/sources.example.yaml` → `config/sources.yaml` and list the repos / HTTP roots you want indexed. Sources not in the allowlist are refused — by design.
+3. **Configure models.** Copy `config/models.example.yaml` → `config/models.yaml` and pick an embedding provider. The default is a local sentence-transformers model so the dev loop has zero external dependencies; swap to an OpenAI-compatible endpoint when you want a real provider. Adversary-origin model weights are blocked (`docs/model-providers.md`).
+4. **Provision Postgres + pgvector.** In Cloud Foundry, bind a Postgres service from a broker that exposes `pgvector` (`KILN_PG_SERVICE_NAME` selects which binding). Locally, the integration tests assume `pgvector/pgvector:pg16` at `localhost:5432`; see `tests/integration/conftest.py` for the default DSN.
+5. **Push.** `make cf-push` deploys the two-process layout from `manifest.yml` (`cf-knowledge-kiln-api` + `cf-knowledge-kiln-worker`). `make ingest` enqueues an initial corpus build.
+6. **Verify.** `scripts/smoke-test.sh` posts a query to the deployed API; `make eval` runs the retrieval-quality harness against your seeded corpus.
+
+An expanded walkthrough lives in the forking guide once Phase 9 (#32) lands.
 
 ## License
 

@@ -89,17 +89,20 @@ identity, never sees an ACL, never gates a response based on prompted
 
 ## Pre-launch checklist (referenced by Phase 8/9)
 
-- [ ] All external sources allowlisted.
-- [ ] Secrets only in env/service bindings.
-- [ ] Source URLs sanitized; SSRF prevented.
-- [ ] Repository clones size-capped.
-- [ ] File size limit enforced.
-- [ ] Token limits enforced on agent endpoints.
-- [ ] Query logs do not record secret material.
-- [ ] CUI/PII assumptions documented.
-- [ ] Deprecated docs visibly flagged in retrieval responses.
-- [ ] Model licenses/provenance documented in `docs/model-providers.md`.
-- [ ] SBOM and Grype scan hooks present and green.
-- [ ] Tests cover failure paths.
-- [ ] Agent endpoints protected from prompt-injection patterns.
-- [ ] AI consumers warned not to execute retrieved text.
+State as of the Phase 9 public-readiness review (#34):
+
+- [x] All external sources allowlisted. (`SourceAllowlist`; #27)
+- [x] Secrets only in env/service bindings. (`Settings` + `VCAP_SERVICES` resolution; never in YAML config)
+- [x] Source URLs sanitized; SSRF prevented. (#80 host allowlist + IP-range checks + IPv6 transition blocks; #81 DNS pinning closes the TOCTOU window)
+- [x] Repository clones size-capped. (`KILN_INGEST_MAX_REPO_BYTES`)
+- [x] File size limit enforced. (`KILN_INGEST_MAX_FILE_BYTES`)
+- [x] Token limits enforced on agent endpoints. (`max_tokens` on `/v1/agent/context-pack`)
+- [x] Query logs do not record secret material. (`db.redact_dsn` for connection strings; query bodies log at INFO without secrets)
+- [x] CUI/PII assumptions documented. (this file)
+- [x] Deprecated docs visibly flagged in retrieval responses. (`status` warnings on result cards + agent packs)
+- [x] Model licenses/provenance documented in `docs/model-providers.md`. (US-origin allowlist; adversary-origin weights refused at load time)
+- [x] SBOM and Grype scan hooks present and green. (`make sbom` + `make scan`; CI gate severity-cutoff `high`; #28)
+- [x] Tests cover failure paths. (454 unit + 101 integration as of #94; retrieval eval harness at `tests/eval/` with `make eval`)
+- [x] Agent endpoints protected from prompt-injection patterns. (ingest-time scanner stamps `has_prompt_injection`; retrieval emits the warning O(1) per chunk)
+- [x] AI consumers warned not to execute retrieved text. (`untrusted_content_notice` always present in context-pack response)
+- [x] Per-IP rate limit on `/v1/search`, `/v1/agent/context-pack`, and `/feedback`. (#79; in-process token-bucket with LRU bucket cap; single-instance only — horizontal scale needs a shared backend)
