@@ -35,6 +35,20 @@ pytest_plugins = ["tests.integration.conftest"]
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _GOLDEN_PATH = _REPO_ROOT / "tests" / "eval" / "golden" / "docs.yaml"
 _DOCS_DIR = _REPO_ROOT / "docs"
+_ADVERSARIAL_DIR = _REPO_ROOT / "tests" / "eval" / "fixtures" / "adversarial"
+
+# Phrases the prompt-injection scanner watches for. Kept in sync with
+# the production list at config/security.example.yaml; the journey
+# tests need the scanner enabled so the prompt-injection adversarial
+# fixture actually gets stamped at ingest time.
+_PROMPT_INJECTION_PHRASES = [
+    "ignore previous instructions",
+    "ignore prior instructions",
+    "disregard the system prompt",
+    "you are now",
+    "developer message",
+    "you must comply",
+]
 
 
 def _eval_settings() -> Settings:
@@ -87,13 +101,56 @@ def seeded_db(database_url: str) -> Iterator[None]:
 
 
 @pytest.fixture
-def seeded_retriever(seeded_db: None, database_url: str) -> Iterator[HybridRetriever]:
-    """Wire a :class:`HybridRetriever` against the seeded DB.
+def seeded_db_with_adversarial(database_url: str) -> Iterator[None]:
+    """Seed docs/ AND tests/eval/fixtures/adversarial/ with PI scanning on.
 
-    Yields so the engine pool is disposed on teardown; a return-form
-    fixture would leak one pool per test (the process tears down at
-    suite end, but ``pytest -W error`` flags the open resource).
+    Used by the journey-level tests (#68): the adversarial fixtures
+    are what exercise the prompt-injection warning emission and the
+    deprecation-status flow. Function-scoped for the same reason as
+    ``seeded_db`` — autouse truncate races a session-scoped seed.
     """
+
+    async def _seed() -> None:
+        eng: AsyncEngine = create_async_engine(database_url)
+        try:
+            maker = async_sessionmaker(eng, expire_on_commit=False)
+            async with maker() as session:
+                # The repo docs/ stay scan-clean — the production
+                # filter list never matches benign architecture or
+                # security prose.
+                await run_source(
+                    session,
+                    source=LocalSource(
+                        name="cf-knowledge-kiln",
+                        type="local",
+                        path=str(_DOCS_DIR),
+                        include=["**/*.md"],
+                    ),
+                    settings=_eval_settings(),
+                    embedding_provider=MockEmbeddingProvider(),
+                    prompt_injection_phrases=_PROMPT_INJECTION_PHRASES,
+                )
+                await run_source(
+                    session,
+                    source=LocalSource(
+                        name="adversarial-fixtures",
+                        type="local",
+                        path=str(_ADVERSARIAL_DIR),
+                        include=["*.md"],
+                    ),
+                    settings=_eval_settings(),
+                    embedding_provider=MockEmbeddingProvider(),
+                    prompt_injection_phrases=_PROMPT_INJECTION_PHRASES,
+                )
+                await session.commit()
+        finally:
+            await eng.dispose()
+
+    asyncio.run(_seed())
+    yield
+
+
+def _build_retriever(database_url: str) -> tuple[HybridRetriever, Database]:
     settings = _eval_settings()
     db = Database(database_url, pool_size=settings.pg_pool_size)
     config = load_retrieval_config(settings.security_config_path)
@@ -103,6 +160,30 @@ def seeded_retriever(seeded_db: None, database_url: str) -> Iterator[HybridRetri
         config=config,
         ef_search=settings.hnsw_ef_search,
     )
+    return retriever, db
+
+
+@pytest.fixture
+def seeded_retriever(seeded_db: None, database_url: str) -> Iterator[HybridRetriever]:
+    """Wire a :class:`HybridRetriever` against the seeded DB.
+
+    Yields so the engine pool is disposed on teardown; a return-form
+    fixture would leak one pool per test (the process tears down at
+    suite end, but ``pytest -W error`` flags the open resource).
+    """
+    retriever, db = _build_retriever(database_url)
+    try:
+        yield retriever
+    finally:
+        asyncio.run(db.dispose())
+
+
+@pytest.fixture
+def adversarial_retriever(
+    seeded_db_with_adversarial: None, database_url: str
+) -> Iterator[HybridRetriever]:
+    """Same as :func:`seeded_retriever` but with adversarial fixtures ingested."""
+    retriever, db = _build_retriever(database_url)
     try:
         yield retriever
     finally:
