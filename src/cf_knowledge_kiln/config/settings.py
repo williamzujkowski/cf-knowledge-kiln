@@ -63,6 +63,9 @@ class Settings(BaseSettings):
     default_max_tokens: int = 3000
     default_status_preference: str = "active,approved"
 
+    # Embedding provider config (Phase 4).
+    models_config_path: str = "config/models.yaml"
+
     # Security.
     source_allowlist_path: str = "config/sources.yaml"
     auth_mode: AuthMode = "none"

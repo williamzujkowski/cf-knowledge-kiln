@@ -25,14 +25,29 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from cf_knowledge_kiln.config import Settings
 from cf_knowledge_kiln.db.models import (
+    ChunkEmbedding,
     DataSource,
     Document,
     DocumentChunk,
     IngestionRun,
 )
 from cf_knowledge_kiln.db.repositories import IngestionJobsRepository
+from cf_knowledge_kiln.ingestion.embedding import MockEmbeddingProvider
 from cf_knowledge_kiln.ingestion.pipeline import run_source
 from cf_knowledge_kiln.ingestion.sources import LocalSource
+
+
+class _CountingMockProvider(MockEmbeddingProvider):
+    """Mock provider that records every ``embed`` call for assertions."""
+
+    def __init__(self, **kwargs: object) -> None:
+        super().__init__(**kwargs)  # type: ignore[arg-type]
+        self.calls: list[list[str]] = []
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        self.calls.append(list(texts))
+        return await super().embed(texts)
+
 
 pytestmark = pytest.mark.integration
 
@@ -155,6 +170,70 @@ async def test_pipeline_aborts_on_repo_cap_and_marks_run(
     assert summary.errors
     runs = (await session.execute(select(IngestionRun))).scalars().all()
     assert any(r.status == "failed" for r in runs)
+
+
+async def test_pipeline_embeds_new_chunks_when_provider_supplied(
+    session: AsyncSession, fixture_corpus: Path
+) -> None:
+    """Issue #18: every new chunk gets exactly one embedding row."""
+    provider = _CountingMockProvider()
+    src = LocalSource(name="fixtures", type="local", path=str(fixture_corpus), include=["**/*.md"])
+    summary = await run_source(
+        session, source=src, settings=_settings(), embedding_provider=provider
+    )
+    await session.commit()
+    assert summary.embeddings_created == summary.chunks_created
+    assert summary.embeddings_created > 0
+    embeddings = (await session.execute(select(ChunkEmbedding))).scalars().all()
+    assert len(embeddings) == summary.chunks_created
+    assert all(e.provider == "mock" for e in embeddings)
+    assert all(e.dimensions == 768 for e in embeddings)
+
+
+async def test_pipeline_skips_embeddings_on_unchanged_re_ingest(
+    session: AsyncSession, fixture_corpus: Path
+) -> None:
+    """Issue #18 acceptance: re-ingestion of unchanged corpus = zero calls."""
+    provider = _CountingMockProvider()
+    src = LocalSource(name="fixtures", type="local", path=str(fixture_corpus), include=["**/*.md"])
+
+    first = await run_source(session, source=src, settings=_settings(), embedding_provider=provider)
+    await session.commit()
+    calls_after_first = len(provider.calls)
+    assert first.embeddings_created > 0
+
+    second = await run_source(
+        session, source=src, settings=_settings(), embedding_provider=provider
+    )
+    await session.commit()
+    # Re-ingest of identical content: provider must not be called again.
+    assert len(provider.calls) == calls_after_first
+    assert second.embeddings_created == 0
+    assert second.embeddings_unchanged == first.embeddings_created
+
+
+async def test_pipeline_re_embeds_only_changed_chunks(
+    session: AsyncSession, tmp_path: Path
+) -> None:
+    """A chunk whose hash changed gets one new embedding; siblings stay put."""
+    (tmp_path / "doc.md").write_text("# Doc\n\noriginal body\n")
+    src = LocalSource(name="changing", type="local", path=str(tmp_path), include=["**/*.md"])
+    provider = _CountingMockProvider()
+
+    first = await run_source(session, source=src, settings=_settings(), embedding_provider=provider)
+    await session.commit()
+    initial_call_count = len(provider.calls)
+    assert first.embeddings_created >= 1
+
+    # Edit the file → new chunk hash for the changed chunk.
+    (tmp_path / "doc.md").write_text("# Doc\n\nedited body\n")
+    second = await run_source(
+        session, source=src, settings=_settings(), embedding_provider=provider
+    )
+    await session.commit()
+    # At least one fresh embedding call for the changed chunk.
+    assert len(provider.calls) > initial_call_count
+    assert second.embeddings_created >= 1
 
 
 async def test_pipeline_records_skip_reasons_in_run_stats(
