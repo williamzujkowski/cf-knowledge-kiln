@@ -1,0 +1,60 @@
+---
+# GitHub CodeQL — language-aware static analysis for Python.
+#
+# Complements (does not replace) the bandit + pip-audit + grype checks
+# already in ci.yml. CodeQL catches dataflow-style issues that bandit's
+# pattern matching misses (e.g., taint analysis from user input through
+# multiple function calls). Free for public repos; required permissions
+# documented at https://github.com/github/codeql-action.
+#
+# Runs on push to main + PRs into main + weekly cron so the queries get
+# re-evaluated as the CodeQL ruleset updates.
+#
+# Issue #55 evaluated Semgrep + CodeQL: CodeQL won on (a) zero-config
+# Python coverage, (b) GitHub-native code-scanning UI, (c) no separate
+# rules repo to maintain. Semgrep is still a candidate if we ever want
+# repo-specific custom rules — file a follow-up issue if that need
+# materializes.
+
+name: codeql
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Mondays 08:00 UTC. Re-evaluates against any updated query packs.
+    - cron: "0 8 * * 1"
+  workflow_dispatch:
+
+jobs:
+  analyze:
+    name: analyze (python)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      # Required by github/codeql-action.
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: python
+          # security-extended adds the security-and-quality rule pack
+          # on top of the default security pack.
+          queries: security-extended
+
+      - name: Autobuild
+        # Python doesn't need a real "build" step for CodeQL to work,
+        # but the autobuild action is the documented happy path.
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:python"
