@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from pathlib import PurePosixPath
 from uuid import UUID
 
 from cf_knowledge_kiln.ingestion._jsonsafe import jsonify
@@ -60,6 +61,24 @@ class TestJsonify:
     def test_dict_string_keys_coerced(self) -> None:
         out = jsonify({1: "a", "b": "c"})
         assert out == {"1": "a", "b": "c"}
+
+    def test_path_becomes_posix_string(self) -> None:
+        assert jsonify(PurePosixPath("a/b/c.md")) == "a/b/c.md"
+
+    def test_cycle_in_dict_does_not_recurse_infinitely(self) -> None:
+        """A self-referential dict short-circuits to "<cycle>"."""
+        d: dict[str, object] = {"name": "outer"}
+        d["self"] = d
+        out = jsonify(d)
+        assert out["name"] == "outer"
+        assert out["self"] == "<cycle>"
+
+    def test_cycle_in_list_does_not_recurse_infinitely(self) -> None:
+        a: list[object] = [1, 2]
+        a.append(a)
+        out = jsonify(a)
+        assert out[:2] == [1, 2]
+        assert out[2] == "<cycle>"
 
     def test_output_round_trips_through_json(self) -> None:
         """The whole point: output must hand off to json.dumps cleanly."""
