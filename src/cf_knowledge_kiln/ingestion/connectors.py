@@ -43,6 +43,33 @@ SkipReason = Literal[
 
 _SUPPORTED_SUFFIXES: Final = frozenset({".md", ".markdown"})
 
+# Default-deny patterns: paths whose first segment matches any of these
+# are skipped regardless of include/exclude config. Prevents secrets in
+# upstream repos (`.env`, `.git/config`, IDE state, etc.) from being
+# silently indexed when a source's include defaults to `**/*`.
+_DOTFILE_DENY: Final = (
+    ".git",
+    ".github",
+    ".env",
+    ".envrc",
+    ".venv",
+    "node_modules",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".idea",
+    ".vscode",
+)
+
+
+def _is_denied_by_default(rel_path: str) -> bool:
+    """Top-level dotfile / vendored-tree paths are skipped pre-glob."""
+    head, _, _ = rel_path.partition("/")
+    if head in _DOTFILE_DENY:
+        return True
+    # Also block dotfiles at any depth (e.g. `docs/.env`).
+    return any(seg.startswith(".") and seg not in {".", ".."} for seg in rel_path.split("/"))
+
 
 @dataclass(frozen=True)
 class IngestionCaps:
@@ -120,6 +147,11 @@ def _walk(root: Path, source: Source, caps: IngestionCaps, commit_sha: str | Non
         if not path.is_file():
             continue
         rel = path.relative_to(root).as_posix()
+        if _is_denied_by_default(rel):
+            result.skipped.append(
+                SkippedFile(rel, "excluded_by_pattern", "dotfile / vendored-tree default-deny")
+            )
+            continue
         if rel not in include_set:
             result.skipped.append(SkippedFile(rel, "excluded_by_pattern", "not in include glob"))
             continue
@@ -188,6 +220,9 @@ class GitConnector:
 
     @staticmethod
     def _clone(source: GitSource, target: Path) -> None:
+        # The trailing `--` terminates git's option parsing, so even if a
+        # repo URL or path starts with `-` (Pydantic refuses this today
+        # via the source schema) git won't interpret it as an option.
         cmd = [
             "git",
             "clone",
@@ -196,6 +231,7 @@ class GitConnector:
             source.branch,
             "--single-branch",
             "--no-tags",
+            "--",
             _resolve_repo_url(source.repo),
             str(target),
         ]

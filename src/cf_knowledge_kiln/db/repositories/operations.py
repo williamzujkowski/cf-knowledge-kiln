@@ -262,6 +262,14 @@ class IngestionJobsRepository(BaseRepository):
         simultaneously each get a different row (or None). The claimed
         row transitions to ``running`` with ``started_at = now()``.
         Returns ``None`` if the queue is empty.
+
+        Note: the row lock is released when the session commits, *not*
+        when this method returns. The caller is expected to either
+        commit immediately (and rely on the ``status = 'queued'`` filter
+        below to keep the claim correct) or to hold the transaction
+        open while processing. The UPDATE re-asserts the status filter
+        as a defense against a duplicate-claim race introduced by a
+        retry between SELECT and UPDATE.
         """
         stmt = (
             select(IngestionJob)
@@ -273,11 +281,17 @@ class IngestionJobsRepository(BaseRepository):
         job = (await self._session.execute(stmt)).scalar_one_or_none()
         if job is None:
             return None
-        await self._session.execute(
+        result = await self._session.execute(
             update(IngestionJob)
-            .where(IngestionJob.id == job.id)
+            .where(IngestionJob.id == job.id, IngestionJob.status == "queued")
             .values(status="running", started_at=func.now(), attempts=IngestionJob.attempts + 1)
         )
+        # rowcount is available on the underlying CursorResult; falling
+        # through to refresh() would still work (we'd just get a row that
+        # might already be `running`), so this is a defensive bail-out
+        # for the rare lost-race case.
+        if getattr(result, "rowcount", 1) == 0:
+            return None
         await self._session.flush()
         await self._session.refresh(job)
         return job

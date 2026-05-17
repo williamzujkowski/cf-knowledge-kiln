@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from cf_knowledge_kiln.config import Settings
@@ -84,44 +85,47 @@ async def _upsert_document(
     commit_sha: str | None,
     source_defaults: Source,
 ) -> Document:
-    """Upsert ``documents`` row keyed by (repo, path). Returns the live row.
+    """Upsert ``documents`` row keyed by ``(repo, path)``. Returns the live row.
 
-    Plain ORM (select-then-mutate-or-add). ``Document.extra`` is the
-    Python attribute that maps to the SQL column ``metadata``; we use
-    the attribute name throughout to avoid colliding with SQLAlchemy's
-    reserved ``Base.metadata``.
+    Uses ``INSERT ... ON CONFLICT (repo, path) DO UPDATE`` so two
+    concurrent workers (or a retry after crash) can't race the
+    SELECT-then-INSERT pattern into an ``IntegrityError``. We address
+    columns via ``Document.__table__`` so the SQL column name
+    ``metadata`` doesn't collide with SQLAlchemy's reserved
+    ``Base.metadata`` attribute.
     """
-    existing = (
-        await session.execute(select(Document).where(Document.repo == repo, Document.path == path))
-    ).scalar_one_or_none()
-    status = str(metadata.get("status", source_defaults.status))
+    table = Document.__table__
+    status = metadata.get("status") or source_defaults.status
     owner = metadata.get("owner") or source_defaults.default_owner
-    authority = str(metadata.get("authority", source_defaults.authority))
-    sensitivity = str(metadata.get("sensitivity", source_defaults.default_sensitivity))
-    if existing is None:
-        doc = Document(
-            repo=repo,
-            path=path,
-            title=title,
-            extra=metadata,
-            commit_sha=commit_sha,
-            status=status,
-            owner=owner,
-            authority=authority,
-            sensitivity=sensitivity,
-        )
-        session.add(doc)
-        await session.flush()
-        return doc
-    existing.title = title
-    existing.extra = metadata
-    existing.commit_sha = commit_sha
-    existing.status = status
-    existing.owner = owner
-    existing.authority = authority
-    existing.sensitivity = sensitivity
-    await session.flush()
-    return existing
+    authority = metadata.get("authority") or source_defaults.authority
+    sensitivity = metadata.get("sensitivity") or source_defaults.default_sensitivity
+    insert_stmt = pg_insert(table).values(  # type: ignore[arg-type]
+        {
+            table.c.repo: repo,
+            table.c.path: path,
+            table.c.title: title,
+            table.c.metadata: metadata,
+            table.c.commit_sha: commit_sha,
+            table.c.status: status,
+            table.c.owner: owner,
+            table.c.authority: authority,
+            table.c.sensitivity: sensitivity,
+        }
+    )
+    upsert_stmt = insert_stmt.on_conflict_do_update(
+        constraint="uq_documents_repo_path",
+        set_={
+            "title": insert_stmt.excluded.title,
+            "metadata": insert_stmt.excluded.metadata,
+            "commit_sha": insert_stmt.excluded.commit_sha,
+            "status": insert_stmt.excluded.status,
+            "owner": insert_stmt.excluded.owner,
+            "authority": insert_stmt.excluded.authority,
+            "sensitivity": insert_stmt.excluded.sensitivity,
+        },
+    ).returning(table.c.id)
+    doc_id = (await session.execute(upsert_stmt)).scalar_one()
+    return (await session.execute(select(Document).where(Document.id == doc_id))).scalar_one()
 
 
 async def _process_file(
@@ -195,7 +199,15 @@ async def run_source(
     source: Source,
     settings: Settings,
 ) -> IngestionSummary:
-    """Run the full pipeline for a single source. Writes an ingestion_runs row."""
+    """Run the full pipeline for a single source. Writes an ingestion_runs row.
+
+    Commits internally on success and on cap-violation so the
+    ``ingestion_runs`` row is durable even if the caller never commits
+    (e.g. caller crashes after this returns). Callers that want to
+    compose this in a larger transaction should pass a session bound
+    to that transaction; the internal commits then commit only the
+    work this function did.
+    """
     summary = IngestionSummary()
     runs_repo = IngestionRunsRepository(session)
     sources_repo = DataSourcesRepository(session)
@@ -209,6 +221,7 @@ async def run_source(
         await session.execute(
             _runs_update(run.id, status="failed", stats=summary.as_stats(), errors=summary.errors)
         )
+        await session.commit()
         return summary
 
     summary.files_scanned = len(fetch.files) + len(fetch.skipped)
@@ -228,6 +241,7 @@ async def run_source(
             commit_sha=fetch.commit_sha,
         )
     )
+    await session.commit()
     return summary
 
 

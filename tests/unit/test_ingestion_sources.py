@@ -67,6 +67,17 @@ def test_invalid_status_rejected() -> None:
         GitSource(name="n", type="git", repo="o/r", status="purple")  # type: ignore[arg-type]
 
 
+def test_git_source_rejects_branch_starting_with_dash() -> None:
+    """`--upload-pack=...` style injection via branch arg is refused at schema time."""
+    with pytest.raises(ValueError):
+        GitSource(name="x", type="git", repo="o/r", branch="-foo")
+
+
+def test_git_source_rejects_repo_starting_with_dash() -> None:
+    with pytest.raises(ValueError):
+        GitSource(name="x", type="git", repo="-evil-repo")
+
+
 def test_invalid_sensitivity_rejected() -> None:
     with pytest.raises(ValueError):
         GitSource(

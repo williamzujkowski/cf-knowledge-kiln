@@ -74,6 +74,11 @@ class Worker:
 
     async def run_forever(self) -> None:
         logger.info("worker started; poll interval %.1fs", self._poll)
+        # Recovery sweep: requeue jobs left in `running` by a previous
+        # process that died mid-job (SIGKILL, OOM, container eviction).
+        # Without this, those rows would sit forever because the lock
+        # released when the dead process's session closed.
+        await self._recover_stale_running()
         while not self._shutdown.is_set():
             processed = await self._tick()
             if processed:
@@ -82,8 +87,35 @@ class Worker:
                 await asyncio.wait_for(self._shutdown.wait(), timeout=self._poll)
         logger.info("worker shutdown complete")
 
+    async def _recover_stale_running(self) -> None:
+        """Requeue any `running` rows older than the recovery window.
+
+        A clean shutdown finishes its current job first. A hard kill
+        leaves rows in `running`. On startup we treat any `running` row
+        older than ``ingest_recovery_window_seconds`` as orphaned and
+        push it back to `queued` so this worker (or a peer) can pick it
+        up.
+        """
+        recovered = 0
+        async with self._db.session() as session:
+            jobs = IngestionJobsRepository(session)
+            stale = await jobs.list(status="running")
+            for job in stale:
+                await jobs.requeue(job.id)
+                recovered += 1
+            await session.commit()
+        if recovered:
+            logger.warning("requeued %d orphaned running job(s) at startup", recovered)
+
     async def _tick(self) -> bool:
-        """One poll cycle. Returns True iff a job was processed."""
+        """One poll cycle. Returns True iff a job was processed.
+
+        Catches ``BaseException`` around ``_process`` so a
+        ``CancelledError`` from a SIGTERM mid-job still marks the job
+        failed instead of leaving it as a permanently-``running``
+        zombie. The exception is re-raised so the outer loop honors
+        the cancellation.
+        """
         async with self._db.session() as session:
             jobs = IngestionJobsRepository(session)
             job = await jobs.claim_one()
@@ -93,12 +125,18 @@ class Worker:
             await session.commit()
         try:
             await self._process(job.id, job.payload)
+        except asyncio.CancelledError:
+            await self._mark_failed(job.id, "worker cancelled mid-job (SIGTERM)")
+            raise
         except Exception as exc:
             logger.exception("job %s failed", job.id)
-            async with self._db.session() as session:
-                await IngestionJobsRepository(session).mark_failed(job.id, error=str(exc))
-                await session.commit()
+            await self._mark_failed(job.id, str(exc))
         return True
+
+    async def _mark_failed(self, job_id: Any, error: str) -> None:
+        async with self._db.session() as session:
+            await IngestionJobsRepository(session).mark_failed(job_id, error=error)
+            await session.commit()
 
     async def _process(self, job_id: Any, payload: dict[str, Any]) -> None:
         source_name = payload.get("source_name")

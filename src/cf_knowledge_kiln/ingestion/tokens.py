@@ -16,8 +16,11 @@ import tiktoken
 DEFAULT_ENCODING = "cl100k_base"
 
 
-@lru_cache(maxsize=4)
+@lru_cache(maxsize=1)
 def _encoding(name: str) -> tiktoken.Encoding:
+    """Cache one encoding at a time. Each Encoding is ~5-50 MB resident; a
+    bigger cache inflates the worker footprint without a payoff (we only
+    use ``cl100k_base`` today)."""
     return tiktoken.get_encoding(name)
 
 
