@@ -1,5 +1,19 @@
-"""Ingestion (sources, markdown parsing, chunking, embedding).
+"""Ingestion pipeline: source allowlist, connectors, parsing, chunking, queue."""
 
-Phase 3 lands the implementation; this module is intentionally empty in
-Phase 1 so the import surface is stable.
-"""
+from cf_knowledge_kiln.ingestion.sources import (
+    GitSource,
+    LocalSource,
+    Source,
+    SourceAllowlist,
+    SourceAllowlistError,
+    SourceNotAllowedError,
+)
+
+__all__ = [
+    "GitSource",
+    "LocalSource",
+    "Source",
+    "SourceAllowlist",
+    "SourceAllowlistError",
+    "SourceNotAllowedError",
+]

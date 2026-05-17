@@ -19,6 +19,7 @@ from cf_knowledge_kiln.db.repositories.documents import (
 from cf_knowledge_kiln.db.repositories.operations import (
     ContextPacksRepository,
     FeedbackRepository,
+    IngestionJobsRepository,
     IngestionRunsRepository,
     QueriesRepository,
 )
@@ -30,6 +31,7 @@ __all__ = [
     "DocumentsRepository",
     "EmbeddingsRepository",
     "FeedbackRepository",
+    "IngestionJobsRepository",
     "IngestionRunsRepository",
     "ModelRegistryRepository",
     "QueriesRepository",

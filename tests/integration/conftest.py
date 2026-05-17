@@ -41,6 +41,7 @@ from cf_knowledge_kiln.config import get_settings
 DEFAULT_TEST_DSN = "postgresql+asyncpg://kiln:kiln@localhost:5432/kiln"  # pragma: allowlist secret
 
 _TRUNCATE_TABLES = [
+    "ingestion_jobs",
     "rag_feedback",
     "rag_queries",
     "context_packs",
