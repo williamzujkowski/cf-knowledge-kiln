@@ -29,6 +29,7 @@ from fastapi.staticfiles import StaticFiles
 from cf_knowledge_kiln import __version__
 from cf_knowledge_kiln.api.auth import configure_auth
 from cf_knowledge_kiln.api.health import router as health_router
+from cf_knowledge_kiln.api.rate_limit import TokenBucketLimiter
 from cf_knowledge_kiln.api.retrieval import router as retrieval_router
 from cf_knowledge_kiln.api.web import router as web_router
 from cf_knowledge_kiln.config import get_settings
@@ -54,6 +55,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     embedding_provider: EmbeddingProvider | None = build_provider_from_settings(settings)
     app.state.db = db
     app.state.embedding_provider = embedding_provider
+    # #79: in-process per-IP rate limiters. Built once per app so the
+    # token buckets persist across requests. Two separate limiters
+    # because /search and /feedback have different cost profiles.
+    app.state.search_limiter = TokenBucketLimiter(
+        capacity=settings.rate_limit_search_per_min, window_seconds=60.0
+    )
+    app.state.feedback_limiter = TokenBucketLimiter(
+        capacity=settings.rate_limit_feedback_per_min, window_seconds=60.0
+    )
     try:
         yield
     finally:

@@ -98,10 +98,30 @@ def get_hybrid_retriever(
     )
 
 
+def get_search_limiter(request: Request) -> object:
+    """Per-IP rate limiter for /v1/search and /search (#79)."""
+    limiter = getattr(request.app.state, "search_limiter", None)
+    if limiter is None:
+        # Lifespan ran without setting state — should never happen
+        # outside test fixtures that build a bare app.
+        raise HTTPException(status_code=500, detail="rate limiter not initialized")
+    return limiter
+
+
+def get_feedback_limiter(request: Request) -> object:
+    """Per-IP rate limiter for /feedback (#79)."""
+    limiter = getattr(request.app.state, "feedback_limiter", None)
+    if limiter is None:
+        raise HTTPException(status_code=500, detail="rate limiter not initialized")
+    return limiter
+
+
 __all__ = [
     "get_db",
     "get_embedding_provider",
+    "get_feedback_limiter",
     "get_hybrid_retriever",
     "get_retrieval_config",
+    "get_search_limiter",
     "get_session",
 ]

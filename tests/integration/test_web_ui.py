@@ -267,3 +267,60 @@ def test_web_search_persists_rag_query_with_human_consumer(
     assert len(rows) == 1
     assert rows[0].consumer_type == "human"
     assert rows[0].query == "widgets"
+
+
+# ─── #79: rate limit on HTMX routes returns HTML fragment, not JSON ──
+
+
+@pytest.fixture
+def rate_limited_client(database_url: str) -> Iterator[TestClient]:
+    saved_url = os.environ.get("KILN_DATABASE_URL")
+    saved_search = os.environ.get("KILN_RATE_LIMIT_SEARCH_PER_MIN")
+    saved_feedback = os.environ.get("KILN_RATE_LIMIT_FEEDBACK_PER_MIN")
+    os.environ["KILN_DATABASE_URL"] = database_url
+    os.environ["KILN_RATE_LIMIT_SEARCH_PER_MIN"] = "1"
+    os.environ["KILN_RATE_LIMIT_FEEDBACK_PER_MIN"] = "1"
+    get_settings.cache_clear()
+    try:
+        with TestClient(create_app()) as c:
+            yield c
+    finally:
+        for key, val in (
+            ("KILN_DATABASE_URL", saved_url),
+            ("KILN_RATE_LIMIT_SEARCH_PER_MIN", saved_search),
+            ("KILN_RATE_LIMIT_FEEDBACK_PER_MIN", saved_feedback),
+        ):
+            if val is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = val
+        get_settings.cache_clear()
+
+
+def test_htmx_search_429_returns_error_fragment(rate_limited_client: TestClient) -> None:
+    """The HTMX /search route renders an error fragment, not raw JSON, on 429."""
+    data = {"query": "widgets", "status": ["active"]}
+    rate_limited_client.post("/search", data=data)
+    second = rate_limited_client.post("/search", data=data)
+    assert second.status_code == 429
+    # Same fragment shape as /search's other error path, so HTMX swaps it cleanly.
+    assert "error-fragment" in second.text or "Too many requests" in second.text
+    assert "Too many requests" in second.text
+    assert int(second.headers["retry-after"]) >= 1
+
+
+def test_htmx_feedback_429_returns_error_fragment(rate_limited_client: TestClient) -> None:
+    """The HTMX /feedback route renders the feedback-error fragment on 429."""
+    import uuid
+
+    payload = {
+        "query_id": str(uuid.uuid4()),
+        "chunk_id": str(uuid.uuid4()),
+        "signal": "useful",
+        "comment": "",
+    }
+    rate_limited_client.post("/feedback", data=payload)
+    second = rate_limited_client.post("/feedback", data=payload)
+    assert second.status_code == 429
+    assert "Too many feedback submissions" in second.text
+    assert int(second.headers["retry-after"]) >= 1

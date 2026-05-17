@@ -286,3 +286,60 @@ def test_context_pack_request_uses_one_db_session(
         f"got {sum(calls)}. #74 regression — telemetry should share the "
         f"handler's session, not open its own."
     )
+
+
+# ─── #79: per-IP rate limit on /v1/search + /v1/agent/context-pack ──
+
+
+@pytest.fixture
+def rate_limited_client(database_url: str) -> Iterator[TestClient]:
+    """A TestClient with the search/context-pack rate limit set to 1/min.
+
+    Lets us prove the 4th request hits 429 with Retry-After without
+    burning real capacity. We override env vars before building the
+    app so the lifespan picks them up.
+    """
+    saved_url = os.environ.get("KILN_DATABASE_URL")
+    saved_search = os.environ.get("KILN_RATE_LIMIT_SEARCH_PER_MIN")
+    saved_feedback = os.environ.get("KILN_RATE_LIMIT_FEEDBACK_PER_MIN")
+    os.environ["KILN_DATABASE_URL"] = database_url
+    os.environ["KILN_RATE_LIMIT_SEARCH_PER_MIN"] = "1"
+    os.environ["KILN_RATE_LIMIT_FEEDBACK_PER_MIN"] = "1"
+    get_settings.cache_clear()
+    try:
+        with TestClient(create_app()) as c:
+            yield c
+    finally:
+        for key, val in (
+            ("KILN_DATABASE_URL", saved_url),
+            ("KILN_RATE_LIMIT_SEARCH_PER_MIN", saved_search),
+            ("KILN_RATE_LIMIT_FEEDBACK_PER_MIN", saved_feedback),
+        ):
+            if val is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = val
+        get_settings.cache_clear()
+
+
+def test_search_returns_429_when_rate_limited(rate_limited_client: TestClient) -> None:
+    """#79: after the 1/min bucket drains, /v1/search returns 429."""
+    body = {"query": "anything", "max_results": 1}
+    # First call consumes the only token; status may be 200 or 503
+    # depending on whether the embedding provider is configured. The
+    # test only cares about the SECOND call, which is rate-limited
+    # before any retrieval work runs.
+    rate_limited_client.post("/v1/search", json=body)
+    second = rate_limited_client.post("/v1/search", json=body)
+    assert second.status_code == 429, second.text
+    assert second.headers.get("retry-after") is not None
+    assert int(second.headers["retry-after"]) >= 1
+
+
+def test_context_pack_returns_429_when_rate_limited(rate_limited_client: TestClient) -> None:
+    """#79: /v1/agent/context-pack shares the search limiter — also 429s."""
+    body = {"task": "explain", "query": "anything"}
+    rate_limited_client.post("/v1/agent/context-pack", json=body)
+    second = rate_limited_client.post("/v1/agent/context-pack", json=body)
+    assert second.status_code == 429, second.text
+    assert int(second.headers["retry-after"]) >= 1

@@ -17,10 +17,18 @@ from __future__ import annotations
 import logging
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from cf_knowledge_kiln.api.dependencies import get_hybrid_retriever, get_session
+from cf_knowledge_kiln.api.dependencies import (
+    get_hybrid_retriever,
+    get_search_limiter,
+    get_session,
+)
+from cf_knowledge_kiln.api.rate_limit import (
+    TokenBucketLimiter,
+    raise_429_if_limited,
+)
 from cf_knowledge_kiln.db.repositories import ContextPacksRepository, QueriesRepository
 from cf_knowledge_kiln.retrieval import (
     ContextPackRequest,
@@ -42,19 +50,25 @@ router = APIRouter(tags=["search"])
     summary="Human search",
     response_model=SearchResponse,
     response_model_exclude_none=True,
-    responses={status.HTTP_200_OK: {"description": "Search results."}},
+    responses={
+        status.HTTP_200_OK: {"description": "Search results."},
+        status.HTTP_429_TOO_MANY_REQUESTS: {"description": "Rate limit exceeded."},
+    },
 )
 async def human_search(
+    request: Request,
     body: SearchRequest,
     retriever: Annotated[HybridRetriever, Depends(get_hybrid_retriever)],
     session: Annotated[AsyncSession, Depends(get_session)],
+    limiter: Annotated[TokenBucketLimiter, Depends(get_search_limiter)],
 ) -> SearchResponse:
     """Run a hybrid retrieval query and return ranked result cards.
 
     Persists the query into ``rag_queries`` (consumer_type='human') for
     the Phase 9 eval harness. Issue #74: retrieval + telemetry share
-    one DB session per request.
+    one DB session per request. Issue #79: per-IP rate limit.
     """
+    raise_429_if_limited(limiter, request)
     filters = body.filters or _empty_filters()
     try:
         result = await retriever.search(
@@ -93,19 +107,26 @@ async def human_search(
     response_model=ContextPackResponse,
     response_model_exclude_none=True,
     tags=["agent"],
-    responses={status.HTTP_200_OK: {"description": "Context pack."}},
+    responses={
+        status.HTTP_200_OK: {"description": "Context pack."},
+        status.HTTP_429_TOO_MANY_REQUESTS: {"description": "Rate limit exceeded."},
+    },
 )
 async def agent_context_pack(
+    request: Request,
     body: ContextPackRequest,
     retriever: Annotated[HybridRetriever, Depends(get_hybrid_retriever)],
     session: Annotated[AsyncSession, Depends(get_session)],
+    limiter: Annotated[TokenBucketLimiter, Depends(get_search_limiter)],
 ) -> ContextPackResponse:
     """Build a bounded, cited context pack for an agent consumer.
 
     Persists into ``context_packs`` so an operator can audit what the
     agent saw (and so the eval harness can replay). Issue #74:
-    retrieval + telemetry share one DB session per request.
+    retrieval + telemetry share one DB session per request. Issue #79:
+    per-IP rate limit (same bucket as /v1/search; both are DB-heavy).
     """
+    raise_429_if_limited(limiter, request)
     filters = body.filters or _empty_filters()
     try:
         pack = await retriever.context_pack(

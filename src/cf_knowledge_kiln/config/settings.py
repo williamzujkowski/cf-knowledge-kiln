@@ -75,6 +75,11 @@ class Settings(BaseSettings):
     security_config_path: str = "config/security.yaml"
     auth_mode: AuthMode = "none"
     bearer_token: str | None = None
+    # Per-IP rate limits (Phase 8 #79). In-process token bucket;
+    # operationally cheap, single-instance only. Horizontal scale
+    # needs a shared backend — separate follow-up.
+    rate_limit_search_per_min: int = 60
+    rate_limit_feedback_per_min: int = 30
 
     # Telemetry.
     otel_exporter_otlp_endpoint: str | None = None
