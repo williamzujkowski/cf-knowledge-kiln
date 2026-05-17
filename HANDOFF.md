@@ -1,7 +1,7 @@
 # Handoff notes
 
-**As of:** 2026-05-17 (Phase 9 readiness pass)
-**Status:** Phases 0–8 complete. Phase 9 in progress — retrieval eval harness landed (`make eval`); public/template readiness pass merging now; forking guide + end-to-end UX eval still open. CI green on `main` (454 unit + 101 integration tests; PRs #88–#95 in the latest run).
+**As of:** 2026-05-17 (Phase 9 close-out)
+**Status:** Phases 0–9 complete. Every phase epic (#1–#8) is closed; the cross-cutting warnings surface (#33) is closed. CI green on `main` (517 unit + 106 integration + 13 eval tests; PRs #88–#103 across the autonomous run).
 
 This file is the "where we are, what's next, what's been decided" briefing. For *how* to work in the repo, read [AGENTS.md](./AGENTS.md). For *what* the project is, read [README.md](./README.md). For *the plan*, read [plans/cf-rag-plan.md](./plans/cf-rag-plan.md).
 
@@ -13,26 +13,24 @@ cf-knowledge-kiln is a Cloud Foundry RAG knowledge app — a `cf push`'d Python/
 
 **Phase 5 shipped 2026-05-17** in four slices (PRs #69, #71, #72, #73). After-the-slice-4 follow-up #75 collapsed handlers to one DB session per request. Editorial-design UI scaffold (PR #76) and the feedback widget (PR #78) shipped Phase 6 entirely. Phase 7 HTTP source + SSRF guard landed (PR #80) with 6to4-bypass fix included after independent review. Phase 8 hardening landed: bearer-token auth (PR #77, with path-traversal fix), SBOM + grype CI (PR #82), CODEOWNERS + CodeQL (PR #83). Worker session lifecycle + smart crash recovery (PR #85) and DRY refactor of the repo layer (PR #84) closed two carry-over backlog items. Final cleanup of over-cap functions in pipeline.py (PR #86) closed #53.
 
-**Net effect of the late-night + readiness runs:** 8 more PRs merged after the slice-6 HANDOFF — #88 (#26 smoke test), #89 (#81 DNS pinning), #90 (#79 rate limit), #92 (#31 eval harness), #94 (#91 JSON-safe frontmatter), plus #95 (#34 public-readiness) merging now. Issues filed: #91 (fixed in #94), #93 (admin-only: enable repo code scanning so the CodeQL workflow's SARIF upload stops failing on every PR).
+**Net effect of the full autonomous run:** 16 PRs merged (#88–#103) closing Phase 7, Phase 8, and Phase 9 plus the standing follow-up backlog. Every phase epic (#1–#8) and the cross-cutting warnings issue (#33) are closed. Issues filed for genuine work-not-done: #91 (fixed in #94), #93 (admin-only: enable repo Code Scanning), #98 (fixed in #101), #100 (deferred journey-eval scope: staleness/conflict precision, sensitive-content fixture, confidence calibration).
 
-**Phase 8 complete. Phase 9 substantially started.** What remains:
+**All phases complete.** Status by phase:
 
-| Phase | Status | Remaining |
+| Phase | Status | Notes |
 |---|---|---|
 | 0–6 | ✅ Complete | — |
-| 7 | ✅ Complete (#26 merged in #88) | — |
-| 8 | ✅ Complete (#79 rate limit in #90; #81 DNS pin in #89) | #30 Concourse pipeline (CF-foundation-native CI mirror; operator deliverable); mTLS auth mode (follow-up to #29) |
-| 9 | In progress — #31 eval harness (#92), #34 public-readiness (#95) done | #32 forking guide (capstone), #68 end-to-end UX eval |
+| 7 | ✅ Complete | smoke-test script + apps.internal docs (#88); HTTP source with SSRF + DNS pinning (#80, #89); rolling deploy (#101) |
+| 8 | ✅ Complete | bearer auth (#77); rate limit (#90); SBOM + grype (#82); Concourse pipeline (#97) |
+| 9 | ✅ Complete | retrieval eval harness (#92); end-to-end UX eval (#99); public/template readiness (#95); forking guide (#96); coverage-gaps bundle (#102) |
 
-**Next concrete chunks of work (in recommended order):**
+**What's left in the open-issue list** (none of it blocks "Phase 9 done"):
 
-1. **Phase 9 #32 — forking guide.** Capstone for Phase 9. README now has a "Fork & repurpose" short-form section (#95); #32 is the expanded walkthrough.
-2. **Phase 9 #68 — end-to-end UX eval.** Complements #31's retrieval-quality harness with a journey-level scorer.
-3. **Phase 8 #30 — Concourse pipeline.** Mirrors `.github/workflows/ci.yml` for CF-foundation-native CI.
-4. **#54 — small test-coverage gaps bundle.** Bite-sized.
-5. **#93 — enable code scanning on the repo (admin only).** Drops the spurious CodeQL failure on every PR.
+1. **[#93](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/93)** — enable GitHub Code Scanning at repo settings (admin-only click). Drops the spurious CodeQL failure that's been red on every PR for the whole run.
+2. **[#100](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/100)** — deferred journey-eval scope: staleness/conflict precision, sensitive-content fixture, confidence calibration, query-side prompt-injection normalization, deprecation warning under default filter. Each is its own small PR; bundle if you want.
+3. **[#35](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/35)** — operator-side BOSH-deployed Postgres prereq. Not for this repo's agent; tracked because the CF deploy gate still depends on [bosh-pgvector-release#3](https://github.com/williamzujkowski/bosh-pgvector-release/issues/3) (operator runbook).
 
-The CF deploy gate still depends on [bosh-pgvector-release#3](https://github.com/williamzujkowski/bosh-pgvector-release/issues/3) (operator runbook). Independent of all the above; happens on the operator track.
+The CF deploy gate continues to wait on the operator track. Independent of all in-repo work.
 
 ---
 
