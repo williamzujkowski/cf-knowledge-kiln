@@ -2,5 +2,6 @@
    fails — kept lightweight so HTMX can swap it into #results without
    wiping the page chrome. #}
 <div class="error-fragment" role="alert">
-  <p>{{ message }}</p>
+  <span class="error-icon" aria-hidden="true">!</span>
+  <p class="error-message">{{ message }}</p>
 </div>

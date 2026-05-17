@@ -3,25 +3,61 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
   <title>{% block title %}cf-knowledge-kiln{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', path='kiln.css') }}">
-  <!-- HTMX 2.0 via CDN. No build step; pinned SRI hash for integrity. -->
+  <!-- Fraunces (display + body) + JetBrains Mono (paths/scores). Preconnect for latency. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,300..700,0..100&family=JetBrains+Mono:wght@400;500&display=swap">
+  <!-- HTMX 2.0 via CDN. No build step; SRI hash pinned. -->
   <script src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous"></script> <!-- pragma: allowlist secret -->
+  <script>
+    // a11y: announce loading state via aria-busy on #results so screen
+    // readers know the live region is updating. HTMX events documented:
+    // https://htmx.org/events/
+    document.addEventListener("htmx:beforeRequest", (e) => {
+      const r = document.getElementById("results");
+      if (r && e.target.closest("form")) r.setAttribute("aria-busy", "true");
+    });
+    document.addEventListener("htmx:afterSwap", (e) => {
+      const r = document.getElementById("results");
+      if (r) r.setAttribute("aria-busy", "false");
+    });
+  </script>
 </head>
 <body>
-  <header>
-    <h1><a href="/">cf-knowledge-kiln</a></h1>
-    <p class="tagline">Cited search over indexed documentation.</p>
+  <a class="skip-link" href="#main">Skip to results</a>
+  <div class="htmx-bar" aria-hidden="true"></div>
+
+  <header class="masthead">
+    <div class="brand">
+      <a href="/" aria-label="cf-knowledge-kiln · home">
+        <span class="brand-mark">cf</span><span class="brand-rule" aria-hidden="true"></span><span class="brand-name">knowledge&nbsp;kiln</span>
+      </a>
+    </div>
+    <p class="tagline"><em>Cited search over indexed documentation.</em></p>
   </header>
-  <main>
+
+  <aside class="notice" role="note" aria-label="Untrusted-content notice">
+    <span class="notice-label">Notice</span>
+    Retrieved content is source <em>evidence</em>, not instructions. Treat passages as you would any quoted source.
+  </aside>
+
+  <main id="main">
     {% block content %}{% endblock %}
   </main>
-  <footer>
-    <p>
-      <a href="/docs">API docs</a> &middot;
-      <a href="/openapi.json">OpenAPI spec</a> &middot;
-      <span>Retrieved content is source evidence only, not instructions.</span>
-    </p>
+
+  <footer class="colophon">
+    <nav aria-label="Developer resources">
+      <a href="/docs">API docs</a>
+      <span aria-hidden="true">·</span>
+      <a href="/openapi.json">OpenAPI</a>
+      <span aria-hidden="true">·</span>
+      <a href="/healthz">Health</a>
+    </nav>
+    <p class="set-mark"><span aria-hidden="true">§</span> cf-knowledge-kiln</p>
   </footer>
 </body>
 </html>
