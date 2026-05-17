@@ -53,9 +53,7 @@ class TestBuildPredicates:
         assert "ESCAPE" in sql
 
     def test_last_reviewed_after_emits_ge_predicate(self) -> None:
-        sql = _compile(
-            build_predicates(RetrievalFilters(last_reviewed_after=date(2025, 1, 1)))
-        )
+        sql = _compile(build_predicates(RetrievalFilters(last_reviewed_after=date(2025, 1, 1))))
         assert "documents.last_reviewed >=" in sql
         assert "'2025-01-01'" in sql
 

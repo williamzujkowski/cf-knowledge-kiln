@@ -92,9 +92,7 @@ def _tags_predicate(tags: Sequence[str]) -> ColumnElement[bool]:
     return cast(ColumnElement[bool], chunk_match | doc_match)
 
 
-def _jsonb_array_overlap(
-    column: Any, values: Sequence[str]
-) -> ColumnElement[bool]:
+def _jsonb_array_overlap(column: Any, values: Sequence[str]) -> ColumnElement[bool]:
     """``column ?| ARRAY[values]`` — true if any element of values is in the JSONB array.
 
     Postgres-specific. The ``?|`` operator is the JSONB "exists any"

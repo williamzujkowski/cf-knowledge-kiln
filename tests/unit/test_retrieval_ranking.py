@@ -111,24 +111,38 @@ class TestApplyBoosts:
 
     def test_never_reviewed_treated_as_stale(self) -> None:
         config = RetrievalConfig(stale_after_days=30)
-        [chunk] = apply_boosts(
-            [_mk(score=1.0, last_reviewed=None)], config=config, today=TODAY
-        )
+        [chunk] = apply_boosts([_mk(score=1.0, last_reviewed=None)], config=config, today=TODAY)
         assert chunk.score == pytest.approx(0.3)
 
     def test_stale_after_days_none_disables_freshness(self) -> None:
         config = RetrievalConfig(stale_after_days=None)
-        [chunk] = apply_boosts(
-            [_mk(score=1.0, last_reviewed=None)], config=config, today=TODAY
-        )
+        [chunk] = apply_boosts([_mk(score=1.0, last_reviewed=None)], config=config, today=TODAY)
         assert chunk.score == pytest.approx(1.0)
 
     def test_unknown_status_weight_is_one(self) -> None:
         config = RetrievalConfig()
+        [chunk] = apply_boosts([_mk(score=1.0, status="experimental")], config=config, today=TODAY)
+        assert chunk.score == pytest.approx(1.0)
+
+    def test_freshness_at_stale_boundary_keeps_full_score(self) -> None:
+        """Age == stale_after_days is still inside the freshness window."""
+        config = RetrievalConfig(stale_after_days=30)
         [chunk] = apply_boosts(
-            [_mk(score=1.0, status="experimental")], config=config, today=TODAY
+            [_mk(score=1.0, last_reviewed=TODAY - timedelta(days=30))],
+            config=config,
+            today=TODAY,
         )
         assert chunk.score == pytest.approx(1.0)
+
+    def test_freshness_midpoint_is_between_full_and_floor(self) -> None:
+        """At age = 1.5 * stale_after_days the factor should be 1.0 - 0.7 * 0.5 = 0.65."""
+        config = RetrievalConfig(stale_after_days=30)
+        [chunk] = apply_boosts(
+            [_mk(score=1.0, last_reviewed=TODAY - timedelta(days=45))],
+            config=config,
+            today=TODAY,
+        )
+        assert chunk.score == pytest.approx(0.65)
 
 
 # ─── Warnings ───────────────────────────────────────────────────────

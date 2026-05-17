@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +59,27 @@ class RetrievalConfig(BaseModel):
 
     status_weights: dict[str, float] = Field(default_factory=lambda: dict(DEFAULT_STATUS_WEIGHTS))
     stale_after_days: int | None = DEFAULT_STALE_AFTER_DAYS
+
+    @field_validator("status_weights")
+    @classmethod
+    def _weights_in_unit_interval(cls, value: dict[str, float]) -> dict[str, float]:
+        """Each weight must be in (0, 1].
+
+        A negative weight would invert ranking (deprecated chunks pushed
+        to the top); a > 1.0 weight would let one status outrun a
+        perfectly-scored peer. Both are bugs we want to catch at config
+        load, not at query time. Zero is rejected because that's what
+        ``status_weights: {deprecated: 0.0}`` would silently do to
+        deprecated docs — if you want to suppress a status entirely,
+        use a tiny positive number like the example's 0.05 for
+        ``superseded``, or filter at query time.
+        """
+        for status, weight in value.items():
+            if not (0.0 < weight <= 1.0):
+                raise ValueError(
+                    f"status_weights[{status!r}] = {weight} is outside (0, 1]"
+                )
+        return value
 
     def weight_for_status(self, status: str) -> float:
         """Return the multiplier for ``status``; unknown statuses get 1.0."""

@@ -89,9 +89,7 @@ def apply_boosts(
     Each chunk's score is ``base * status_weight * freshness_factor``.
     Ordering is preserved from the input; callers re-sort if needed.
     """
-    return [
-        _apply_boost_to_chunk(c, config=config, today=today) for c in chunks
-    ]
+    return [_apply_boost_to_chunk(c, config=config, today=today) for c in chunks]
 
 
 def _apply_boost_to_chunk(
@@ -220,8 +218,7 @@ def weak_evidence_warning(chunks: list[RankedChunk]) -> list[Warning]:
             Warning(
                 type="weak_evidence",
                 message=(
-                    f"Best chunk score {best:.2f} below threshold "
-                    f"{WEAK_EVIDENCE_SCORE_THRESHOLD}."
+                    f"Best chunk score {best:.2f} below threshold {WEAK_EVIDENCE_SCORE_THRESHOLD}."
                 ),
             )
         ]
@@ -258,9 +255,7 @@ def detect_conflicts(chunks: list[RankedChunk]) -> list[Conflict]:
             Conflict(
                 topic=".".join(path),
                 source_ids=sorted(doc_ids, key=str),
-                description=(
-                    f"{len(doc_ids)} active sources address the same heading."
-                ),
+                description=(f"{len(doc_ids)} active sources address the same heading."),
             )
         )
     return out

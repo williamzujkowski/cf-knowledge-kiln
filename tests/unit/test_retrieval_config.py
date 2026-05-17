@@ -87,6 +87,33 @@ freshness:
         config = load_retrieval_config(path)
         assert config.stale_after_days is None
 
+    def test_rejects_negative_status_weight(self, tmp_path: Path) -> None:
+        """A negative weight would invert ranking; refuse at load time."""
+        path = _write(
+            tmp_path / "security.yaml",
+            "retrieval:\n  status_weights:\n    active: -0.1\n",
+        )
+        with pytest.raises(RetrievalConfigError, match="outside"):
+            load_retrieval_config(path)
+
+    def test_rejects_zero_status_weight(self, tmp_path: Path) -> None:
+        """Zero would silently zero-out matches — caller should use a tiny + value."""
+        path = _write(
+            tmp_path / "security.yaml",
+            "retrieval:\n  status_weights:\n    deprecated: 0\n",
+        )
+        with pytest.raises(RetrievalConfigError, match="outside"):
+            load_retrieval_config(path)
+
+    def test_rejects_status_weight_above_one(self, tmp_path: Path) -> None:
+        """Weights > 1.0 break the multiplier semantics."""
+        path = _write(
+            tmp_path / "security.yaml",
+            "retrieval:\n  status_weights:\n    active: 1.5\n",
+        )
+        with pytest.raises(RetrievalConfigError, match="outside"):
+            load_retrieval_config(path)
+
     def test_real_example_config_loads(self) -> None:
         """The shipped example file must always parse — and round-trip cleanly."""
         example = Path(__file__).resolve().parents[2] / "config" / "security.example.yaml"
