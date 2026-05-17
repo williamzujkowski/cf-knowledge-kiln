@@ -20,6 +20,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from typing import Annotated, Any
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse
@@ -27,7 +28,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from cf_knowledge_kiln.api.dependencies import get_hybrid_retriever, get_session
-from cf_knowledge_kiln.db.repositories import QueriesRepository
+from cf_knowledge_kiln.db.repositories import FeedbackRepository, QueriesRepository
 from cf_knowledge_kiln.retrieval import HybridRetriever, RetrievalFilters, Status
 
 logger = logging.getLogger(__name__)
@@ -97,7 +98,7 @@ async def search_partial(
             {"message": "Search is temporarily unavailable. Please try again."},
             status_code=503,
         )
-    await _log_human_query(
+    query_id = await _log_human_query(
         session, query=query, filters=filters, chunk_ids=[c.chunk_id for c in result.chunks]
     )
     cards = [
@@ -109,8 +110,86 @@ async def search_partial(
     return templates.TemplateResponse(
         request,
         "_results.html",
-        {"query": query, "results": cards, "warnings": result.warnings or []},
+        {
+            "query": query,
+            "results": cards,
+            "warnings": result.warnings or [],
+            "query_id": str(query_id) if query_id else None,
+        },
     )
+
+
+# ─── /feedback ──────────────────────────────────────────────────────
+
+
+_FEEDBACK_TYPES: frozenset[str] = frozenset(
+    {
+        "useful",
+        "not_useful",
+        "stale",
+        "wrong_source",
+        "missing_source",
+        "duplicate_or_conflicting",
+    }
+)
+"""Six feedback signals per the plan + issue #25."""
+
+_FEEDBACK_COMMENT_MAX_LEN: int = 500
+"""Per-comment character cap. Enforced server-side; no PII guarantees
+beyond what the user voluntarily enters."""
+
+
+@router.post("/feedback", response_class=HTMLResponse)
+async def submit_feedback(
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    query_id: Annotated[str, Form()],
+    chunk_id: Annotated[str, Form()],
+    signal: Annotated[str, Form()],
+    comment: Annotated[str, Form()] = "",
+) -> HTMLResponse:
+    """HTMX target — append a rag_feedback row, return an ack chip.
+
+    The form submits inline from a result card; the response HTML
+    replaces the form so the user sees a "Thanks!" chip without a
+    page reload. Validation errors return a small inline error so
+    the user can correct + resubmit.
+    """
+    if signal not in _FEEDBACK_TYPES:
+        return _feedback_error(request, "Unknown feedback type.")
+    qid = _parse_uuid(query_id)
+    cid = _parse_uuid(chunk_id)
+    if qid is None or cid is None:
+        return _feedback_error(request, "Invalid query or chunk reference.")
+    note = (comment or "").strip()[:_FEEDBACK_COMMENT_MAX_LEN] or None
+    try:
+        async with session.begin_nested():
+            await FeedbackRepository(session).create(
+                signal=signal,
+                query_id=qid,
+                chunk_id=cid,
+                comment=note,
+                source="web",
+            )
+    except Exception:
+        logger.exception("rag_feedback write failed")
+        return _feedback_error(request, "Could not record feedback. Try again later.")
+    return templates.TemplateResponse(
+        request, "_feedback_ack.html", {"signal": signal}, status_code=200
+    )
+
+
+def _feedback_error(request: Request, message: str) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request, "_feedback_error.html", {"message": message}, status_code=400
+    )
+
+
+def _parse_uuid(raw: str) -> UUID | None:
+    try:
+        return UUID(raw)
+    except (ValueError, AttributeError, TypeError):
+        return None
 
 
 # ─── helpers ────────────────────────────────────────────────────────
@@ -181,21 +260,27 @@ async def _log_human_query(
     query: str,
     filters: RetrievalFilters,
     chunk_ids: list[Any],
-) -> None:
-    """Append a row to ``rag_queries`` (consumer_type='human').
+) -> object | None:
+    """Append a row to ``rag_queries`` and return its id (or None on failure).
 
-    Same non-fatal pattern as the JSON-API handlers (slice 4 + #75).
+    The id is rendered into the result page so the feedback widget
+    can tie each rag_feedback row back to the query that produced
+    the chunk. Non-fatal: telemetry failure logs + returns None,
+    which the template renders without feedback widgets (rather
+    than 500'ing the user's search).
     """
     try:
         async with session.begin_nested():
-            await QueriesRepository(session).create(
+            row = await QueriesRepository(session).create(
                 query=query,
                 consumer_type="human",
                 filters=filters.model_dump(exclude_none=True),
                 retrieved_chunk_ids=chunk_ids,
             )
+        return row.id
     except Exception:
         logger.exception("rag_queries telemetry write failed (non-fatal)")
+        return None
 
 
 __all__ = ["router"]

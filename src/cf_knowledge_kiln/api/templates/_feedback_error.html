@@ -1,0 +1,7 @@
+{# HTMX swaps this in place of the feedback form when validation
+   fails or the write errors out. Keeps the disclosure open so the
+   user can see + retry. #}
+<details class="feedback feedback-failed" open>
+  <summary>Feedback &mdash; failed</summary>
+  <p class="fb-error" role="alert">{{ message }}</p>
+</details>
