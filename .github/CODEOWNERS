@@ -1,0 +1,30 @@
+# cf-knowledge-kiln code owners.
+#
+# Reviewers GitHub automatically requests when a PR touches a path.
+# Patterns are evaluated bottom-up, so more-specific patterns near the
+# bottom override the catch-all at the top.
+#
+# Add yourself to the appropriate section if you've taken ownership of
+# a subsystem; the catch-all keeps the project lead in the loop for
+# everything else.
+
+# Catch-all — every PR pings the project lead.
+* @williamzujkowski
+
+# CI + security policy. Changes here affect every PR + every deploy.
+/.github/                       @williamzujkowski
+/manifest.yml                   @williamzujkowski
+/Procfile                       @williamzujkowski
+/scripts/                       @williamzujkowski
+
+# Security-critical modules. Bypass risk is high; an extra set of eyes
+# is the cheapest guardrail.
+/src/cf_knowledge_kiln/api/auth.py            @williamzujkowski
+/src/cf_knowledge_kiln/ingestion/ssrf.py      @williamzujkowski
+/src/cf_knowledge_kiln/ingestion/_http_connector.py  @williamzujkowski
+
+# OpenAPI contract — load-bearing per ADR-0003.
+/openapi/                       @williamzujkowski
+
+# ADRs — design decisions get the project lead by default.
+/docs/adr/                      @williamzujkowski
