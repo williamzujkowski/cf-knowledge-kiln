@@ -1,0 +1,28 @@
+---
+# Example vars for ci/concourse-pipeline.yml.
+#
+# Copy to ci/vars.yml (gitignored — see .gitignore) and customize for
+# your foundation. NEVER commit the real values for kiln-test-db-url
+# or cf-password; pull them from a credential manager instead:
+#
+#   fly -t <target> set-pipeline -p cf-knowledge-kiln \
+#       -c ci/concourse-pipeline.yml \
+#       --load-vars-from ci/vars.yml \
+#       --var kiln-test-db-url=((vault/kiln-test-db-url)) \
+#       --var cf-password=((vault/cf-password))
+
+repo-uri: https://github.com/williamzujkowski/cf-knowledge-kiln.git
+repo-branch: main
+
+# Postgres+pgvector DSN that integration tests will run against.
+# Use a credential manager in production — this example value is
+# illustrative only and points at a local docker container.
+kiln-test-db-url: postgresql+asyncpg://kiln:kiln@localhost:5432/kiln  # pragma: allowlist secret
+
+# Cloud Foundry deploy target (used by the deploy-cf job, which is
+# manual-only — fly trigger-job -j cf-knowledge-kiln/deploy-cf).
+cf-api: https://api.your-foundation.example.com
+cf-username: ci-deployer
+cf-password: REPLACE_ME_FROM_CRED_MANAGER  # pragma: allowlist secret
+cf-org: knowledge
+cf-space: prod

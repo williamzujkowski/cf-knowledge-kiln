@@ -1,0 +1,298 @@
+---
+# Concourse pipeline mirror of .github/workflows/ci.yml (closes #30).
+#
+# Purpose: a CF-foundation-native CI/CD pipeline that runs the same
+# gates as the GitHub Actions workflow without depending on a public
+# GitHub runner. Operators who run their own Concourse can target it
+# at this repo (or any fork) and get the same lint / typecheck / test
+# / SBOM / scan signal, plus a manually-gated deploy stage.
+#
+# Set with:
+#   fly -t <target> set-pipeline \
+#       -p cf-knowledge-kiln \
+#       -c ci/concourse-pipeline.yml \
+#       --load-vars-from ci/vars.example.yml
+#
+# Validate without applying:
+#   fly -t <target> validate-pipeline -c ci/concourse-pipeline.yml
+#
+# Required vars (see ci/vars.example.yml for the full list):
+#   repo-uri / repo-branch
+#   kiln-test-db-url          DSN for the integration job's pgvector DB.
+#   cf-api / cf-username / cf-password / cf-org / cf-space
+#                             Target for the deploy job (manual gate).
+#
+# Secret-bearing vars (kiln-test-db-url, cf-password) MUST come from a
+# credential manager (Vault, credhub, ...). Never commit them; never
+# pass via plain --var on a shared pipeline.
+
+groups:
+  - name: ci
+    jobs:
+      - verify
+      - integration
+      - gitleaks
+      - shellcheck
+      - markdownlint
+      - sbom-scan
+  - name: deploy
+    jobs:
+      - deploy-cf
+
+resources:
+  - name: source
+    type: git
+    icon: git
+    source:
+      uri: ((repo-uri))
+      branch: ((repo-branch))
+
+jobs:
+  # ─── verify: lint + format-check + typecheck + unit tests + openapi + bandit ───
+  - name: verify
+    serial: true
+    plan:
+      - get: source
+        trigger: true
+      - task: verify
+        config:
+          platform: linux
+          image_resource:
+            type: registry-image
+            source:
+              repository: python
+              tag: "3.12-slim"
+          inputs:
+            - name: source
+          run:
+            path: bash
+            args:
+              - -euxc
+              - |
+                cd source
+                apt-get update -qq && apt-get install -y --no-install-recommends git
+                python -m pip install --upgrade pip
+                pip install -e ".[dev,db,ingestion]"
+                ruff check src tests
+                ruff format --check src tests
+                mypy src
+                pytest tests/unit -q --cov=cf_knowledge_kiln --cov-report=term-missing
+                python scripts/lint_openapi.py openapi/openapi.yaml
+                bandit -c pyproject.toml -q -r src
+                pip-audit --skip-editable
+
+  # ─── integration: pytest tests/integration against a real pgvector DB ───
+  # Operators bring their own Postgres+pgvector via kiln-test-db-url —
+  # a service in your CF foundation or a dedicated VM. The task does
+  # not start postgres in-container because Concourse tasks aren't a
+  # great fit for sidecar containers; a bound DB is the CF idiom.
+  - name: integration
+    serial: true
+    plan:
+      - get: source
+        trigger: true
+        passed: [verify]
+      - task: integration
+        params:
+          KILN_TEST_DATABASE_URL: ((kiln-test-db-url))
+        config:
+          platform: linux
+          image_resource:
+            type: registry-image
+            source:
+              repository: python
+              tag: "3.12-slim"
+          inputs:
+            - name: source
+          run:
+            path: bash
+            args:
+              - -euxc
+              - |
+                cd source
+                apt-get update -qq && apt-get install -y --no-install-recommends git
+                python -m pip install --upgrade pip
+                pip install -e ".[dev,db,ingestion]"
+                pytest tests/integration -q
+
+  # ─── gitleaks: full-history secret scan ───
+  - name: gitleaks
+    plan:
+      - get: source
+        trigger: true
+      - task: gitleaks
+        config:
+          platform: linux
+          image_resource:
+            type: registry-image
+            source:
+              repository: zricethezav/gitleaks
+              tag: latest
+          inputs:
+            - name: source
+          run:
+            path: gitleaks
+            args:
+              - detect
+              - --no-banner
+              - --redact
+              - --source=source
+
+  # ─── shellcheck ───
+  - name: shellcheck
+    plan:
+      - get: source
+        trigger: true
+      - task: shellcheck
+        config:
+          platform: linux
+          image_resource:
+            type: registry-image
+            source:
+              repository: koalaman/shellcheck-alpine
+              tag: stable
+          inputs:
+            - name: source
+          run:
+            path: sh
+            args:
+              - -euc
+              - |
+                cd source
+                shellcheck scripts/*.sh
+
+  # ─── markdownlint ───
+  - name: markdownlint
+    plan:
+      - get: source
+        trigger: true
+      - task: markdownlint
+        config:
+          platform: linux
+          image_resource:
+            type: registry-image
+            source:
+              repository: davidanson/markdownlint-cli2
+              tag: latest
+          inputs:
+            - name: source
+          run:
+            path: sh
+            args:
+              - -euc
+              - |
+                cd source
+                markdownlint-cli2 \
+                  "**/*.md" \
+                  "!node_modules/**" \
+                  "!plans/**" \
+                  "!.venv/**"
+
+  # ─── sbom + grype ───
+  # Generates an SPDX SBOM via syft and scans it via grype. Fails the
+  # build on HIGH/CRITICAL findings to mirror the GH workflow's
+  # severity-cutoff: high policy.
+  - name: sbom-scan
+    serial: true
+    plan:
+      - get: source
+        trigger: true
+      - task: install
+        config:
+          platform: linux
+          image_resource:
+            type: registry-image
+            source:
+              repository: python
+              tag: "3.12-slim"
+          inputs:
+            - name: source
+          outputs:
+            - name: installed
+          run:
+            path: bash
+            args:
+              - -euxc
+              - |
+                cd source
+                apt-get update -qq && apt-get install -y --no-install-recommends git
+                python -m pip install --upgrade pip
+                pip install -e ".[dev,db,ingestion]"
+                # Copy the populated venv + repo into the next task's input.
+                cp -a . ../installed/
+      - task: sbom
+        config:
+          platform: linux
+          image_resource:
+            type: registry-image
+            source:
+              repository: anchore/syft
+              tag: latest
+          inputs:
+            - name: installed
+          outputs:
+            - name: sbom-out
+          run:
+            path: sh
+            args:
+              - -euc
+              - |
+                syft installed -o spdx-json=sbom-out/sbom.spdx.json
+      - task: grype
+        config:
+          platform: linux
+          image_resource:
+            type: registry-image
+            source:
+              repository: anchore/grype
+              tag: latest
+          inputs:
+            - name: sbom-out
+          run:
+            path: sh
+            args:
+              - -euc
+              - |
+                grype sbom:sbom-out/sbom.spdx.json --fail-on high
+
+  # ─── deploy (manual gate) ───
+  # Manual-only by virtue of `trigger: false` on the get. Requires every
+  # `passed:` job to be green before fly trigger-job will run it.
+  - name: deploy-cf
+    serial: true
+    plan:
+      - get: source
+        trigger: false
+        passed:
+          - verify
+          - integration
+          - gitleaks
+          - shellcheck
+          - markdownlint
+          - sbom-scan
+      - task: cf-push
+        params:
+          CF_API: ((cf-api))
+          CF_USERNAME: ((cf-username))
+          CF_PASSWORD: ((cf-password))
+          CF_ORG: ((cf-org))
+          CF_SPACE: ((cf-space))
+        config:
+          platform: linux
+          image_resource:
+            type: registry-image
+            source:
+              repository: cloudfoundry/cli
+              tag: latest
+          inputs:
+            - name: source
+          run:
+            path: sh
+            args:
+              - -euc
+              - |
+                cd source
+                cf api "$CF_API"
+                cf auth "$CF_USERNAME" "$CF_PASSWORD"
+                cf target -o "$CF_ORG" -s "$CF_SPACE"
+                cf push -f manifest.yml
