@@ -5,18 +5,19 @@ recovery sweep) live in ``tests/integration/test_ingestion_worker.py``
 where a real pgvector Postgres is available. This file covers the
 parts that don't need a database:
 
-* ``_build_provider_or_warn`` policy: missing config = warn + None,
-  malformed config = raise, valid config = real provider.
 * ``serve()`` early-exit paths: malformed allowlist, missing DB URL.
 * ``Worker._process`` payload validation.
 * ``Worker.request_shutdown`` idempotency.
 * ``Worker`` constructor poll-interval override.
+
+Embedding-provider construction policy used to live in this file; it
+moved to ``tests/unit/test_ingestion_embedding_factory.py`` once the
+factory function was hoisted out of ``worker.py`` (issue #58).
 """
 
 from __future__ import annotations
 
 import asyncio
-import logging
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -26,10 +27,8 @@ import pytest
 
 from cf_knowledge_kiln.config import Settings
 from cf_knowledge_kiln.ingestion import worker as worker_mod
-from cf_knowledge_kiln.ingestion.embedding import MockEmbeddingProvider
-from cf_knowledge_kiln.ingestion.embedding.factory import EmbeddingConfigError
 from cf_knowledge_kiln.ingestion.sources import SourceAllowlist
-from cf_knowledge_kiln.ingestion.worker import Worker, _build_provider_or_warn, serve
+from cf_knowledge_kiln.ingestion.worker import Worker, serve
 
 
 def _settings(**overrides: object) -> Settings:
@@ -37,75 +36,9 @@ def _settings(**overrides: object) -> Settings:
     return Settings(_env_file=None, **overrides)  # type: ignore[arg-type, call-arg]
 
 
-def _write_models_yaml(path: Path, body: str) -> Path:
-    path.write_text(body, encoding="utf-8")
-    return path
-
-
 @pytest.fixture
 def empty_allowlist() -> SourceAllowlist:
     return SourceAllowlist(sources=[])
-
-
-class TestBuildProviderOrWarn:
-    def test_missing_config_returns_none_with_warning(
-        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        settings = _settings(models_config_path=str(tmp_path / "absent.yaml"))
-        with caplog.at_level(logging.WARNING):
-            result = _build_provider_or_warn(settings)
-        assert result is None
-        assert any("no embedding config" in r.getMessage() for r in caplog.records)
-
-    def test_excluded_model_raises_at_startup(self, tmp_path: Path) -> None:
-        path = _write_models_yaml(
-            tmp_path / "models.yaml",
-            """
-models:
-  embedding:
-    provider: local
-    name: Qwen/Qwen3-Embedding-8B
-    dimensions: 1024
-    enabled: true
-""",
-        )
-        settings = _settings(models_config_path=str(path))
-        with pytest.raises(EmbeddingConfigError, match="excluded"):
-            _build_provider_or_warn(settings)
-
-    def test_valid_mock_config_returns_provider(self, tmp_path: Path) -> None:
-        path = _write_models_yaml(
-            tmp_path / "models.yaml",
-            """
-models:
-  embedding:
-    provider: mock
-    name: mock-768
-    dimensions: 768
-    enabled: true
-""",
-        )
-        settings = _settings(models_config_path=str(path))
-        provider = _build_provider_or_warn(settings)
-        assert isinstance(provider, MockEmbeddingProvider)
-        assert provider.dimensions == 768
-
-    def test_disabled_model_is_fatal_at_startup(self, tmp_path: Path) -> None:
-        """An operator who wrote enabled=false in production wants to know."""
-        path = _write_models_yaml(
-            tmp_path / "models.yaml",
-            """
-models:
-  embedding:
-    provider: mock
-    name: mock-768
-    dimensions: 768
-    enabled: false
-""",
-        )
-        settings = _settings(models_config_path=str(path))
-        with pytest.raises(EmbeddingConfigError, match="disabled"):
-            _build_provider_or_warn(settings)
 
 
 class TestServeEarlyExits:

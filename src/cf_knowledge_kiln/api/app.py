@@ -8,6 +8,13 @@ If no URL is configured (e.g. local dev without a Postgres), the app
 still starts; ``/readyz`` reports ``postgres: failing`` and returns
 ``status: degraded``. ``/healthz`` is unaffected — liveness is process
 liveness, not dependency health.
+
+The same lifespan builds the active :class:`EmbeddingProvider` from
+``config/models.yaml`` and attaches it to ``app.state.embedding_provider``.
+The local provider lazy-loads ~500 MB of weights, so building it
+once per app is the only viable pattern. If no config file is present
+the slot is ``None`` and ``/v1/search`` returns 503 until the operator
+fixes the config.
 """
 
 from __future__ import annotations
@@ -21,11 +28,13 @@ from cf_knowledge_kiln import __version__
 from cf_knowledge_kiln.api.health import router as health_router
 from cf_knowledge_kiln.config import get_settings
 from cf_knowledge_kiln.db import Database, resolve_database_url
+from cf_knowledge_kiln.ingestion.embedding import EmbeddingProvider
+from cf_knowledge_kiln.ingestion.embedding.factory import build_provider_from_settings
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Start and stop the async DB pool around the app's lifetime."""
+    """Start and stop the async DB pool + embedding provider around the app's lifetime."""
     settings = get_settings()
     url = resolve_database_url(settings)
     db: Database | None = None
@@ -35,10 +44,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             pool_size=settings.pg_pool_size,
             max_overflow=settings.pg_pool_max_overflow,
         )
+    embedding_provider: EmbeddingProvider | None = build_provider_from_settings(settings)
     app.state.db = db
+    app.state.embedding_provider = embedding_provider
     try:
         yield
     finally:
+        if embedding_provider is not None:
+            await embedding_provider.aclose()
         if db is not None:
             await db.dispose()
 

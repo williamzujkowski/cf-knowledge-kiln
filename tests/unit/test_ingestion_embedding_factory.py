@@ -12,6 +12,7 @@ The factory enforces three policies that the rest of Phase 4 trusts:
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import pytest
@@ -22,6 +23,7 @@ from cf_knowledge_kiln.ingestion.embedding.factory import (
     EmbeddingConfig,
     EmbeddingConfigError,
     build_embedding_provider,
+    build_provider_from_settings,
     load_embedding_config,
 )
 from cf_knowledge_kiln.ingestion.embedding.local import LocalEmbeddingProvider
@@ -256,3 +258,66 @@ class TestBuildEmbeddingProvider:
         )
         with pytest.raises(EmbeddingConfigError, match="KILN_EMBEDDING_BASE_URL"):
             build_embedding_provider(config, _settings())
+
+
+class TestBuildProviderFromSettings:
+    """The shared startup helper used by the worker AND the API lifespan (#58)."""
+
+    def test_missing_config_returns_none_with_warning(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        settings = _settings(models_config_path=str(tmp_path / "absent.yaml"))
+        with caplog.at_level(logging.WARNING):
+            result = build_provider_from_settings(settings)
+        assert result is None
+        assert any("no embedding config" in r.getMessage() for r in caplog.records)
+
+    def test_excluded_model_raises_at_startup(self, tmp_path: Path) -> None:
+        path = _write(
+            tmp_path / "models.yaml",
+            """
+models:
+  embedding:
+    provider: local
+    name: Qwen/Qwen3-Embedding-8B
+    dimensions: 1024
+    enabled: true
+""",
+        )
+        settings = _settings(models_config_path=str(path))
+        with pytest.raises(EmbeddingConfigError, match="excluded"):
+            build_provider_from_settings(settings)
+
+    def test_valid_mock_config_returns_provider(self, tmp_path: Path) -> None:
+        path = _write(
+            tmp_path / "models.yaml",
+            """
+models:
+  embedding:
+    provider: mock
+    name: mock-768
+    dimensions: 768
+    enabled: true
+""",
+        )
+        settings = _settings(models_config_path=str(path))
+        provider = build_provider_from_settings(settings)
+        assert isinstance(provider, MockEmbeddingProvider)
+        assert provider.dimensions == 768
+
+    def test_disabled_model_is_fatal_at_startup(self, tmp_path: Path) -> None:
+        """An operator who wrote enabled=false in production wants to know."""
+        path = _write(
+            tmp_path / "models.yaml",
+            """
+models:
+  embedding:
+    provider: mock
+    name: mock-768
+    dimensions: 768
+    enabled: false
+""",
+        )
+        settings = _settings(models_config_path=str(path))
+        with pytest.raises(EmbeddingConfigError, match="disabled"):
+            build_provider_from_settings(settings)

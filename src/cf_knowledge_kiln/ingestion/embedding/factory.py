@@ -22,6 +22,7 @@ the provider it receives:
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from typing import Any, Literal
@@ -44,6 +45,8 @@ from cf_knowledge_kiln.ingestion.embedding.openai_compatible import (
     DEFAULT_TIMEOUT_SECONDS,
     OpenAICompatibleEmbeddingProvider,
 )
+
+logger = logging.getLogger(__name__)
 
 ProviderName = Literal["local", "openai-compatible", "mock"]
 
@@ -192,10 +195,43 @@ def _resolve_env(env_name: str | None, fallback: str | None) -> str | None:
     return fallback
 
 
+def build_provider_from_settings(settings: Settings) -> EmbeddingProvider | None:
+    """Build the active embedding provider, tolerating a missing config file.
+
+    Both the worker and the API call this at startup. Policy:
+
+    * **Missing ``config/models.yaml``** — log a warning, return ``None``.
+      The worker continues without an embedding pass; the API may still
+      serve health endpoints. Callers must check for ``None`` before
+      using the result.
+    * **Malformed or excluded-model config** — fatal. Raise
+      :class:`EmbeddingConfigError` so startup fails loudly rather than
+      silently skipping embeddings.
+
+    Path comes from :attr:`Settings.models_config_path` (default
+    ``config/models.yaml``); operators override via
+    ``KILN_MODELS_CONFIG_PATH``.
+    """
+    path = Path(settings.models_config_path)
+    if not path.exists():
+        logger.warning(
+            "no embedding config at %s; this process will not generate embeddings",
+            path,
+        )
+        return None
+    try:
+        config = load_embedding_config(path)
+        return build_embedding_provider(config, settings)
+    except EmbeddingConfigError:
+        logger.exception("invalid embedding config at %s", path)
+        raise
+
+
 __all__: list[Any] = [
     "EmbeddingConfig",
     "EmbeddingConfigError",
     "ProviderName",
     "build_embedding_provider",
+    "build_provider_from_settings",
     "load_embedding_config",
 ]
