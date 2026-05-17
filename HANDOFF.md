@@ -1,7 +1,7 @@
 # Handoff notes
 
 **As of:** 2026-05-16
-**Status:** Phase 0–3 complete; Phase 4 (embeddings) ready to start. CI green on `main`.
+**Status:** Phase 0–4 complete; Phase 5 (hybrid retrieval) ready to start. CI green on `main`.
 
 This file is the "where we are, what's next, what's been decided" briefing. For *how* to work in the repo, read [AGENTS.md](./AGENTS.md). For *what* the project is, read [README.md](./README.md). For *the plan*, read [plans/cf-rag-plan.md](./plans/cf-rag-plan.md).
 
@@ -11,9 +11,9 @@ This file is the "where we are, what's next, what's been decided" briefing. For 
 
 cf-knowledge-kiln is a Cloud Foundry RAG knowledge app — a `cf push`'d Python/FastAPI app that binds to a Postgres + pgvector service and serves cited retrieval to humans (search UI) and AI agents (bounded context packs). Architecture is hybrid retrieval (pgvector similarity + Postgres FTS + metadata ranking) per [ADR-0002](./docs/adr/0002-postgres-pgvector.md) (reaffirmed by [ADR-0008](./docs/adr/0008-pgvector-mvp-critical.md)).
 
-Phase 3 (ingestion) landed: allowlist-gated source loader (git + local), connectors with size/file-count caps + typed skip reasons, structure-aware Markdown chunking with tiktoken, Postgres-backed `ingestion_jobs` queue with `FOR UPDATE SKIP LOCKED`, polling worker with SIGTERM-safe shutdown, end-to-end pipeline that upserts documents/chunks with content-hash dedup. 83 unit + 28 integration tests green.
+Phase 4 (embeddings) landed: `EmbeddingProvider` Protocol + deterministic `MockEmbeddingProvider`, `OpenAICompatibleEmbeddingProvider` (asyncio semaphore + exponential backoff + secrets stay out of logs), `LocalEmbeddingProvider` (sentence-transformers, lazy-load, runs in a worker thread), config-driven factory with the China-origin exclusion list enforced at load time, `EmbeddingsRepository.upsert` + `existing_hashes_for_document` for content-hash-gated re-embedding, pipeline wired so re-ingestion of unchanged content makes zero provider calls. Also fixed a pre-existing pipeline bug: chunk content edits now upsert on `(document_id, chunk_index)` and orphan chunks are deleted. 128 unit + 33 integration tests green.
 
-Next concrete chunk of work: Phase 4 (embeddings). Epic [#3](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/3). Phase 2 already created the `chunk_embeddings` table + HNSW partial index for 768-dim; Phase 4 wires the embedding-provider abstraction and the re-embed-on-hash-change logic. The CF deploy gate still depends on [bosh-pgvector-release#3](https://github.com/williamzujkowski/bosh-pgvector-release/issues/3) (operator runbook).
+Next concrete chunk of work: Phase 5 (hybrid retrieval). Epic [#4](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/4). With chunks + embeddings + FTS in place, Phase 5 wires `/v1/search`, `/v1/answer`, and `/v1/agent/*` over the existing schema. The CF deploy gate still depends on [bosh-pgvector-release#3](https://github.com/williamzujkowski/bosh-pgvector-release/issues/3) (operator runbook).
 
 ---
 
@@ -39,7 +39,7 @@ Local dev and CI sidestep all of this with `docker run pgvector/pgvector:pg16`.
 
 ---
 
-## What's done (Phase 0 + Phase 1 + Phase 2)
+## What's done (Phase 0 + Phase 1 + Phase 2 + Phase 3 + Phase 4)
 
 ### Phase 0 — Discovery
 
@@ -81,21 +81,26 @@ Local dev and CI sidestep all of this with `docker run pgvector/pgvector:pg16`.
 - **Settings** — three new env vars: `KILN_INGEST_MAX_FILES` (default 10000), `KILN_INGEST_MAX_REPO_BYTES` (default 100 MiB), `KILN_INGEST_POLL_INTERVAL_SECONDS` (default 5.0).
 - **Tests** — 83 unit + 28 integration green. Integration tests cover end-to-end local-source ingest (3 markdown files → 3 documents + N chunks → ingestion_runs row), idempotency on unchanged content (re-run does zero chunk creation), cap-violation handling (run marked failed), and SKIP LOCKED concurrency (two sessions each claim a different row).
 
+### Phase 4 — Embeddings
+
+- **Provider abstraction** (`src/cf_knowledge_kiln/ingestion/embedding/__init__.py`) — `EmbeddingProvider` Protocol with `embed(texts) -> list[list[float]]`, `dimensions`, `model`, `provider`, `aclose()`. Deterministic `MockEmbeddingProvider` derives L2-normalized unit vectors from sha256(text) — used by every Phase 4+ test that doesn't need a real backend. No network, no weights.
+- **OpenAI-compatible adapter** (`embedding/openai_compatible.py`) — async HTTP client speaking `/v1/embeddings`. `asyncio.Semaphore` cap from `KILN_INGEST_CONCURRENCY`. Exponential backoff + jitter on 408/425/429/5xx; 4xx fails fast. Bearer token attached at client level so it never lands in log messages.
+- **Local adapter** (`embedding/local.py`) — sentence-transformers wrapper. Lazy model load, `asyncio.to_thread` for `encode()`. Ships behind the `embeddings` extra (pulls in torch). Tests inject a fake encoder factory so they don't download weights.
+- **Config loader + factory** (`embedding/factory.py`) — reads `config/models.yaml`, validates the schema, refuses to start with unknown providers, disabled models, or names matching the excluded prefixes (`qwen`, `deepseek`, `baai/bge`, `bge-`). Required env vars are validated up front. Picks one of `mock | local | openai-compatible`.
+- **Repository** — `EmbeddingsRepository.upsert(chunk_id, embedding, model, provider, dimensions, content_hash)` (insert-or-replace on PK) and `existing_hashes_for_document(doc_id) -> {chunk_id: content_hash}` for the pipeline skip-gate.
+- **Pipeline integration** (`ingestion/pipeline.py`) — after chunks are upserted, an embedding pass walks each touched document and embeds only the chunks whose stored hash doesn't match. Re-ingestion of unchanged content makes zero provider calls. Embedding failures don't abort the run; they're recorded in `summary.embeddings_failed` and `ingestion_runs.errors`.
+- **Pipeline bugfix** — chunk inserts now UPSERT on `(document_id, chunk_index)` and orphan chunks (indices beyond the new content) are deleted. Without this, a content edit would hit `uq_chunks_doc_index` and crash mid-run.
+- **Worker integration** — `Worker` accepts an `embedding_provider`; `serve()` builds one from `config/models.yaml` and closes it on shutdown. Missing config = warn + skip embeddings; malformed config = fatal at startup.
+- **Settings** — new `KILN_MODELS_CONFIG_PATH` (default `config/models.yaml`).
+- **Tests** — 128 unit + 33 integration green. New coverage: protocol contract + deterministic mock (11), openai-compatible adapter incl. concurrency cap + secret-leak guard (9), local adapter incl. lazy-load + off-loop encode (7), config loader + provider factory incl. excluded-list enforcement (14), pgvector upsert + existing-hashes lookup (2), pipeline embeds new chunks (1), pipeline skips re-embedding on unchanged corpus (1), pipeline re-embeds only changed chunks (1).
+
 ---
 
 ## What's next (in order)
 
-### Immediate (Phase 4 — Embeddings)
+### Immediate (Phase 5 — Hybrid retrieval + agent endpoint)
 
-Epic [#3](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/3). Scope per the plan:
-
-- Embedding-provider abstraction (`src/cf_knowledge_kiln/agent/embeddings/` or similar) — provider interface + at least the MVP provider per `docs/model-providers.md`.
-- Mock provider for tests (so unit tests don't call out to the real model).
-- Re-embed only when `content_hash` changes (Phase 3 already produces stable hashes; Phase 4 wires the skip path).
-- Per-row dimensions stored on each `chunk_embeddings` row (schema already supports it).
-- Wire embedding generation into `ingestion/pipeline.py` after the chunk upsert.
-
-This is unblocked by Phase 3: ingestion produces hashed chunks ready for embedding.
+Epic [#4](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/4). Phase 5 wires `/v1/search`, `/v1/answer`, and `/v1/agent/*` over the now-complete index. Inputs ready: chunks with FTS GIN, embeddings with HNSW partial index, hash-keyed `chunk_embeddings` for staleness checks. Ranking signals per the plan; dual response shapes per ADR-0003.
 
 ### Parallel (operator track)
 
@@ -141,24 +146,27 @@ The ADR-0007 file is preserved on disk as a historical record of the temporarily
 
 ---
 
-## How to start working (Phase 4)
+## How to start working (Phase 5)
 
 ```bash
 cd /home/william/git/cf-knowledge-kiln
 git pull origin main
-git checkout -b feat/phase-4-embeddings
+git checkout -b feat/phase-5-retrieval
 
 # Local dev with pgvector (already created in Phase 2; re-start if stopped)
 docker start kiln-pg
 export KILN_DATABASE_URL=postgresql+asyncpg://kiln:kiln@localhost:5432/kiln  # pragma: allowlist secret
 
-# Phase 4 may add a dep extra (e.g. `embeddings` for nomic / openai-compatible clients).
+# Phase 5 reuses everything already installed. The `embeddings` extra
+# is only needed if you want to use the `local` provider for smoke tests;
+# the mock provider works without it.
 .venv/bin/pip install -e ".[dev,db,ingestion]"
 
 # Apply migrations (idempotent if already at head)
 .venv/bin/python -m alembic upgrade head
 
-# Smoke-test the ingestion pipeline against fixtures
+# Smoke-test the ingestion + embedding pipeline against fixtures
+# (point KILN_MODELS_CONFIG_PATH at a YAML with provider: mock)
 .venv/bin/python -m cf_knowledge_kiln.ingestion validate --config config/sources.example.yaml
 ```
 
@@ -204,8 +212,8 @@ These are tracked omnibus issues from the 2026-05-16 code-reviewer pass. Refer t
 
 ```bash
 cd /home/william/git/cf-knowledge-kiln
-gh issue view 3  # Phase 4 epic — embeddings
-git checkout -b feat/phase-4-embeddings
+gh issue view 4  # Phase 5 epic — hybrid retrieval + agent endpoint
+git checkout -b feat/phase-5-retrieval
 ```
 
 Or, to start the operator track in parallel:

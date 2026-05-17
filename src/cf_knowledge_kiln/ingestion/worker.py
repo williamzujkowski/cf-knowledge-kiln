@@ -32,6 +32,12 @@ from typing import Any
 from cf_knowledge_kiln.config import Settings, get_settings
 from cf_knowledge_kiln.db import Database, resolve_database_url
 from cf_knowledge_kiln.db.repositories import IngestionJobsRepository
+from cf_knowledge_kiln.ingestion.embedding import EmbeddingProvider
+from cf_knowledge_kiln.ingestion.embedding.factory import (
+    EmbeddingConfigError,
+    build_embedding_provider,
+    load_embedding_config,
+)
 from cf_knowledge_kiln.ingestion.pipeline import run_source
 from cf_knowledge_kiln.ingestion.sources import (
     SourceAllowlist,
@@ -56,11 +62,13 @@ class Worker:
         db: Database,
         allowlist: SourceAllowlist,
         settings: Settings,
+        embedding_provider: EmbeddingProvider | None = None,
         poll_interval_seconds: float | None = None,
     ) -> None:
         self._db = db
         self._allowlist = allowlist
         self._settings = settings
+        self._embedding_provider = embedding_provider
         self._poll = (
             poll_interval_seconds
             if poll_interval_seconds is not None
@@ -144,7 +152,12 @@ class Worker:
             raise ValueError(f"job {job_id} payload missing 'source_name' string; got {payload!r}")
         source = self._allowlist.get(source_name)  # raises SourceNotAllowedError
         async with self._db.session() as session:
-            summary = await run_source(session, source=source, settings=self._settings)
+            summary = await run_source(
+                session,
+                source=source,
+                settings=self._settings,
+                embedding_provider=self._embedding_provider,
+            )
             await session.commit()
         async with self._db.session() as session:
             await IngestionJobsRepository(session).mark_done(job_id)
@@ -186,13 +199,36 @@ async def serve(
         return 2
 
     db = Database(url, pool_size=settings.pg_pool_size, max_overflow=settings.pg_pool_max_overflow)
-    worker = Worker(db=db, allowlist=allowlist, settings=settings)
+    provider = _build_provider_or_warn(settings)
+    worker = Worker(db=db, allowlist=allowlist, settings=settings, embedding_provider=provider)
     _install_signal_handlers(worker)
     try:
         await worker.run_forever()
     finally:
+        if provider is not None:
+            await provider.aclose()
         await db.dispose()
     return 0
+
+
+def _build_provider_or_warn(settings: Settings) -> EmbeddingProvider | None:
+    """Construct the embedding provider; tolerate a missing config file.
+
+    A missing ``config/models.yaml`` is allowed in pre-Phase-4
+    environments — the worker keeps running and just skips the
+    embedding pass. A *malformed* config or an *excluded* model is
+    fatal at startup so the operator notices, not a silent skip.
+    """
+    path = Path(settings.models_config_path)
+    if not path.exists():
+        logger.warning("no embedding config at %s; worker will not generate embeddings", path)
+        return None
+    try:
+        config = load_embedding_config(path)
+        return build_embedding_provider(config, settings)
+    except EmbeddingConfigError:
+        logger.exception("invalid embedding config at %s", path)
+        raise
 
 
 __all__ = ["SourceNotAllowedError", "Worker", "serve"]

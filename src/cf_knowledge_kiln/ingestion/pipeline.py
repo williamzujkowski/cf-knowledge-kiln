@@ -2,15 +2,20 @@
 
 One call to :func:`run_source` takes a :class:`Source` (allowlisted),
 fetches its files (git or local), parses each into chunks, upserts the
-documents + chunks into Postgres, and writes a summary row into
-``ingestion_runs``.
+documents + chunks into Postgres, embeds anything new-or-changed, and
+writes a summary row into ``ingestion_runs``.
 
-Re-running against unchanged content is a no-op for chunks: the
-content-hash check skips any chunk whose hash already exists for the
-same document. Embedding work is Phase 4; this pipeline writes
-document/chunk metadata only, so "no embedding work" is satisfied
-trivially today and the hash check is what makes the property hold
-when embeddings land.
+Two idempotency properties matter here:
+
+* **Chunks** — re-running against unchanged content writes zero new
+  chunk rows. The hash on each chunk is the gate.
+* **Embeddings** (Phase 4) — re-running against unchanged content
+  makes zero embedding-provider calls. The gate is the per-chunk
+  ``content_hash`` stored on ``chunk_embeddings``: if it equals the
+  current chunk hash, the embedding is up to date.
+
+The embedding pass runs after the chunk pass so it can rely on
+flushed chunk IDs.
 """
 
 from __future__ import annotations
@@ -18,8 +23,9 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from typing import Any
+from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,9 +40,10 @@ from cf_knowledge_kiln.ingestion.connectors import (
     FetchedFile,
     IngestionCapExceeded,
     IngestionCaps,
-    SkippedFile,
     fetch_source,
 )
+from cf_knowledge_kiln.ingestion.embedding import EmbeddingProvider
+from cf_knowledge_kiln.ingestion.embedding.pipeline import embed_touched_documents
 from cf_knowledge_kiln.ingestion.sources import Source
 
 logger = logging.getLogger(__name__)
@@ -51,6 +58,9 @@ class IngestionSummary:
     files_skipped: int = 0
     chunks_created: int = 0
     chunks_unchanged: int = 0
+    embeddings_created: int = 0
+    embeddings_unchanged: int = 0
+    embeddings_failed: int = 0
     warnings: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     skip_reasons: dict[str, int] = field(default_factory=dict)
@@ -62,6 +72,9 @@ class IngestionSummary:
             "files_skipped": self.files_skipped,
             "chunks_created": self.chunks_created,
             "chunks_unchanged": self.chunks_unchanged,
+            "embeddings_created": self.embeddings_created,
+            "embeddings_unchanged": self.embeddings_unchanged,
+            "embeddings_failed": self.embeddings_failed,
             "skip_reasons": self.skip_reasons,
         }
 
@@ -70,9 +83,19 @@ def _bump(d: dict[str, int], key: str) -> None:
     d[key] = d.get(key, 0) + 1
 
 
-async def _existing_chunk_hashes(session: AsyncSession, document_id: Any) -> set[str]:
-    stmt = select(DocumentChunk.content_hash).where(DocumentChunk.document_id == document_id)
-    return set((await session.execute(stmt)).scalars().all())
+async def _existing_chunks_by_index(
+    session: AsyncSession, document_id: Any
+) -> dict[int, tuple[UUID, str]]:
+    """Return ``{chunk_index: (chunk_id, content_hash)}`` for one document.
+
+    Used by ``_process_file`` to decide per-index whether to skip,
+    upsert, or replace each chunk. The index is the natural key the
+    parser produces; the DB enforces ``UNIQUE (document_id, chunk_index)``.
+    """
+    stmt = select(DocumentChunk.id, DocumentChunk.chunk_index, DocumentChunk.content_hash).where(
+        DocumentChunk.document_id == document_id
+    )
+    return {idx: (chunk_id, h) for chunk_id, idx, h in (await session.execute(stmt)).all()}
 
 
 async def _upsert_document(
@@ -134,6 +157,7 @@ async def _process_file(
     file: FetchedFile,
     source: Source,
     summary: IngestionSummary,
+    touched_doc_ids: set[UUID],
 ) -> None:
     """Parse one fetched file and write its chunks. Dedup on content_hash."""
     try:
@@ -158,22 +182,46 @@ async def _process_file(
         commit_sha=file.commit_sha,
         source_defaults=source,
     )
-    existing_hashes = await _existing_chunk_hashes(session, doc.id)
+    touched_doc_ids.add(doc.id)
+    existing_by_index = await _existing_chunks_by_index(session, doc.id)
+    seen_indices: set[int] = set()
+    chunks_table = DocumentChunk.__table__
     for chunk in parsed.chunks:
-        if chunk.content_hash in existing_hashes:
+        seen_indices.add(chunk.chunk_index)
+        prev = existing_by_index.get(chunk.chunk_index)
+        if prev is not None and prev[1] == chunk.content_hash:
             summary.chunks_unchanged += 1
             continue
-        session.add(
-            DocumentChunk(
-                document_id=doc.id,
-                chunk_index=chunk.chunk_index,
-                content=chunk.content,
-                content_tokens=chunk.content_tokens,
-                content_hash=chunk.content_hash,
-                heading_path=chunk.heading_path,
-            )
+        # Upsert on (document_id, chunk_index): a content edit replaces
+        # the row in place so the chunk's UUID is stable. That stable ID
+        # is what chunk_embeddings references; the embedding pass will
+        # then notice the content_hash drift and re-embed.
+        insert_stmt = pg_insert(chunks_table).values(  # type: ignore[arg-type]
+            {
+                chunks_table.c.document_id: doc.id,
+                chunks_table.c.chunk_index: chunk.chunk_index,
+                chunks_table.c.content: chunk.content,
+                chunks_table.c.content_tokens: chunk.content_tokens,
+                chunks_table.c.content_hash: chunk.content_hash,
+                chunks_table.c.heading_path: chunk.heading_path,
+            }
         )
+        upsert_stmt = insert_stmt.on_conflict_do_update(
+            constraint="uq_chunks_doc_index",
+            set_={
+                "content": insert_stmt.excluded.content,
+                "content_tokens": insert_stmt.excluded.content_tokens,
+                "content_hash": insert_stmt.excluded.content_hash,
+                "heading_path": insert_stmt.excluded.heading_path,
+            },
+        )
+        await session.execute(upsert_stmt)
         summary.chunks_created += 1
+    orphan_ids = [
+        chunk_id for idx, (chunk_id, _h) in existing_by_index.items() if idx not in seen_indices
+    ]
+    if orphan_ids:
+        await session.execute(delete(DocumentChunk).where(DocumentChunk.id.in_(orphan_ids)))
     summary.files_indexed += 1
 
 
@@ -198,6 +246,7 @@ async def run_source(
     *,
     source: Source,
     settings: Settings,
+    embedding_provider: EmbeddingProvider | None = None,
 ) -> IngestionSummary:
     """Run the full pipeline for a single source. Writes an ingestion_runs row.
 
@@ -207,6 +256,13 @@ async def run_source(
     compose this in a larger transaction should pass a session bound
     to that transaction; the internal commits then commit only the
     work this function did.
+
+    ``embedding_provider`` is optional so the pipeline still runs
+    chunk-only when no provider is configured (e.g. a worker started
+    before Phase 4 config landed). When supplied, embeddings are
+    generated for any chunk whose stored ``content_hash`` doesn't
+    match the current chunk hash — re-ingestion of unchanged content
+    therefore makes zero provider calls (issue #18).
     """
     summary = IngestionSummary()
     runs_repo = IngestionRunsRepository(session)
@@ -228,8 +284,23 @@ async def run_source(
     for skipped in fetch.skipped:
         summary.files_skipped += 1
         _bump(summary.skip_reasons, skipped.reason)
+    touched_doc_ids: set[UUID] = set()
     for file in fetch.files:
-        await _process_file(session, file=file, source=source, summary=summary)
+        await _process_file(
+            session,
+            file=file,
+            source=source,
+            summary=summary,
+            touched_doc_ids=touched_doc_ids,
+        )
+
+    if embedding_provider is not None:
+        await embed_touched_documents(
+            session,
+            doc_ids=touched_doc_ids,
+            provider=embedding_provider,
+            summary=summary,
+        )
 
     await session.execute(
         _runs_update(
@@ -285,15 +356,7 @@ def _runs_update(
     )
 
 
-# ─── helpers exposed for tests ──────────────────────────────────────
-
-
 __all__ = [
     "IngestionSummary",
     "run_source",
 ]
-
-
-def _record_skipped(summary: IngestionSummary, skipped: SkippedFile) -> None:  # pragma: no cover
-    summary.files_skipped += 1
-    _bump(summary.skip_reasons, skipped.reason)

@@ -175,6 +175,67 @@ async def test_embeddings_crud(session: AsyncSession) -> None:
     assert await embeds.get(chunk.id) is None
 
 
+async def test_embeddings_upsert_replaces_existing(session: AsyncSession) -> None:
+    """Issue #18: re-embedding a chunk overwrites the row, not duplicates it."""
+    docs = DocumentsRepository(session)
+    chunks = ChunksRepository(session)
+    embeds = EmbeddingsRepository(session)
+
+    doc = await docs.create(repo="r", path="p", title="t")
+    chunk = await chunks.create(
+        document_id=doc.id, chunk_index=0, content="x", content_hash="hash-v1"
+    )
+    await embeds.upsert(
+        chunk_id=chunk.id,
+        embedding=[0.1] * 768,
+        model="nomic-embed-text-v1.5",
+        provider="local",
+        dimensions=768,
+        content_hash="hash-v1",
+    )
+    # Same chunk, same model — but content rewritten, so new vector + hash.
+    await embeds.upsert(
+        chunk_id=chunk.id,
+        embedding=[0.5] * 768,
+        model="nomic-embed-text-v1.5",
+        provider="local",
+        dimensions=768,
+        content_hash="hash-v2",
+    )
+
+    rows = await embeds.list(dimensions=768)
+    assert len(rows) == 1
+    assert rows[0].content_hash == "hash-v2"
+
+
+async def test_embeddings_existing_hashes_for_document(session: AsyncSession) -> None:
+    """Issue #18: the pipeline needs the {chunk_id: hash} map to decide skips."""
+    docs = DocumentsRepository(session)
+    chunks = ChunksRepository(session)
+    embeds = EmbeddingsRepository(session)
+
+    doc = await docs.create(repo="r", path="p", title="t")
+    chunk_embedded = await chunks.create(
+        document_id=doc.id, chunk_index=0, content="x", content_hash="h0"
+    )
+    chunk_pending = await chunks.create(
+        document_id=doc.id, chunk_index=1, content="y", content_hash="h1"
+    )
+    # Only one of the two chunks has an embedding row.
+    await embeds.upsert(
+        chunk_id=chunk_embedded.id,
+        embedding=[0.0] * 768,
+        model="m",
+        provider="mock",
+        dimensions=768,
+        content_hash="h0",
+    )
+
+    hashes = await embeds.existing_hashes_for_document(doc.id)
+    assert hashes == {chunk_embedded.id: "h0"}
+    assert chunk_pending.id not in hashes
+
+
 # ─── ingestion_runs ─────────────────────────────────────────────────
 
 

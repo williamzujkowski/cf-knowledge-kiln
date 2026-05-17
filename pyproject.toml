@@ -43,6 +43,12 @@ ingestion = [
   "mistune>=3.0,<4.0",
   "tiktoken>=0.8,<1.0",
 ]
+embeddings = [
+  # Heavy: pulls in torch transitively. Only needed for the `local`
+  # embedding provider; the `openai-compatible` and `mock` providers
+  # work without this extra.
+  "sentence-transformers>=3.0,<6.0",
+]
 dev = [
   "ruff>=0.7,<1.0",
   "mypy>=1.13,<2.0",
@@ -116,7 +122,13 @@ show_error_codes = true
 
 # Third-party libs without py.typed markers.
 [[tool.mypy.overrides]]
-module = ["pgvector.*", "frontmatter.*", "mistune.*", "tiktoken.*"]
+module = [
+  "pgvector.*",
+  "frontmatter.*",
+  "mistune.*",
+  "tiktoken.*",
+  "sentence_transformers.*",
+]
 ignore_missing_imports = true
 
 # ─── pytest ──────────────────────────────────────────────────────────

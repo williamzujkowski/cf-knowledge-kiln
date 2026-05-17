@@ -7,6 +7,7 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from cf_knowledge_kiln.db.models import ChunkEmbedding, Document, DocumentChunk
 from cf_knowledge_kiln.db.repositories._base import BaseRepository
@@ -175,3 +176,56 @@ class EmbeddingsRepository(BaseRepository):
 
     async def delete(self, id: UUID) -> None:
         await self._session.execute(delete(ChunkEmbedding).where(ChunkEmbedding.chunk_id == id))
+
+    async def upsert(
+        self,
+        *,
+        chunk_id: UUID,
+        embedding: Sequence[float],
+        model: str,
+        provider: str,
+        dimensions: int,
+        content_hash: str,
+    ) -> None:
+        """Insert or overwrite the row for ``chunk_id``.
+
+        ``chunk_embeddings`` has ``chunk_id`` as its sole primary key:
+        one embedding per chunk, intentionally. Swapping models =
+        reindex (Phase 4 plan). Re-embedding the same chunk after a
+        content edit replaces the vector and updates ``content_hash``.
+        """
+        stmt = pg_insert(ChunkEmbedding).values(
+            chunk_id=chunk_id,
+            embedding=list(embedding),
+            model=model,
+            provider=provider,
+            dimensions=dimensions,
+            content_hash=content_hash,
+        )
+        await self._session.execute(
+            stmt.on_conflict_do_update(
+                index_elements=["chunk_id"],
+                set_={
+                    "embedding": stmt.excluded.embedding,
+                    "model": stmt.excluded.model,
+                    "provider": stmt.excluded.provider,
+                    "dimensions": stmt.excluded.dimensions,
+                    "content_hash": stmt.excluded.content_hash,
+                },
+            )
+        )
+
+    async def existing_hashes_for_document(self, document_id: UUID) -> dict[UUID, str]:
+        """Return ``{chunk_id: content_hash}`` for chunks already embedded.
+
+        Used by the ingestion pipeline to skip re-embedding chunks whose
+        content hasn't changed (issue #18). A chunk that isn't in the
+        result map either has no embedding yet, or its row was deleted.
+        """
+        stmt = (
+            select(DocumentChunk.id, ChunkEmbedding.content_hash)
+            .join(ChunkEmbedding, ChunkEmbedding.chunk_id == DocumentChunk.id)
+            .where(DocumentChunk.document_id == document_id)
+        )
+        rows = (await self._session.execute(stmt)).all()
+        return {row[0]: row[1] for row in rows}
