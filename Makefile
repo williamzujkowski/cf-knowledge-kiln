@@ -70,8 +70,8 @@ scan: ## Scan SBOM via grype.
 run: ## Start the API on $$KILN_HTTP_PORT (default 8080).
 	@$(PY) -m uvicorn $(PKG).api.app:app --host 0.0.0.0 --port $${KILN_HTTP_PORT:-8080} --reload
 
-run-worker: ## Start the ingestion worker.
-	@$(PY) -m $(PKG).ingestion.worker
+run-worker: ## Start the ingestion worker (uses config/sources.yaml).
+	@$(PY) -m $(PKG).ingestion serve-worker --config config/sources.yaml
 
 migrate: ## Apply Alembic migrations (Phase 2+).
 	@$(PY) -m alembic upgrade head
@@ -79,8 +79,8 @@ migrate: ## Apply Alembic migrations (Phase 2+).
 migrate-down: ## Roll back one revision.
 	@$(PY) -m alembic downgrade -1
 
-ingest: ## Ingest configured sources (Phase 3+).
-	@$(PY) -m $(PKG).ingestion --config config/sources.yaml
+ingest: ## Enqueue ingestion jobs for active sources (uses config/sources.yaml).
+	@$(PY) -m $(PKG).ingestion ingest --config config/sources.yaml
 
 cf-push: ## Push to Cloud Foundry using ./manifest.yml.
 	@command -v cf >/dev/null 2>&1 || { echo "cf CLI not installed"; exit 1; }

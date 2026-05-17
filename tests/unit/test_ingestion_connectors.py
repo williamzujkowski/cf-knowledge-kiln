@@ -133,6 +133,52 @@ def test_local_connector_default_denies_dotfiles_and_vendored_trees(tmp_path: Pa
     assert "docs/.env.local" in denied
 
 
+def test_local_connector_skips_symlink_escaping_root(tmp_path: Path) -> None:
+    """A symlink whose target lives outside the source root is refused.
+
+    Without this guard, a malicious source author could ship
+    ``mydocs/escape.md → /etc/hostname`` and have the worker index
+    arbitrary files the worker UID can read. See #44.
+    """
+    outside_root = tmp_path / "outside"
+    outside_root.mkdir()
+    sensitive = outside_root / "secret.md"
+    sensitive.write_text("# Sensitive\nshould never be indexed\n")
+
+    source_root = tmp_path / "src"
+    source_root.mkdir()
+    _write(source_root / "legitimate.md", "# Legitimate\nhello\n")
+    (source_root / "escape.md").symlink_to(sensitive)
+
+    src = LocalSource(name="x", type="local", path=str(source_root), include=["**/*"])
+    result = LocalConnector(_make_caps()).fetch(src)
+
+    assert {f.path for f in result.files} == {"legitimate.md"}
+    escaped = [s for s in result.skipped if s.reason == "symlink_escape"]
+    assert {s.path for s in escaped} == {"escape.md"}
+    # The sensitive content must never appear in the returned bytes.
+    for file in result.files:
+        assert b"Sensitive" not in file.content
+
+
+def test_local_connector_allows_symlink_within_root(tmp_path: Path) -> None:
+    """A symlink that resolves *inside* the source root is fine."""
+    _write(tmp_path / "real.md", "# Real\nbody\n")
+    (tmp_path / "alias.md").symlink_to(tmp_path / "real.md")
+    src = LocalSource(name="x", type="local", path=str(tmp_path), include=["**/*"])
+    result = LocalConnector(_make_caps()).fetch(src)
+    assert {f.path for f in result.files} == {"real.md", "alias.md"}
+
+
+def test_local_connector_skips_broken_symlink(tmp_path: Path) -> None:
+    """A symlink with a missing target is treated like an escape."""
+    _write(tmp_path / "real.md", "# Real\n")
+    (tmp_path / "broken.md").symlink_to(tmp_path / "does-not-exist.md")
+    src = LocalSource(name="x", type="local", path=str(tmp_path), include=["**/*"])
+    result = LocalConnector(_make_caps()).fetch(src)
+    assert {f.path for f in result.files} == {"real.md"}
+
+
 # ─── GitConnector ───────────────────────────────────────────────────
 
 

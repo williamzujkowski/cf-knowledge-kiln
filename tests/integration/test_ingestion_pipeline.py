@@ -49,6 +49,22 @@ class _CountingMockProvider(MockEmbeddingProvider):
         return await super().embed(texts)
 
 
+class _RaisingMockProvider(MockEmbeddingProvider):
+    """Mock provider whose embed() always raises; for failure-path tests."""
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        raise RuntimeError("simulated provider outage")
+
+
+class _WrongLengthMockProvider(MockEmbeddingProvider):
+    """Mock provider that returns the wrong number of vectors."""
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        # Return one fewer vector than requested.
+        truncated = texts[:-1] if len(texts) > 1 else []
+        return await super().embed(truncated)
+
+
 pytestmark = pytest.mark.integration
 
 
@@ -234,6 +250,62 @@ async def test_pipeline_re_embeds_only_changed_chunks(
     # At least one fresh embedding call for the changed chunk.
     assert len(provider.calls) > initial_call_count
     assert second.embeddings_created >= 1
+
+
+async def test_pipeline_records_embedding_provider_failure(
+    session: AsyncSession, fixture_corpus: Path
+) -> None:
+    """Issue #46: provider exception → embeddings_failed counted, run survives."""
+    provider = _RaisingMockProvider()
+    src = LocalSource(name="fixtures", type="local", path=str(fixture_corpus), include=["**/*.md"])
+    summary = await run_source(
+        session, source=src, settings=_settings(), embedding_provider=provider
+    )
+    await session.commit()
+    # Chunk pass still succeeded; embedding pass failed per-document.
+    assert summary.chunks_created > 0
+    assert summary.embeddings_created == 0
+    assert summary.embeddings_failed == summary.chunks_created
+    assert any("simulated provider outage" in e for e in summary.errors)
+    runs = (await session.execute(select(IngestionRun))).scalars().all()
+    # Status is "partial" because errors were recorded, not "failed".
+    assert runs[0].status == "partial"
+
+
+async def test_pipeline_records_vector_count_mismatch(
+    session: AsyncSession, fixture_corpus: Path
+) -> None:
+    """Issue #46: provider returns wrong number of vectors → failure counted."""
+    provider = _WrongLengthMockProvider()
+    src = LocalSource(name="fixtures", type="local", path=str(fixture_corpus), include=["**/*.md"])
+    summary = await run_source(
+        session, source=src, settings=_settings(), embedding_provider=provider
+    )
+    await session.commit()
+    assert summary.embeddings_created == 0
+    assert summary.embeddings_failed > 0
+    assert any("vectors for" in e for e in summary.errors)
+
+
+async def test_pipeline_handles_document_with_zero_chunks(
+    session: AsyncSession, tmp_path: Path
+) -> None:
+    """Issue #46: an empty Markdown file produces no chunks and no errors.
+
+    Parser today treats an effectively-empty body as 'no chunks' and the
+    file is recorded as files_skipped + a warning. The embedding pass
+    must then see no chunks and short-circuit.
+    """
+    (tmp_path / "empty.md").write_text("")
+    src = LocalSource(name="empties", type="local", path=str(tmp_path), include=["**/*.md"])
+    provider = _CountingMockProvider()
+    summary = await run_source(
+        session, source=src, settings=_settings(), embedding_provider=provider
+    )
+    await session.commit()
+    assert summary.embeddings_created == 0
+    assert summary.embeddings_failed == 0
+    assert provider.calls == []
 
 
 async def test_pipeline_records_skip_reasons_in_run_stats(
