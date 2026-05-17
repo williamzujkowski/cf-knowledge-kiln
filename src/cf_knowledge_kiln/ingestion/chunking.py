@@ -25,6 +25,19 @@ isn't valid Markdown, the call returns no chunks and the caller
 records ``parse_error`` in the ingestion summary. Mistune's AST is
 **not** used to drive chunk boundaries (line-based scanning gives us
 position information we'd otherwise lose when re-rendering AST nodes).
+
+Known limitations of the line-based scanner (acceptable today; revisit
+in Phase 4 if retrieval quality suffers):
+
+* **ATX headings only** (``# Title``). Setext-style headings
+  (``Title\\n====``) fall through to the paragraph branch and the H1 is
+  not added to ``heading_path``. Internal docs use ATX consistently.
+* **Blockquotes** (``> ...``) are absorbed into paragraphs.
+* **Single-column GFM tables** are not recognized as tables (multi-
+  column only; rare in practice).
+* Orphan H3 (an ``### Foo`` with no preceding H1/H2) produces a
+  ``heading_path`` like ``["Foo"]``, indistinguishable from an H1.
+  Source documents should anchor on H1 to avoid the ambiguity.
 """
 
 from __future__ import annotations
@@ -45,7 +58,7 @@ DEFAULT_MAX_TOKENS = 800
 DEFAULT_MIN_TOKENS = 300
 
 _HEADING_RE = re.compile(r"^(?P<hashes>#{1,6})\s+(?P<text>.+?)\s*#*$")
-_FENCE_RE = re.compile(r"^(?P<fence>```+|~~~+)")
+_FENCE_OPEN_RE = re.compile(r"^(?P<fence>`{3,}|~{3,})")
 _LIST_ITEM_RE = re.compile(r"^\s{0,3}(?:[-*+]|\d+[.)])\s+")
 _TABLE_SEP_RE = re.compile(r"^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$")
 
@@ -96,16 +109,24 @@ def _scan_blocks(body: str) -> list[_Block]:
         if not line.strip():
             i += 1
             continue
-        # Fenced code block — match the fence character + length on close.
-        fence_m = _FENCE_RE.match(line)
+        # Fenced code block — close fence must be the SAME character class
+        # and AT LEAST as long as the opener (CommonMark §4.5). This lets
+        # docs use ```` ```` to wrap a block that itself contains ``` lines.
+        fence_m = _FENCE_OPEN_RE.match(line)
         if fence_m:
             fence = fence_m.group("fence")
+            fence_char = fence[0]
+            fence_len = len(fence)
             start = i
             i += 1
-            while i < n and not lines[i].startswith(fence):
+            while i < n:
+                stripped = lines[i].lstrip()
+                if stripped.startswith(fence_char * fence_len) and set(
+                    stripped[: len(stripped.rstrip())]
+                ) <= {fence_char}:
+                    i += 1  # consume closing fence
+                    break
                 i += 1
-            if i < n:
-                i += 1  # consume closing fence
             blocks.append(_Block(kind="code", text="\n".join(lines[start:i])))
             continue
         heading_m = _HEADING_RE.match(line)
@@ -149,7 +170,7 @@ def _scan_blocks(body: str) -> list[_Block]:
 def _is_block_start(line: str, lines: list[str], idx: int) -> bool:
     if _HEADING_RE.match(line):
         return True
-    if _FENCE_RE.match(line):
+    if _FENCE_OPEN_RE.match(line):
         return True
     if _LIST_ITEM_RE.match(line):
         return True

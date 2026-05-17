@@ -41,12 +41,27 @@ class _SourceBase(BaseModel):
     last_reviewed_required: bool = False
 
 
+_REPO_PATTERN = (
+    r"^(?:[A-Za-z0-9_./:@+][A-Za-z0-9_./:@+-]*"
+    r"|https?://[^\s]+"
+    r"|git@[^\s]+"
+    r"|file://[^\s]+)$"
+)
+_BRANCH_PATTERN = r"^[A-Za-z0-9._/][A-Za-z0-9._/-]*$"
+
+
 class GitSource(_SourceBase):
-    """A git-hosted source. ``repo`` is ``owner/name`` shorthand or full URL."""
+    """A git-hosted source. ``repo`` is ``owner/name`` shorthand or a full URL.
+
+    Both ``repo`` and ``branch`` are constrained so they cannot start with
+    ``-`` (which the ``git`` CLI would parse as an option), closing the
+    obvious arg-injection door even though the connector passes args as
+    a list, not a shell string.
+    """
 
     type: Literal["git"]
-    repo: str = Field(min_length=1)
-    branch: str = "main"
+    repo: str = Field(min_length=1, pattern=_REPO_PATTERN)
+    branch: str = Field(default="main", pattern=_BRANCH_PATTERN)
 
 
 class LocalSource(_SourceBase):

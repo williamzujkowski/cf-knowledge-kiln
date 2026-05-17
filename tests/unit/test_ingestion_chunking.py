@@ -212,6 +212,34 @@ def test_chunk_indexes_are_sequential() -> None:
     assert [c.chunk_index for c in doc.chunks] == [0, 1, 2]
 
 
+def test_nested_fenced_code_block_is_preserved_with_inner_fence() -> None:
+    """A ```` ```` outer fence must NOT close on an inner ``` line."""
+    src = textwrap.dedent(
+        """\
+        # Top
+        ````md
+        Outer.
+        ```python
+        def foo(): pass
+        ```
+        More outer.
+        ````
+        After.
+        """
+    )
+    doc = parse_document(src)
+    full = "\n".join(c.content for c in doc.chunks)
+    # Both inner triple-backticks survive intact.
+    assert full.count("```python") == 1
+    assert full.count("def foo()") == 1
+    # The outer fence open/close (4 backticks) is also present.
+    assert "````md" in full
+    # The "After." text lands in a *separate* chunk concept (after the
+    # outer fence closes), or stays in the same section — either way it
+    # must appear unmangled.
+    assert "After." in full
+
+
 def test_frontmatter_overrides_apply_per_document() -> None:
     src = textwrap.dedent(
         """\

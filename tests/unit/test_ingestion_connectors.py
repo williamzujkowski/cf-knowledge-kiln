@@ -116,6 +116,23 @@ def test_local_connector_raises_on_missing_path(tmp_path: Path) -> None:
         LocalConnector(_make_caps()).fetch(src)
 
 
+def test_local_connector_default_denies_dotfiles_and_vendored_trees(tmp_path: Path) -> None:
+    """Dotfiles (`.env`, `.git/`, `node_modules/`) skipped regardless of include."""
+    _write(tmp_path / ".env", "SECRET=value")
+    _write(tmp_path / ".git" / "config", "noise")
+    _write(tmp_path / "node_modules" / "x" / "README.md", "noise")
+    _write(tmp_path / "docs" / ".env.local", "another-secret")
+    _write(tmp_path / "docs" / "intro.md", "# Intro")
+    src = LocalSource(name="x", type="local", path=str(tmp_path), include=["**/*"])
+    result = LocalConnector(_make_caps()).fetch(src)
+    assert {f.path for f in result.files} == {"docs/intro.md"}
+    denied = {s.path for s in result.skipped if s.detail == "dotfile / vendored-tree default-deny"}
+    assert ".env" in denied
+    assert ".git/config" in denied
+    assert "node_modules/x/README.md" in denied
+    assert "docs/.env.local" in denied
+
+
 # ─── GitConnector ───────────────────────────────────────────────────
 
 
