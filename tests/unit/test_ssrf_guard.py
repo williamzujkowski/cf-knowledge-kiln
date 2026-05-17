@@ -226,3 +226,79 @@ class TestAddressGuard:
             pytest.raises(SsrfRefused, match="DNS resolution failed"),
         ):
             assert_addresses_public("nonexistent.example")
+
+
+# ─── pin_dns (#81 TOCTOU mitigation) ────────────────────────────────
+
+
+class TestPinDns:
+    def test_pinned_lookup_returns_only_pinned_ips(self) -> None:
+        """Inside the with block, getaddrinfo(host) returns ONLY pinned IPs."""
+        import socket as socket_mod
+
+        from cf_knowledge_kiln.ingestion.ssrf import pin_dns
+
+        with pin_dns("safe.example.com", ["93.184.216.34"]):
+            results = socket_mod.getaddrinfo("safe.example.com", 443)
+            assert any(r[4][0] == "93.184.216.34" for r in results)
+
+    def test_other_hosts_resolve_normally_inside_pin(self) -> None:
+        """The pin is keyed on hostname; unrelated hosts pass through."""
+        import socket as socket_mod
+
+        from cf_knowledge_kiln.ingestion.ssrf import pin_dns
+
+        captured: dict[str, str | bytes | None] = {}
+        original = socket_mod.getaddrinfo
+
+        def fake(host, port, *args, **kwargs):  # type: ignore[no-untyped-def]
+            captured["host"] = host
+            return [(socket_mod.AF_INET, socket_mod.SOCK_STREAM, 0, "", ("1.1.1.1", port))]
+
+        socket_mod.getaddrinfo = fake  # type: ignore[assignment]
+        try:
+            with pin_dns("pinned.example.com", ["93.184.216.34"]):
+                socket_mod.getaddrinfo("other.example.com", 80)
+            assert captured["host"] == "other.example.com"
+        finally:
+            socket_mod.getaddrinfo = original  # type: ignore[assignment]
+
+    def test_resolver_restored_after_with_block(self) -> None:
+        import socket as socket_mod
+
+        from cf_knowledge_kiln.ingestion.ssrf import pin_dns
+
+        original = socket_mod.getaddrinfo
+        with pin_dns("x.example.com", ["1.1.1.1"]):
+            assert socket_mod.getaddrinfo is not original
+        assert socket_mod.getaddrinfo is original
+
+    def test_resolver_restored_even_when_inner_raises(self) -> None:
+        import socket as socket_mod
+
+        from cf_knowledge_kiln.ingestion.ssrf import pin_dns
+
+        original = socket_mod.getaddrinfo
+        with (
+            pytest.raises(RuntimeError, match="boom"),
+            pin_dns("x.example.com", ["1.1.1.1"]),
+        ):
+            raise RuntimeError("boom")
+        assert socket_mod.getaddrinfo is original
+
+    def test_empty_ip_list_refuses(self) -> None:
+        from cf_knowledge_kiln.ingestion.ssrf import pin_dns
+
+        with pytest.raises(SsrfRefused, match="empty IP list"), pin_dns("x.example.com", []):
+            pass
+
+    def test_pinned_lookup_supports_ipv6(self) -> None:
+        import socket as socket_mod
+
+        from cf_knowledge_kiln.ingestion.ssrf import pin_dns
+
+        with pin_dns("safe.example.com", ["2606:2800:220:1:248:1893:25c8:1946"]):
+            results = socket_mod.getaddrinfo("safe.example.com", 443)
+            assert results[0][0] == socket_mod.AF_INET6
+            # IPv6 sockaddr is a 4-tuple (host, port, flowinfo, scopeid).
+            assert len(results[0][4]) == 4

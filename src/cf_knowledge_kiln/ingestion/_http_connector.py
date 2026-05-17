@@ -31,6 +31,7 @@ from cf_knowledge_kiln.ingestion.ssrf import (
     SsrfRefused,
     assert_addresses_public,
     assert_host_allowlisted,
+    pin_dns,
 )
 
 if TYPE_CHECKING:
@@ -117,8 +118,15 @@ class HttpConnector:
         """One redirect-hop. Returns httpx.URL (redirect), SkippedFile, or (FetchedFile, int)."""
         from cf_knowledge_kiln.ingestion.connectors import FetchedFile, SkippedFile
 
-        _guard_url(current, source)
-        response = client.get(str(current))  # type: ignore[attr-defined]
+        # Issue #81 — pin DNS for the duration of the connect so an
+        # attacker who controls the upstream nameserver can't rebind
+        # the hostname to a private IP between our SSRF check and
+        # httpx's own getaddrinfo call. pinned_ips is the list our
+        # SSRF guard already verified as public.
+        pinned_ips = _guard_url(current, source)
+        host = getattr(current, "host", "") or ""
+        with pin_dns(host, pinned_ips):
+            response = client.get(str(current))  # type: ignore[attr-defined]
         if response.is_redirect:
             return _next_redirect(response, current, _source=source)
         if response.status_code >= 400:
@@ -169,8 +177,13 @@ def _next_redirect(
     return httpx.URL(loc) if "://" in loc else current.copy_with(path=loc)  # type: ignore[attr-defined]
 
 
-def _guard_url(url: object, source: HttpSource) -> None:
-    """Run the SSRF guard for the current hop's host."""
+def _guard_url(url: object, source: HttpSource) -> list[str]:
+    """Run the SSRF guard for the current hop's host. Returns the verified IPs.
+
+    The IPs are then handed to :func:`pin_dns` so the subsequent
+    ``httpx.Client.get`` connects to one of THESE addresses, closing
+    the TOCTOU window (#81).
+    """
     host = getattr(url, "host", None) or ""
     scheme = getattr(url, "scheme", None) or ""
     assert_host_allowlisted(
@@ -179,7 +192,7 @@ def _guard_url(url: object, source: HttpSource) -> None:
         allow_http_hosts=source.allow_http_hosts,
         scheme=scheme,
     )
-    assert_addresses_public(host)
+    return assert_addresses_public(host)
 
 
 __all__ = ["HttpConnector"]

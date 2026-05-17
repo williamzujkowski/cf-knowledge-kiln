@@ -25,9 +25,12 @@ Two things to know about this design:
 
 from __future__ import annotations
 
+import contextlib
 import ipaddress
 import socket
-from collections.abc import Iterable
+import threading
+from collections.abc import Iterable, Iterator
+from typing import Any
 
 
 class SsrfRefused(ValueError):
@@ -148,8 +151,70 @@ def _resolve(host: str) -> list[str]:
     return out
 
 
+# ─── #81 — TOCTOU DNS-pinning context manager ───────────────────────
+
+
+_dns_pin_lock = threading.Lock()
+
+
+@contextlib.contextmanager
+def pin_dns(hostname: str, ips: list[str]) -> Iterator[None]:
+    """Temporarily pin ``hostname`` → ``ips`` for DNS lookups in this process.
+
+    Closes the TOCTOU window between :func:`assert_addresses_public`
+    (our SSRF check) and the connect inside ``httpx.Client.get``
+    (httpx's own lookup). Without this, an attacker who controls
+    authoritative DNS for an allowlisted host could return a public IP
+    on the first lookup and a private IP on the second.
+
+    Monkeypatches ``socket.getaddrinfo`` for the duration of the
+    ``with`` block. A process-wide ``threading.Lock`` serializes
+    overlapping pins so two concurrent fetches don't cross-contaminate.
+    Other hosts continue to resolve normally — the override is keyed
+    on hostname.
+
+    Implementation deliberately doesn't use httpx's custom-transport
+    API because that surface changes across versions; socket-level
+    pinning is the lowest-common-denominator fix.
+    """
+    if not ips:
+        raise SsrfRefused(f"refused to pin DNS for {hostname!r}: empty IP list")
+    real_getaddrinfo = socket.getaddrinfo
+
+    def _pinned(
+        host: str | bytes | None,
+        port: int | str | None,
+        *args: Any,
+        **kwargs: Any,
+    ) -> list[Any]:
+        host_str = host.decode() if isinstance(host, bytes) else host
+        if host_str != hostname:
+            return real_getaddrinfo(host, port, *args, **kwargs)
+        # Build addrinfo tuples matching the resolved IPs. Port may
+        # arrive as int or str (per getaddrinfo signature); normalize.
+        port_int = int(port) if port is not None else 0
+        out: list[Any] = []
+        for ip_str in ips:
+            ip = ipaddress.ip_address(ip_str)
+            if isinstance(ip, ipaddress.IPv4Address):
+                out.append((socket.AF_INET, socket.SOCK_STREAM, 0, "", (ip_str, port_int)))
+            else:
+                out.append((socket.AF_INET6, socket.SOCK_STREAM, 0, "", (ip_str, port_int, 0, 0)))
+        return out
+
+    with _dns_pin_lock:
+        # mypy: socket.getaddrinfo's signature is broader than ours;
+        # the runtime accepts any callable, so we just override it.
+        socket.getaddrinfo = _pinned  # type: ignore[assignment]
+        try:
+            yield
+        finally:
+            socket.getaddrinfo = real_getaddrinfo
+
+
 __all__ = [
     "SsrfRefused",
     "assert_addresses_public",
     "assert_host_allowlisted",
+    "pin_dns",
 ]
