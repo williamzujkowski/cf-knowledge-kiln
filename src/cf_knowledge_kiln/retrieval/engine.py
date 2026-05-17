@@ -231,9 +231,13 @@ def _collect_warnings(
 def _conflict_warnings(conflicts: list[Conflict]) -> list[Warning]:
     """One ``conflicting_sources`` warning per detected conflict.
 
-    Slice 3 surfaces conflicts both as :class:`Conflict` entries
-    (structured) and as warnings (so agents that only look at the
-    warning channel still see them).
+    Conflicts are dual-surfaced: as structured :class:`Conflict`
+    entries on the response AND as warning entries. The structured
+    list is canonical for the ``requires_human_review`` decision
+    (see :func:`ranking.requires_human_review` — it inspects the
+    ``conflicts`` argument, not the warnings argument); the warning
+    is purely for agents that only consume the warnings channel and
+    would otherwise miss conflict surfacing.
     """
     return [
         Warning(
@@ -251,6 +255,12 @@ def _document_refs_from_rows(rows: list[SearchRow]) -> dict[UUID, Any]:
     shape needs; collapse to one ref per document_id (later rows
     don't overwrite — same document, same metadata). ``DocumentRef``
     is lazy-imported here to avoid the retrieval ↔ agent cycle.
+
+    ``source_url`` is hard-coded to ``None`` because :class:`SearchRow`
+    doesn't carry the document's ``source_url`` column today (it's not
+    in the slice-2 CTE projection). The openapi.yaml hand-spec was
+    updated in this slice to make ``source_url`` optional. A later
+    improvement can plumb it through the CTE for HTTP-source docs.
     """
     from cf_knowledge_kiln.agent.serializers import DocumentRef
 
