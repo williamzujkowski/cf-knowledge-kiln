@@ -125,9 +125,9 @@ class TestOperationsAgree:
             app_methods = {
                 m for m in app_spec["paths"][path] if m in {"get", "post", "put", "delete", "patch"}
             }
-            assert (
-                hand_methods == app_methods
-            ), f"{path}: methods drift. hand={hand_methods}, app={app_methods}"
+            assert hand_methods == app_methods, (
+                f"{path}: methods drift. hand={hand_methods}, app={app_methods}"
+            )
 
     def test_operation_ids_match(self, hand_spec: dict[str, Any], app_spec: dict[str, Any]) -> None:
         for path in self._shared_paths(hand_spec, app_spec):
@@ -136,9 +136,9 @@ class TestOperationsAgree:
                     continue
                 hand_id = hand_spec["paths"][path][method].get("operationId")
                 app_id = app_spec["paths"][path][method].get("operationId")
-                assert (
-                    hand_id == app_id
-                ), f"{method.upper()} {path}: operationId drift. hand={hand_id!r}, app={app_id!r}"
+                assert hand_id == app_id, (
+                    f"{method.upper()} {path}: operationId drift. hand={hand_id!r}, app={app_id!r}"
+                )
 
     def test_declared_status_codes_match(
         self, hand_spec: dict[str, Any], app_spec: dict[str, Any]
