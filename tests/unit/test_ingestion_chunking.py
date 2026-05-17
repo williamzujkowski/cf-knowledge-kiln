@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import textwrap
 
+import pytest
+
 from cf_knowledge_kiln.ingestion.chunking import (
     Chunk,
     parse_document,
@@ -278,3 +280,48 @@ def test_frontmatter_overrides_apply_per_document() -> None:
     doc = parse_document(src)
     assert doc.meta["owner"] == "cybersecurity"
     assert doc.meta["status"] == "deprecated"
+
+
+# ─── frontmatter size cap (#54) ─────────────────────────────────────
+
+
+def test_oversize_frontmatter_raises_dedicated_error() -> None:
+    """#54: frontmatter past MAX_FRONTMATTER_BYTES rejects with a clean error.
+
+    A multi-megabyte YAML blob in frontmatter would otherwise become a
+    JSONB row that's expensive to write, slow to query, and (worst case)
+    an OOM vector. Cap defensively at the parser.
+    """
+    from cf_knowledge_kiln.ingestion.chunking import (
+        MAX_FRONTMATTER_BYTES,
+        FrontmatterTooLargeError,
+        parse_document,
+    )
+
+    huge = "x" * (MAX_FRONTMATTER_BYTES + 1)
+    src = f"---\nbig: {huge}\n---\n# Body\nok\n"
+    with pytest.raises(FrontmatterTooLargeError, match="frontmatter is"):
+        parse_document(src)
+
+
+def test_just_under_cap_frontmatter_parses_normally() -> None:
+    """Adjacent boundary case — sized just under the cap parses cleanly."""
+    from cf_knowledge_kiln.ingestion.chunking import (
+        MAX_FRONTMATTER_BYTES,
+        parse_document,
+    )
+
+    # Reserve a few bytes for the YAML scaffolding ("big: ").
+    payload = "x" * (MAX_FRONTMATTER_BYTES - 100)
+    src = f"---\nbig: {payload}\n---\n# Body\nok\n"
+    doc = parse_document(src)
+    assert doc.title == "Body"
+    assert doc.meta["big"] == payload
+
+
+def test_no_frontmatter_skips_size_check() -> None:
+    """Docs with no frontmatter at all are unaffected by the cap."""
+    from cf_knowledge_kiln.ingestion.chunking import parse_document
+
+    doc = parse_document("# Top\nbody\n")
+    assert doc.title == "Top"

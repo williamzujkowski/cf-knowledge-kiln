@@ -275,3 +275,65 @@ def test_fetch_source_dispatches_on_type(tmp_path: Path) -> None:
     src = LocalSource(name="x", type="local", path=str(tmp_path), include=["**/*.md"])
     result = fetch_source(src, _make_caps())
     assert {f.path for f in result.files} == {"a.md"}
+
+
+# ─── _expand_globs edge cases (#54) ─────────────────────────────────
+
+
+def test_local_connector_handles_empty_glob_match(tmp_path: Path) -> None:
+    """An include pattern that matches nothing yields zero files, no crash."""
+    _write(tmp_path / "real.md", "ok")
+    src = LocalSource(
+        name="x",
+        type="local",
+        path=str(tmp_path),
+        include=["docs/never-exists/**/*.md"],
+    )
+    result = LocalConnector(_make_caps()).fetch(src)
+    assert result.files == []
+
+
+def test_local_connector_handles_deeply_nested_recursive_glob(tmp_path: Path) -> None:
+    """``**/*.md`` traverses arbitrary depth without recursion limits."""
+    deep = tmp_path / "a" / "b" / "c" / "d" / "e"
+    deep.mkdir(parents=True)
+    _write(deep / "target.md", "deep")
+    _write(tmp_path / "root.md", "root")
+    src = LocalSource(name="x", type="local", path=str(tmp_path), include=["**/*.md"])
+    result = LocalConnector(_make_caps()).fetch(src)
+    paths = {f.path for f in result.files}
+    assert "root.md" in paths
+    assert "a/b/c/d/e/target.md" in paths
+
+
+def test_local_connector_does_not_read_files_past_cap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#54: when the repo cap trips, the file that pushes over must NOT be read.
+
+    Pre-#54 guard: ``path.read_bytes()`` happened inside the FetchedFile
+    construction *after* the cap check; verify by patching read_bytes
+    to count and asserting it never sees the over-cap file.
+    """
+    # rglob is sorted, so name files so the OVER-CAP one comes second
+    # alphabetically. cap=2500. a.md = 1500 (fits, total=1500),
+    # b.md = 2000 (total=3500 > 2500, raise BEFORE read_bytes).
+    _write(tmp_path / "a.md", "x" * 1500)
+    _write(tmp_path / "b.md", "y" * 2000)
+    src = LocalSource(name="x", type="local", path=str(tmp_path), include=["**/*.md"])
+    caps = _make_caps(max_repo_bytes=2500)
+
+    real_read_bytes = Path.read_bytes
+    read_paths: list[str] = []
+
+    def counting_read_bytes(self: Path) -> bytes:
+        read_paths.append(self.name)
+        return real_read_bytes(self)
+
+    monkeypatch.setattr(Path, "read_bytes", counting_read_bytes)
+    with pytest.raises(IngestionCapExceeded):
+        LocalConnector(caps).fetch(src)
+    # a.md was read (and indexed); b.md must NOT have been read into
+    # memory just to throw it away.
+    assert "a.md" in read_paths
+    assert "b.md" not in read_paths

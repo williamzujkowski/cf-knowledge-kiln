@@ -91,3 +91,60 @@ models:
     get_settings.cache_clear()
     with pytest.raises(Exception, match="excluded"), TestClient(create_app()):
         pass
+
+
+def test_lifespan_propagates_database_init_error(
+    models_config: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#54: a failing Database.__init__ must propagate, not be swallowed.
+
+    Lifespan errors surface as an exception during ``TestClient(create_app()).__enter__()``.
+    The app refuses to come up — operators see a clear traceback instead
+    of a silently-broken instance.
+    """
+    monkeypatch.setenv(
+        "KILN_DATABASE_URL", "postgresql+asyncpg://u:p@h:5432/d"
+    )  # pragma: allowlist secret
+
+    def boom(*a: object, **kw: object) -> object:
+        raise RuntimeError("simulated init failure")
+
+    # cf_knowledge_kiln.api package's __init__ does
+    # ``from .app import app`` which shadows the module name with the
+    # FastAPI instance, so the usual dotted-path monkeypatch resolves
+    # to the wrong object. Reach into sys.modules to grab the actual
+    # module, then patch its Database binding.
+    import sys
+
+    app_module = sys.modules["cf_knowledge_kiln.api.app"]
+    monkeypatch.setattr(app_module, "Database", boom)
+    get_settings.cache_clear()
+    with pytest.raises(RuntimeError, match="simulated init failure"), TestClient(create_app()):
+        pass
+
+
+def test_lifespan_disposes_database_even_on_shutdown_path(
+    models_config: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#54: a failing Database.dispose() bubbles up from teardown.
+
+    Verifies the dispose call actually fires (so a leaking pool would
+    surface in tests as a noisy teardown rather than silently linger).
+    """
+
+    monkeypatch.setenv(
+        "KILN_DATABASE_URL", "postgresql+asyncpg://u:p@h:5432/d"
+    )  # pragma: allowlist secret
+    from cf_knowledge_kiln.db.connection import Database
+
+    dispose_calls: list[int] = []
+
+    async def counting_dispose(self: object) -> None:
+        dispose_calls.append(1)
+
+    monkeypatch.setattr(Database, "dispose", counting_dispose)
+    get_settings.cache_clear()
+    with TestClient(create_app()) as client:
+        assert client.get("/healthz").status_code == 200
+    # __exit__ ran the lifespan teardown which must have called dispose.
+    assert dispose_calls == [1]

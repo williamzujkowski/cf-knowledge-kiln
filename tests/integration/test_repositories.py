@@ -273,6 +273,44 @@ async def test_queries_crud(session: AsyncSession) -> None:
     assert await repo.get(q.id) is None
 
 
+async def test_queries_list_since_filter(session: AsyncSession) -> None:
+    """#54: ``list(since=...)`` is a >= filter on created_at.
+
+    Regression cover for an untested predicate. Each row's
+    ``created_at`` is Postgres ``now()``, which is constant within a
+    transaction — commit between creates so the two rows get distinct
+    timestamps and the cutoff actually splits them.
+    """
+    import asyncio
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import select as sa_select
+
+    from cf_knowledge_kiln.db.models import RagQuery
+
+    repo = QueriesRepository(session)
+    older = await repo.create(query="older", consumer_type="human")
+    await session.commit()
+    # Take cutoff from the DB itself, not Python's wall clock — avoids
+    # any client/server skew. cutoff > older.created_at by definition.
+    older_row = (
+        await session.execute(sa_select(RagQuery).where(RagQuery.id == older.id))
+    ).scalar_one()
+    cutoff = older_row.created_at + timedelta(microseconds=1)
+    await asyncio.sleep(0.01)
+    newer = await repo.create(query="newer", consumer_type="human")
+    await session.commit()
+
+    after_cutoff = await repo.list(since=cutoff)
+    after_cutoff_ids = {row.id for row in after_cutoff}
+    assert newer.id in after_cutoff_ids
+    assert older.id not in after_cutoff_ids
+
+    # Far-future cutoff matches nothing.
+    none_after = await repo.list(since=datetime.now(UTC) + timedelta(days=1))
+    assert none_after == []
+
+
 # ─── rag_feedback ───────────────────────────────────────────────────
 
 
