@@ -124,6 +124,13 @@ def token_budget_respected(pack: Any) -> bool:
     A pack that overshoots is a contract violation — the agent caller
     sized its inbound buffer to ``requested`` and will truncate or
     crash on more.
+
+    Defensive default: returns False on a missing ``token_budget`` or
+    missing fields inside it. ``ContextPackResponse`` makes
+    ``token_budget`` required, so for the engine path missing == schema
+    violation == fail. Callers that need to distinguish "schema
+    violated" from "budget breached" should inspect the pack
+    themselves.
     """
     tb = _get(pack, "token_budget")
     if tb is None:
@@ -152,11 +159,18 @@ def sensitive_chunks_excluded(pack: Any, sensitive_doc_ids: set[UUID]) -> bool:
 
     Sensitive content is allowed to surface in human results with a
     redaction notice; agent context packs must drop it entirely.
+
+    Shape-symmetric: a Pydantic ``EvidenceChunk`` carries
+    ``document_id`` as a :class:`UUID`, while ``pack.model_dump(mode='json')``
+    serializes it to a string. Both sides are coerced to ``str`` before
+    membership so a JSON-shaped pack and a model-shaped pack get the
+    same answer.
     """
+    needle = {str(d) for d in sensitive_doc_ids}
     evidence = _get(pack, "evidence") or []
     for chunk in evidence:
         doc_id = _get(chunk, "document_id")
-        if doc_id is not None and doc_id in sensitive_doc_ids:
+        if doc_id is not None and str(doc_id) in needle:
             return False
     return True
 

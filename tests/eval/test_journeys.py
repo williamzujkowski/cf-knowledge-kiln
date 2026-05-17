@@ -226,6 +226,17 @@ def test_agent_journey_prompt_injection_emits_warning(
         )
 
     pack = _run(_go())
+    # First: prove the prompt-injection chunk actually surfaced in
+    # the evidence. If a future ranking change pushes it out, the
+    # warning + requires_human_review assertions below would both
+    # pass vacuously (no PI chunk → no warning → no review flag).
+    # Make the failure mode diagnostically distinct.
+    evidence_paths = [getattr(e, "path", None) for e in pack.evidence]
+    assert any(p and "prompt-injection.md" in p for p in evidence_paths), (
+        "prompt-injection fixture did not surface in evidence — the "
+        "warning/review assertions below would pass vacuously. "
+        f"evidence paths: {evidence_paths!r}"
+    )
     # Warning must be present on the pack itself.
     kinds = warning_kinds_in(pack)
     assert any("prompt" in k.lower() and "inject" in k.lower() for k in kinds), (

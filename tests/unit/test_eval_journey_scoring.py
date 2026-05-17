@@ -139,6 +139,22 @@ class TestWarningHelpers:
         resp = {"warnings": [{"kind": "deprecated"}]}
         assert warning_emitted(resp, "conflict") is False
 
+    def test_warning_kinds_from_real_pydantic_warning(self) -> None:
+        """Regression: the engine emits ``type=...``, not ``kind=...``.
+
+        Hand the helper a real :class:`retrieval.types.Warning` so a
+        refactor that drops the ``kind`` fallback can't pass tests on
+        stub objects while breaking the engine path.
+        """
+        from cf_knowledge_kiln.retrieval.types import Warning as RWarning
+
+        class _R:
+            def __init__(self, warnings: list[RWarning]) -> None:
+                self.warnings = warnings
+
+        resp = _R([RWarning(type="deprecated_source", message="x")])
+        assert warning_kinds_in(resp) == {"deprecated_source"}
+
 
 class TestTokenBudget:
     def test_under_budget(self) -> None:
@@ -196,6 +212,19 @@ class TestSensitiveExcluded:
         # Defensive: a malformed pack with no evidence list shouldn't
         # raise; passes vacuously.
         assert sensitive_chunks_excluded({}, {uuid4()}) is True
+
+    def test_dict_pack_with_string_document_id_is_caught(self) -> None:
+        """JSON-shape packs (UUIDs serialized to str) must still be checked.
+
+        Regression guard: pack.model_dump(mode='json') turns the
+        document_id UUID into a string. Without str coercion on both
+        sides the membership check would silently say "no sensitive
+        chunks here" — the exact failure mode this metric is meant
+        to catch.
+        """
+        bad = uuid4()
+        pack = {"evidence": [{"document_id": str(bad)}]}
+        assert sensitive_chunks_excluded(pack, {bad}) is False
 
 
 class TestGetHelper:
