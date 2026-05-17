@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from fastapi import APIRouter, Request, status
+from fastapi import APIRouter, Request, Response, status
 from pydantic import BaseModel
 
 from cf_knowledge_kiln import __version__
@@ -55,14 +55,27 @@ async def healthz() -> HealthResponse:
 @router.get(
     "/readyz",
     response_model=ReadyResponse,
-    status_code=status.HTTP_200_OK,
     summary="Readiness probe",
+    responses={
+        status.HTTP_200_OK: {"description": "All dependency checks pass."},
+        status.HTTP_503_SERVICE_UNAVAILABLE: {
+            "description": "At least one dependency check is failing.",
+            "model": ReadyResponse,
+        },
+    },
 )
-async def readyz(request: Request) -> ReadyResponse:
+async def readyz(request: Request, response: Response) -> ReadyResponse:
     """Return readiness with a Postgres ping.
 
     ``postgres`` is ``failing`` when the pool is not configured (no URL,
-    no VCAP binding) or when the ``SELECT 1`` round-trip fails.
+    no VCAP binding) or when the ``SELECT 1`` round-trip fails. When any
+    check fails the HTTP status code is **503** so CF/gorouter and
+    upstream load balancers route traffic away from the instance; the
+    body still carries the per-check details.
+
+    ``/healthz`` (liveness) stays 200 unconditionally — a failing
+    liveness causes a restart loop, which isn't what a missing
+    Postgres warrants.
     """
     db: Database | None = getattr(request.app.state, "db", None)
     if db is None:
@@ -70,7 +83,9 @@ async def readyz(request: Request) -> ReadyResponse:
     else:
         postgres = "ok" if await db.ping() else "failing"
     checks: dict[str, CheckValue] = {"postgres": postgres}
-    overall: ReadyStatus = "ready" if postgres == "ok" else "degraded"
+    overall: ReadyStatus = "ready" if all(v == "ok" for v in checks.values()) else "degraded"
+    if overall == "degraded":
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     return ReadyResponse(status=overall, checks=checks)
 
 
