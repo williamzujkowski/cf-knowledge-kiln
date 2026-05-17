@@ -64,14 +64,21 @@ UI, agent API, and ingestion do **not** own retrieval logic. Retrieval is centra
 
 This repo is designed to be forked by another team and adapted to their corpus + Cloud Foundry foundation. The minimum path:
 
-1. **Fork**. Update `AGENTS.md` (`Repository:` and `Owner:` fields), `pyproject.toml` (`Homepage` / `Issues` / `Repository`), and `manifest.yml` (app name, route, memory quota).
+1. **Fork and rename.** Update every place this repo's GitHub URL is hard-coded:
+   - `AGENTS.md` — `Repository:` and `Owner:` fields at the top.
+   - `pyproject.toml` — `[project.urls]` (`Homepage`, `Issues`, `Repository`).
+   - `manifest.yml` — app name, route, memory quota.
+   - `.github/CODEOWNERS` — replace `@williamzujkowski` with your team handle so PR reviews route correctly.
+   - `SECURITY.md` and `CODE_OF_CONDUCT.md` — disclosure URLs point at this repo's `/security/advisories/new`.
+   - `openapi/openapi.yaml` — `info.contact` / issue-tracker URL.
+   - `HANDOFF.md` — operational state, written by the upstream maintainer; treat as starting context for your fork and rewrite as your work diverges.
 2. **Configure sources.** Copy `config/sources.example.yaml` → `config/sources.yaml` and list the repos / HTTP roots you want indexed. Sources not in the allowlist are refused — by design.
 3. **Configure models.** Copy `config/models.example.yaml` → `config/models.yaml` and pick an embedding provider. The default is a local sentence-transformers model so the dev loop has zero external dependencies; swap to an OpenAI-compatible endpoint when you want a real provider. Adversary-origin model weights are blocked (`docs/model-providers.md`).
 4. **Provision Postgres + pgvector.** In Cloud Foundry, bind a Postgres service from a broker that exposes `pgvector` (`KILN_PG_SERVICE_NAME` selects which binding). Locally, the integration tests assume `pgvector/pgvector:pg16` at `localhost:5432`; see `tests/integration/conftest.py` for the default DSN.
 5. **Push.** `make cf-push` deploys the two-process layout from `manifest.yml` (`cf-knowledge-kiln-api` + `cf-knowledge-kiln-worker`). `make ingest` enqueues an initial corpus build.
 6. **Verify.** `scripts/smoke-test.sh` posts a query to the deployed API; `make eval` runs the retrieval-quality harness against your seeded corpus.
 
-An expanded walkthrough lives in the forking guide once Phase 9 (#32) lands.
+This README walks the happy path. The expanded forking guide (deeper troubleshooting, CF-foundation variations, ingest tuning) lands as part of Phase 9 (#32).
 
 ## License
 
