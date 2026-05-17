@@ -136,3 +136,57 @@ jobs:
             !plans/**
             !.venv/**
           config: .markdownlint.json
+
+  # ─── #28 — SBOM + vulnerability scan ─────────────────────────────
+  # Generates an SPDX SBOM via syft + scans it via grype. Fails the
+  # build on HIGH/CRITICAL findings; warns on MEDIUM/LOW (visible in
+  # the grype table output). Uploads the SBOM as a build artifact so
+  # operators have a record of every dep in a release.
+  sbom-scan:
+    name: sbom + grype scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write   # so future SARIF upload works
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install runtime deps
+        # Install the actual deps so syft picks them up. Without -e
+        # the syft scan only sees pyproject metadata, missing the
+        # transitive tree.
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,db,ingestion]"
+      - name: Generate SBOM (syft)
+        uses: anchore/sbom-action@v0
+        with:
+          format: spdx-json
+          output-file: sbom.spdx.json
+          artifact-name: cf-knowledge-kiln-sbom.spdx.json
+      - name: Scan SBOM (grype)
+        # `fail-build: true` + `severity-cutoff: high` matches the
+        # phase-8 hardening policy: HIGH/CRITICAL → CI red, MEDIUM
+        # and below stay informational. Operators tune the cutoff
+        # for their org's risk appetite in a follow-up PR.
+        uses: anchore/scan-action@v6
+        id: grype
+        with:
+          sbom: sbom.spdx.json
+          fail-build: true
+          severity-cutoff: high
+          # Output table to logs AND SARIF for future code-scanning upload.
+          output-format: table
+          add-cpes-if-none: true
+      - name: Upload SBOM artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cf-knowledge-kiln-sbom
+          path: sbom.spdx.json
+          if-no-files-found: warn
+          retention-days: 90
