@@ -58,6 +58,18 @@ from cf_knowledge_kiln.ingestion.tokens import count_tokens
 DEFAULT_MAX_TOKENS = 800
 DEFAULT_MIN_TOKENS = 300
 
+# Defensive cap on YAML frontmatter size (#54). Stops a malicious or
+# accidentally-massive source doc from pushing a multi-megabyte blob
+# into the documents.metadata JSONB column. 100 KiB is loose enough
+# that a real ADR-style doc is unaffected and tight enough that a
+# bug or attack surfaces immediately.
+MAX_FRONTMATTER_BYTES = 100 * 1024
+
+
+class FrontmatterTooLargeError(ValueError):
+    """Raised when a doc's YAML frontmatter exceeds :data:`MAX_FRONTMATTER_BYTES`."""
+
+
 _HEADING_RE = re.compile(r"^(?P<hashes>#{1,6})\s+(?P<text>.+?)\s*#*$")
 _FENCE_OPEN_RE = re.compile(r"^(?P<fence>`{3,}|~{3,})")
 _LIST_ITEM_RE = re.compile(r"^\s{0,3}(?:[-*+]|\d+[.)])\s+")
@@ -243,6 +255,28 @@ def _make_chunk(text: str, path: list[str], idx: int, tokens: int) -> Chunk:
     )
 
 
+def _check_frontmatter_size(source_text: str) -> None:
+    """Reject docs whose frontmatter exceeds :data:`MAX_FRONTMATTER_BYTES`.
+
+    Frontmatter is delimited by a leading ``---`` and a closing ``---``
+    on its own line. We measure just the bytes between those markers
+    so a 100 MB body doesn't trip the check.
+    """
+    text = source_text.lstrip()
+    if not text.startswith("---"):
+        return
+    # Find the closing fence on its own line.
+    after_open = text[3:].lstrip("\r\n")
+    end_marker_idx = after_open.find("\n---")
+    if end_marker_idx == -1:
+        return
+    fm_bytes = len(after_open[:end_marker_idx].encode("utf-8"))
+    if fm_bytes > MAX_FRONTMATTER_BYTES:
+        raise FrontmatterTooLargeError(
+            f"frontmatter is {fm_bytes} bytes; max {MAX_FRONTMATTER_BYTES}"
+        )
+
+
 def parse_document(
     source_text: str,
     *,
@@ -257,6 +291,11 @@ def parse_document(
     very-small adjacent sections; today we prefer respecting heading
     boundaries over hitting a minimum.
     """
+    # Defensive size cap (#54): a malicious source doc could ship a
+    # 10 MB nested YAML frontmatter that becomes documents.metadata
+    # JSONB. Reject before the YAML parser even sees it so the worst
+    # case is one bounded read instead of an arbitrarily large parse.
+    _check_frontmatter_size(source_text)
     fm = frontmatter.loads(source_text)
     body = fm.content
     # YAML safe_load returns native Python types (date, datetime, UUID,

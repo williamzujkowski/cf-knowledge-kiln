@@ -36,7 +36,10 @@ from cf_knowledge_kiln.db.repositories import (
     IngestionRunsRepository,
 )
 from cf_knowledge_kiln.ingestion._jsonsafe import jsonify
-from cf_knowledge_kiln.ingestion.chunking import parse_document
+from cf_knowledge_kiln.ingestion.chunking import (
+    FrontmatterTooLargeError,
+    parse_document,
+)
 from cf_knowledge_kiln.ingestion.connectors import (
     FetchedFile,
     IngestionCapExceeded,
@@ -255,7 +258,16 @@ async def _process_file(
         summary.files_skipped += 1
         _bump(summary.skip_reasons, "binary_content")
         return
-    parsed = parse_document(text)
+    try:
+        parsed = parse_document(text)
+    except FrontmatterTooLargeError as exc:
+        # #54: oversize frontmatter would otherwise crash the file or
+        # land a multi-megabyte JSONB blob. Record as a skip, keep
+        # ingesting the rest of the corpus.
+        summary.errors.append(f"{file.path}: frontmatter too large: {exc}")
+        summary.files_skipped += 1
+        _bump(summary.skip_reasons, "frontmatter_too_large")
+        return
     if not parsed.chunks:
         summary.warnings.append(f"{file.path}: no chunks (empty or parse error)")
         summary.files_skipped += 1

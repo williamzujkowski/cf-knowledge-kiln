@@ -170,9 +170,14 @@ async def test_ingestion_jobs_claim_one_is_safe_under_skip_locked(
 
 
 async def test_pipeline_aborts_on_repo_cap_and_marks_run(
-    session: AsyncSession, tmp_path: Path
+    session: AsyncSession, tmp_path: Path, engine: AsyncEngine
 ) -> None:
-    """When the repo cap trips, ingestion_runs records failed/partial status."""
+    """When the repo cap trips, ingestion_runs records failed/partial status.
+
+    #54: re-query the row through a *fresh* session so we prove the
+    status='failed' actually committed to disk — not just to the
+    original session's identity map.
+    """
     for i in range(5):
         (tmp_path / f"f{i}.md").write_text("x" * 1000)
     src = LocalSource(name="tinycap", type="local", path=str(tmp_path), include=["**/*.md"])
@@ -186,6 +191,16 @@ async def test_pipeline_aborts_on_repo_cap_and_marks_run(
     assert summary.errors
     runs = (await session.execute(select(IngestionRun))).scalars().all()
     assert any(r.status == "failed" for r in runs)
+
+    # Durability check (#54): open a brand-new session and confirm
+    # the failed row is visible from disk, not the original session's
+    # in-memory state.
+    fresh_maker = async_sessionmaker(engine, expire_on_commit=False)
+    async with fresh_maker() as fresh_session:
+        fresh_runs = (await fresh_session.execute(select(IngestionRun))).scalars().all()
+        assert any(r.status == "failed" for r in fresh_runs), (
+            "ingestion_runs.status='failed' not durable after commit"
+        )
 
 
 async def test_pipeline_embeds_new_chunks_when_provider_supplied(
@@ -428,3 +443,28 @@ async def test_pipeline_ingests_adr_with_date_frontmatter(
     doc = (await session.execute(select(Document))).scalars().one()
     assert doc.extra["date"] == "2026-05-16"
     assert doc.extra["id"] == "ADR-0001"
+
+
+async def test_pipeline_skips_oversize_frontmatter(session: AsyncSession, tmp_path: Path) -> None:
+    """#54: a file with oversize YAML frontmatter is recorded as a skip.
+
+    The bad file should not block the rest of the corpus from ingesting,
+    and the skip should land in summary.skip_reasons["frontmatter_too_large"].
+    """
+    from cf_knowledge_kiln.ingestion.chunking import MAX_FRONTMATTER_BYTES
+
+    # One healthy file alongside one bad file.
+    (tmp_path / "ok.md").write_text("# Ok\nbody\n")
+    huge = "x" * (MAX_FRONTMATTER_BYTES + 1)
+    (tmp_path / "huge.md").write_text(f"---\nbig: {huge}\n---\n# Huge\nbody\n", encoding="utf-8")
+
+    src = LocalSource(name="cap", type="local", path=str(tmp_path), include=["*.md"])
+    summary = await run_source(session, source=src, settings=_settings())
+    await session.commit()
+
+    # The healthy file landed.
+    docs = (await session.execute(select(Document))).scalars().all()
+    assert {d.path for d in docs} == {"ok.md"}
+    # The bad file is recorded with the dedicated skip reason.
+    assert summary.skip_reasons.get("frontmatter_too_large", 0) == 1
+    assert any("huge.md" in err and "frontmatter too large" in err for err in summary.errors)
