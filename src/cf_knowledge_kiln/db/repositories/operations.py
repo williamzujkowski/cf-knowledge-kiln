@@ -16,7 +16,7 @@ from cf_knowledge_kiln.db.models import (
     RagFeedback,
     RagQuery,
 )
-from cf_knowledge_kiln.db.repositories._base import BaseRepository
+from cf_knowledge_kiln.db.repositories._base import BaseRepository, apply_eq_filters
 
 
 class IngestionRunsRepository(BaseRepository):
@@ -28,16 +28,14 @@ class IngestionRunsRepository(BaseRepository):
         stats: dict[str, Any] | None = None,
         commit_sha: str | None = None,
     ) -> IngestionRun:
-        row = IngestionRun(
-            source_id=source_id,
-            status=status,
-            stats=stats or {},
-            commit_sha=commit_sha,
+        return await self._persist(
+            IngestionRun(
+                source_id=source_id,
+                status=status,
+                stats=stats or {},
+                commit_sha=commit_sha,
+            )
         )
-        self._session.add(row)
-        await self._session.flush()
-        await self._session.refresh(row)
-        return row
 
     async def get(self, id: UUID) -> IngestionRun | None:
         return await self._session.get(IngestionRun, id)
@@ -49,12 +47,10 @@ class IngestionRunsRepository(BaseRepository):
         status: str | None = None,
         limit: int | None = None,
     ) -> Sequence[IngestionRun]:
-        stmt = select(IngestionRun)
-        if source_id is not None:
-            stmt = stmt.where(IngestionRun.source_id == source_id)
-        if status is not None:
-            stmt = stmt.where(IngestionRun.status == status)
-        stmt = stmt.order_by(IngestionRun.started_at.desc())
+        stmt = apply_eq_filters(
+            select(IngestionRun),
+            {IngestionRun.source_id: source_id, IngestionRun.status: status},
+        ).order_by(IngestionRun.started_at.desc())
         if limit is not None:
             stmt = stmt.limit(limit)
         return (await self._session.execute(stmt)).scalars().all()
@@ -73,17 +69,15 @@ class QueriesRepository(BaseRepository):
         filters: dict[str, Any] | None = None,
         retrieved_chunk_ids: Sequence[UUID] | None = None,
     ) -> RagQuery:
-        row = RagQuery(
-            query=query,
-            consumer_type=consumer_type,
-            requester=requester,
-            filters=filters or {},
-            retrieved_chunk_ids=list(retrieved_chunk_ids or []),
+        return await self._persist(
+            RagQuery(
+                query=query,
+                consumer_type=consumer_type,
+                requester=requester,
+                filters=filters or {},
+                retrieved_chunk_ids=list(retrieved_chunk_ids or []),
+            )
         )
-        self._session.add(row)
-        await self._session.flush()
-        await self._session.refresh(row)
-        return row
 
     async def get(self, id: UUID) -> RagQuery | None:
         return await self._session.get(RagQuery, id)
@@ -95,9 +89,9 @@ class QueriesRepository(BaseRepository):
         since: datetime | None = None,
         limit: int | None = None,
     ) -> Sequence[RagQuery]:
-        stmt = select(RagQuery)
-        if consumer_type is not None:
-            stmt = stmt.where(RagQuery.consumer_type == consumer_type)
+        # `since` is a `>=` comparison, not eq, so handle it outside
+        # apply_eq_filters.
+        stmt = apply_eq_filters(select(RagQuery), {RagQuery.consumer_type: consumer_type})
         if since is not None:
             stmt = stmt.where(RagQuery.created_at >= since)
         stmt = stmt.order_by(RagQuery.created_at.desc())
@@ -119,17 +113,15 @@ class FeedbackRepository(BaseRepository):
         comment: str | None = None,
         source: str | None = None,
     ) -> RagFeedback:
-        row = RagFeedback(
-            signal=signal,
-            query_id=query_id,
-            chunk_id=chunk_id,
-            comment=comment,
-            source=source,
+        return await self._persist(
+            RagFeedback(
+                signal=signal,
+                query_id=query_id,
+                chunk_id=chunk_id,
+                comment=comment,
+                source=source,
+            )
         )
-        self._session.add(row)
-        await self._session.flush()
-        await self._session.refresh(row)
-        return row
 
     async def get(self, id: UUID) -> RagFeedback | None:
         return await self._session.get(RagFeedback, id)
@@ -142,14 +134,14 @@ class FeedbackRepository(BaseRepository):
         signal: str | None = None,
         limit: int | None = None,
     ) -> Sequence[RagFeedback]:
-        stmt = select(RagFeedback)
-        if chunk_id is not None:
-            stmt = stmt.where(RagFeedback.chunk_id == chunk_id)
-        if query_id is not None:
-            stmt = stmt.where(RagFeedback.query_id == query_id)
-        if signal is not None:
-            stmt = stmt.where(RagFeedback.signal == signal)
-        stmt = stmt.order_by(RagFeedback.created_at.desc())
+        stmt = apply_eq_filters(
+            select(RagFeedback),
+            {
+                RagFeedback.chunk_id: chunk_id,
+                RagFeedback.query_id: query_id,
+                RagFeedback.signal: signal,
+            },
+        ).order_by(RagFeedback.created_at.desc())
         if limit is not None:
             stmt = stmt.limit(limit)
         return (await self._session.execute(stmt)).scalars().all()
@@ -172,21 +164,19 @@ class ContextPacksRepository(BaseRepository):
         warnings: list[Any] | None = None,
         requires_human_review: bool = False,
     ) -> ContextPack:
-        row = ContextPack(
-            query=query,
-            task=task,
-            token_budget=token_budget,
-            filters=filters or {},
-            evidence_chunk_ids=list(evidence_chunk_ids or []),
-            token_estimate=token_estimate,
-            confidence=confidence,
-            warnings=warnings or [],
-            requires_human_review=requires_human_review,
+        return await self._persist(
+            ContextPack(
+                query=query,
+                task=task,
+                token_budget=token_budget,
+                filters=filters or {},
+                evidence_chunk_ids=list(evidence_chunk_ids or []),
+                token_estimate=token_estimate,
+                confidence=confidence,
+                warnings=warnings or [],
+                requires_human_review=requires_human_review,
+            )
         )
-        self._session.add(row)
-        await self._session.flush()
-        await self._session.refresh(row)
-        return row
 
     async def get(self, id: UUID) -> ContextPack | None:
         return await self._session.get(ContextPack, id)
@@ -200,6 +190,8 @@ class ContextPacksRepository(BaseRepository):
     ) -> Sequence[ContextPack]:
         stmt = select(ContextPack)
         if requires_human_review is not None:
+            # `is_(True/False)` rather than ``==`` because Pythonic
+            # equality on Bool columns warns about identity vs eq.
             stmt = stmt.where(ContextPack.requires_human_review.is_(requires_human_review))
         if since is not None:
             stmt = stmt.where(ContextPack.created_at >= since)
@@ -226,11 +218,9 @@ class IngestionJobsRepository(BaseRepository):
         kind: str = "full_resync",
         payload: dict[str, Any] | None = None,
     ) -> IngestionJob:
-        row = IngestionJob(source_id=source_id, kind=kind, payload=payload or {})
-        self._session.add(row)
-        await self._session.flush()
-        await self._session.refresh(row)
-        return row
+        return await self._persist(
+            IngestionJob(source_id=source_id, kind=kind, payload=payload or {})
+        )
 
     async def get(self, id: UUID) -> IngestionJob | None:
         return await self._session.get(IngestionJob, id)
@@ -242,12 +232,10 @@ class IngestionJobsRepository(BaseRepository):
         source_id: UUID | None = None,
         limit: int | None = None,
     ) -> Sequence[IngestionJob]:
-        stmt = select(IngestionJob)
-        if status is not None:
-            stmt = stmt.where(IngestionJob.status == status)
-        if source_id is not None:
-            stmt = stmt.where(IngestionJob.source_id == source_id)
-        stmt = stmt.order_by(IngestionJob.enqueued_at.desc())
+        stmt = apply_eq_filters(
+            select(IngestionJob),
+            {IngestionJob.status: status, IngestionJob.source_id: source_id},
+        ).order_by(IngestionJob.enqueued_at.desc())
         if limit is not None:
             stmt = stmt.limit(limit)
         return (await self._session.execute(stmt)).scalars().all()
