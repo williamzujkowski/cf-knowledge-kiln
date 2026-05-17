@@ -381,3 +381,40 @@ def test_search_result_card_without_source_url_renders_plain_text(
     # The plain-text span renders; the anchor variant does not.
     assert 'class="source">' in response.text
     assert 'class="source source-link"' not in response.text
+
+
+def test_search_result_card_drops_javascript_source_url(
+    client: TestClient, session: AsyncSession, tmp_path: Path
+) -> None:
+    """#24 HIGH: a malicious source_url must not become an href.
+
+    Frontmatter is untrusted. A doc with ``source_url: javascript:...``
+    must be coerced to NULL at ingest and render as plain text — never
+    as an ``href`` that the browser would execute on click.
+    """
+    (tmp_path / "evil.md").write_text(
+        textwrap.dedent(
+            """\
+            ---
+            title: Hostile linked doc
+            status: active
+            source_url: "javascript:alert(document.cookie)"
+            ---
+            # Hostile linked doc
+            unique-token-evil-target widgets and gadgets.
+            """
+        )
+    )
+    asyncio.get_event_loop().run_until_complete(_seed(session, tmp_path))
+    response = client.post(
+        "/search",
+        data={"query": "unique-token-evil-target", "status": ["active"]},
+    )
+    assert response.status_code == 200
+    body = response.text
+    # The malicious URL must never appear as an href value.
+    assert 'href="javascript:' not in body
+    assert "javascript:alert" not in body
+    # The card must still render — just as plain text, not as a link.
+    assert "Hostile linked doc" in body
+    assert 'class="source source-link"' not in body

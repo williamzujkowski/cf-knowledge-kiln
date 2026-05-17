@@ -325,3 +325,51 @@ def test_no_frontmatter_skips_size_check() -> None:
 
     doc = parse_document("# Top\nbody\n")
     assert doc.title == "Top"
+
+
+# ─── source_url scheme allowlist (#24 reviewer HIGH) ────────────────
+
+
+def test_safe_source_url_accepts_http_and_https() -> None:
+    from cf_knowledge_kiln.ingestion.pipeline import _safe_source_url
+
+    assert _safe_source_url("https://docs.example.com/x") == "https://docs.example.com/x"
+    assert _safe_source_url("http://docs.example.com/x") == "http://docs.example.com/x"
+
+
+@pytest.mark.parametrize(
+    "hostile",
+    [
+        "javascript:alert(document.cookie)",
+        "JavaScript:alert(1)",
+        "data:text/html,<script>alert(1)</script>",
+        "vbscript:msgbox(1)",
+        "file:///etc/passwd",
+        "ftp://example.com/x",
+        "mailto:attacker@example.com",
+    ],
+)
+def test_safe_source_url_rejects_non_http_schemes(hostile: str) -> None:
+    """#24 HIGH: stored-XSS prevention. Anything not http(s) → None."""
+    from cf_knowledge_kiln.ingestion.pipeline import _safe_source_url
+
+    assert _safe_source_url(hostile) is None
+
+
+def test_safe_source_url_rejects_empty_and_non_string() -> None:
+    from cf_knowledge_kiln.ingestion.pipeline import _safe_source_url
+
+    assert _safe_source_url(None) is None
+    assert _safe_source_url("") is None
+    assert _safe_source_url("   ") is None
+    assert _safe_source_url(42) is None
+    assert _safe_source_url(["https://x"]) is None
+
+
+def test_safe_source_url_rejects_scheme_without_netloc() -> None:
+    """``https:`` with no host is not a valid absolute URL."""
+    from cf_knowledge_kiln.ingestion.pipeline import _safe_source_url
+
+    assert _safe_source_url("https:") is None
+    # A relative path is not an absolute URL.
+    assert _safe_source_url("/runbooks/foo") is None
