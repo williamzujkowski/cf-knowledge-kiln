@@ -51,6 +51,7 @@ from typing import Any
 import frontmatter
 import mistune
 
+from cf_knowledge_kiln.ingestion._jsonsafe import jsonify
 from cf_knowledge_kiln.ingestion.tokens import count_tokens
 
 # Token-target window for a chunk. Per the plan: roughly 300-800 tokens.
@@ -258,7 +259,11 @@ def parse_document(
     """
     fm = frontmatter.loads(source_text)
     body = fm.content
-    meta: dict[str, Any] = dict(fm.metadata)
+    # YAML safe_load returns native Python types (date, datetime, UUID,
+    # Decimal). The documents.metadata column is JSONB, so any non-
+    # JSON-native value here would crash the upsert (#91). Normalize at
+    # the parser boundary so downstream code sees only JSON-safe values.
+    meta: dict[str, Any] = jsonify(dict(fm.metadata))
     try:
         mistune.create_markdown()(body)
     except Exception:  # pragma: no cover - mistune is permissive

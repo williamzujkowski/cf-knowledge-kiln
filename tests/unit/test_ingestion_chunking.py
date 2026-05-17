@@ -36,6 +36,30 @@ def test_frontmatter_extracted() -> None:
     assert doc.title == "Hello"
 
 
+def test_frontmatter_with_yaml_date_normalizes_to_iso_string() -> None:
+    """#91: a YAML ``date:`` field used to crash the JSONB upsert.
+
+    The parser now coerces it to ISO-8601 before handing off, so the
+    meta dict round-trips through ``json.dumps`` cleanly.
+    """
+    import json
+
+    src = textwrap.dedent(
+        """\
+        ---
+        id: ADR-0001
+        date: 2026-05-16
+        ---
+        # ADR
+        Body.
+        """
+    )
+    doc = parse_document(src)
+    assert doc.meta["date"] == "2026-05-16"
+    # Round-trip: this is what asyncpg+JSONB needs.
+    json.dumps(doc.meta)
+
+
 def test_title_falls_back_to_first_h1_when_frontmatter_absent() -> None:
     doc = parse_document("# Top\nBody.\n")
     assert doc.title == "Top"

@@ -70,12 +70,7 @@ def seeded_db(database_url: str) -> Iterator[None]:
                     name="cf-knowledge-kiln",
                     type="local",
                     path=str(_DOCS_DIR),
-                    # Top-level docs only — ADR frontmatter currently
-                    # contains YAML date objects that fail JSON
-                    # serialization on the documents.metadata JSONB
-                    # column. Tracked as #91; expand to ``**/*.md``
-                    # once that fix lands.
-                    include=["*.md"],
+                    include=["**/*.md"],
                 )
                 await run_source(
                     session,
