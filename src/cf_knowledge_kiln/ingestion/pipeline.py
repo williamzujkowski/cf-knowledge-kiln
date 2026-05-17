@@ -124,7 +124,43 @@ def _resolve_doc_defaults(metadata: dict[str, Any], source_defaults: Source) -> 
         "owner": metadata.get("owner") or source_defaults.default_owner,
         "authority": metadata.get("authority") or source_defaults.authority,
         "sensitivity": metadata.get("sensitivity") or source_defaults.default_sensitivity,
+        # #24: source_url drives the clickable source link on result
+        # cards. Frontmatter-only for now (no source-level template);
+        # operators add `source_url: https://...` to a doc to make its
+        # card open the canonical URL in a new tab. Untrusted-input
+        # policy: allowlist http(s) only — Pydantic's AnyUrl accepts
+        # javascript:/data:/file: which would be a stored-XSS sink
+        # when the template renders the value into an href.
+        "source_url": _safe_source_url(metadata.get("source_url")),
     }
+
+
+def _safe_source_url(raw: Any) -> str | None:
+    """Return ``raw`` only when it parses as an http(s) URL; else None.
+
+    Frontmatter is untrusted (per AGENTS.md). A malicious source could
+    ship ``source_url: javascript:alert(document.cookie)`` and turn
+    the result-card link into a clickable XSS payload. Reject anything
+    that isn't an http(s) absolute URL at the ingestion boundary so
+    the bad value never reaches the documents.source_url column.
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, str):
+        return None
+    cleaned = raw.strip()
+    if not cleaned:
+        return None
+    # urllib.parse handles the scheme detection without pulling in
+    # validators or pydantic at the ingestion layer.
+    from urllib.parse import urlparse
+
+    parsed = urlparse(cleaned)
+    if parsed.scheme.lower() not in {"http", "https"}:
+        return None
+    if not parsed.netloc:
+        return None
+    return cleaned
 
 
 async def _upsert_document(

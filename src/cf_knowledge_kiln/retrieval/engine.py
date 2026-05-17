@@ -321,11 +321,10 @@ def _document_refs_from_rows(rows: list[SearchRow]) -> dict[UUID, Any]:
     don't overwrite — same document, same metadata). ``DocumentRef``
     is lazy-imported here to avoid the retrieval ↔ agent cycle.
 
-    ``source_url`` is hard-coded to ``None`` because :class:`SearchRow`
-    doesn't carry the document's ``source_url`` column today (it's not
-    in the slice-2 CTE projection). The openapi.yaml hand-spec was
-    updated in this slice to make ``source_url`` optional. A later
-    improvement can plumb it through the CTE for HTTP-source docs.
+    ``source_url`` flows from ``documents.source_url`` through the
+    CTE projection (#24); ingestion populates it from frontmatter
+    ``source_url:`` for now. ``None`` is fine — the UI falls back to
+    rendering the plain ``repo/path`` string.
     """
     from cf_knowledge_kiln.agent.serializers import DocumentRef
 
@@ -338,7 +337,7 @@ def _document_refs_from_rows(rows: list[SearchRow]) -> dict[UUID, Any]:
             title=row.title,
             repo=row.repo,
             path=row.path,
-            source_url=None,
+            source_url=row.source_url,
             commit_sha=row.commit_sha,
             authority=row.authority,
             owner=row.owner,

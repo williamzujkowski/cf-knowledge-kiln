@@ -24,8 +24,6 @@ from dataclasses import dataclass, field
 from datetime import date
 from uuid import UUID, uuid4
 
-from pydantic import AnyUrl
-
 from cf_knowledge_kiln.ingestion.tokens import count_tokens
 from cf_knowledge_kiln.retrieval.ranking import (
     WEAK_EVIDENCE_SCORE_THRESHOLD,
@@ -63,7 +61,10 @@ class DocumentRef:
     title: str
     repo: str | None = None
     path: str | None = None
-    source_url: AnyUrl | None = None
+    # Stored as plain ``str`` (not AnyUrl) — this is an internal
+    # transport bag; validation happens at the public boundary when
+    # the engine constructs ResultCard / EvidenceChunk.
+    source_url: str | None = None
     commit_sha: str | None = None
     authority: str | None = None
     owner: str | None = None
@@ -201,7 +202,7 @@ def _to_evidence_chunk(
         repo=ref.repo,
         path=ref.path,
         heading_path=list(chunk.heading_path) or None,
-        source_url=ref.source_url,
+        source_url=ref.source_url,  # type: ignore[arg-type]
         commit_sha=ref.commit_sha,
         status=chunk.status,
         authority=ref.authority,

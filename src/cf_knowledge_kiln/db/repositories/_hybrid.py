@@ -63,6 +63,7 @@ class SearchRow:
     repo: str
     path: str
     title: str
+    source_url: str | None
     score: float
     has_prompt_injection: bool
 
@@ -186,6 +187,7 @@ def _select_search_row_columns(score_col: Any) -> Any:
         Document.repo,
         Document.path,
         Document.title,
+        Document.source_url,
         score_col,
     ).select_from(DocumentChunk)
 
@@ -208,6 +210,7 @@ def row_to_search_row(row: Any) -> SearchRow:
         repo=row["repo"],
         path=row["path"],
         title=row["title"],
+        source_url=row["source_url"],
         score=float(row["rrf_score"]),
         has_prompt_injection=bool(metadata.get("has_prompt_injection")),
     )

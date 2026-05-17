@@ -176,6 +176,7 @@ def _chunk_to_result_card(chunk: RankedChunk, ref: object | None, content: str) 
         heading_path=list(chunk.heading_path) or None,
         repo=getattr(ref, "repo", None),
         path=getattr(ref, "path", None),
+        source_url=getattr(ref, "source_url", None),
         commit_sha=getattr(ref, "commit_sha", None),
         owner=getattr(ref, "owner", None),
         status=chunk.status,  # type: ignore[arg-type]

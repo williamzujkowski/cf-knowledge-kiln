@@ -39,7 +39,24 @@
           <footer class="result-footer">
             <span class="source-line">
               {% if r.repo and r.path %}
-                <span class="source">{{ r.repo }}/{{ r.path }}</span>
+                {# Belt-and-braces: the ingestion layer already rejects
+                   non-http(s) source_url values, but a stored row from
+                   before that fix landed could still hold one. Render
+                   the link ONLY when the URL starts with an allowed
+                   scheme — anything else falls through to the plain
+                   <span> below so a poisoned row can't become a
+                   clickable XSS sink. #}
+                {% if r.source_url and (r.source_url.startswith('https://') or r.source_url.startswith('http://')) %}
+                  <a class="source source-link"
+                     href="{{ r.source_url }}"
+                     target="_blank"
+                     rel="noopener noreferrer"
+                     title="Open canonical source in a new tab">
+                    {{ r.repo }}/{{ r.path }}<span class="source-link-icon" aria-hidden="true">&nbsp;↗</span>
+                  </a>
+                {% else %}
+                  <span class="source">{{ r.repo }}/{{ r.path }}</span>
+                {% endif %}
               {% endif %}
               {% if r.last_reviewed %}
                 <time datetime="{{ r.last_reviewed }}" class="freshness">
