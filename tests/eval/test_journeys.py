@@ -377,3 +377,66 @@ def test_human_journey_deprecation_warning_under_default_filter(
     assert any("deprecat" in k.lower() for k in kinds), (
         f"expected a deprecation warning under the default filter, got kinds={kinds!r}"
     )
+
+
+# ─── #100: sensitive-content scanner ────────────────────────────────
+
+
+def test_human_journey_sensitive_content_warning_surfaces(
+    adversarial_retriever: HybridRetriever,
+) -> None:
+    """#100: a doc matching a sensitive regex must emit sensitive_content.
+
+    The fixture (sensitive.md) embeds a fake Slack token; the scanner
+    stamps the chunk at ingest time; retrieval emits the warning when
+    the chunk surfaces.
+    """
+
+    async def _go() -> Any:
+        return await adversarial_retriever.search(
+            "gravel-six pipeline sensitive runbook",
+            filters=RetrievalFilters(status=["active"], repo=["adversarial-fixtures"]),
+            max_results=10,
+        )
+
+    result = _run(_go())
+    kinds = warning_kinds_in(result)
+    assert any("sensitive" in k.lower() for k in kinds), (
+        f"expected a sensitive_content warning, got kinds={kinds!r}"
+    )
+
+
+def test_agent_journey_sensitive_chunks_dropped_from_evidence(
+    adversarial_retriever: HybridRetriever,
+) -> None:
+    """#100: sensitive chunks must be absent from context-pack evidence.
+
+    AGENTS.md: 'Sensitive content is allowed to surface in human
+    results with a redaction notice; agent context packs must drop it
+    entirely.' The fixture would dominate the FTS for the query but
+    the serializer filters it out before token budgeting.
+    """
+
+    async def _go() -> Any:
+        return await adversarial_retriever.context_pack(
+            query="gravel-six pipeline sensitive runbook",
+            task="report on the pipeline",
+            filters=RetrievalFilters(status=["active"], repo=["adversarial-fixtures"]),
+            max_chunks=10,
+            max_tokens=2000,
+        )
+
+    pack = _run(_go())
+    # No chunk in evidence may come from sensitive.md.
+    evidence_paths = [getattr(e, "path", None) or "" for e in pack.evidence]
+    assert not any("sensitive.md" in p for p in evidence_paths), (
+        f"sensitive.md leaked into context pack evidence: {evidence_paths!r}"
+    )
+    # And the warning must still be on the pack so the agent knows
+    # something was filtered.
+    kinds = warning_kinds_in(pack)
+    assert any("sensitive" in k.lower() for k in kinds), (
+        f"expected sensitive_content warning on pack, got kinds={kinds!r}"
+    )
+    # And requires_human_review must trip.
+    assert pack.requires_human_review is True

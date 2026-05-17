@@ -50,6 +50,7 @@ from cf_knowledge_kiln.ingestion.connectors import (
 from cf_knowledge_kiln.ingestion.embedding import EmbeddingProvider
 from cf_knowledge_kiln.ingestion.embedding.pipeline import embed_touched_documents
 from cf_knowledge_kiln.ingestion.prompt_injection import scan as scan_prompt_injection
+from cf_knowledge_kiln.ingestion.sensitive_content import scan as scan_sensitive_content
 from cf_knowledge_kiln.ingestion.sources import Source
 
 logger = logging.getLogger(__name__)
@@ -72,6 +73,7 @@ class IngestionSummary:
     chunks_created: int = 0
     chunks_unchanged: int = 0
     chunks_with_prompt_injection: int = 0
+    chunks_with_sensitive_content: int = 0
     embeddings_created: int = 0
     embeddings_unchanged: int = 0
     embeddings_failed: int = 0
@@ -88,6 +90,7 @@ class IngestionSummary:
             "chunks_created": self.chunks_created,
             "chunks_unchanged": self.chunks_unchanged,
             "chunks_with_prompt_injection": self.chunks_with_prompt_injection,
+            "chunks_with_sensitive_content": self.chunks_with_sensitive_content,
             "embeddings_created": self.embeddings_created,
             "embeddings_unchanged": self.embeddings_unchanged,
             "embeddings_failed": self.embeddings_failed,
@@ -245,23 +248,37 @@ def _chunk_security_metadata(
     summary: IngestionSummary,
     *,
     prompt_injection_phrases: list[str] | None,
+    sensitive_patterns: list[Any] | None = None,
 ) -> dict[str, Any]:
     """Stamp ingest-time security markers on chunk metadata.
 
-    Pulled out of :func:`_process_file` (#53 cleanup). The retrieval
-    path emits ``prompt_injection_pattern`` warnings in O(1) per chunk
-    using these markers — see #57. Empty phrase list → empty dict.
+    Two scanners run side by side:
+
+    * Prompt-injection — substring match against ``content_filters
+      .prompt_injection_phrases`` (#57). Stamps ``has_prompt_injection``
+      + ``matched_pattern``.
+    * Sensitive-content — regex match against ``content_filters
+      .sensitive_patterns`` (#100). Stamps ``has_sensitive_content``
+      + ``matched_sensitive_pattern``. The agent serializer drops
+      stamped chunks from the body entirely per AGENTS.md.
+
+    Either match flips its own boolean; the two run independently so a
+    chunk can carry both.
     """
-    if not prompt_injection_phrases:
-        return {}
-    match = scan_prompt_injection(content, prompt_injection_phrases)
-    if match is None:
-        return {}
-    summary.chunks_with_prompt_injection += 1
-    return {
-        "has_prompt_injection": True,
-        "matched_pattern": match["matched_pattern"],
-    }
+    out: dict[str, Any] = {}
+    if prompt_injection_phrases:
+        pi_match = scan_prompt_injection(content, prompt_injection_phrases)
+        if pi_match is not None:
+            summary.chunks_with_prompt_injection += 1
+            out["has_prompt_injection"] = True
+            out["matched_pattern"] = pi_match["matched_pattern"]
+    if sensitive_patterns:
+        sc_match = scan_sensitive_content(content, sensitive_patterns)
+        if sc_match is not None:
+            summary.chunks_with_sensitive_content += 1
+            out["has_sensitive_content"] = True
+            out["matched_sensitive_pattern"] = sc_match["matched_pattern"]
+    return out
 
 
 async def _upsert_chunk(
@@ -271,6 +288,7 @@ async def _upsert_chunk(
     chunk: Any,  # parsed chunk; structural, not nominal
     summary: IngestionSummary,
     prompt_injection_phrases: list[str] | None,
+    sensitive_patterns: list[Any] | None = None,
 ) -> None:
     """Upsert one chunk row. Used by :func:`_process_file` (#53 cleanup).
 
@@ -281,7 +299,10 @@ async def _upsert_chunk(
     """
     table = DocumentChunk.__table__
     chunk_extra = _chunk_security_metadata(
-        chunk.content, summary, prompt_injection_phrases=prompt_injection_phrases
+        chunk.content,
+        summary,
+        prompt_injection_phrases=prompt_injection_phrases,
+        sensitive_patterns=sensitive_patterns,
     )
     insert_stmt = pg_insert(table).values(  # type: ignore[arg-type]
         {
@@ -316,6 +337,7 @@ async def _process_file(
     summary: IngestionSummary,
     touched_doc_ids: set[UUID],
     prompt_injection_phrases: list[str] | None = None,
+    sensitive_patterns: list[Any] | None = None,
 ) -> None:
     """Parse one fetched file and write its chunks. Dedup on content_hash."""
     try:
@@ -363,6 +385,7 @@ async def _process_file(
             chunk=chunk,
             summary=summary,
             prompt_injection_phrases=prompt_injection_phrases,
+            sensitive_patterns=sensitive_patterns,
         )
     orphan_ids = [
         chunk_id for idx, (chunk_id, _h) in existing_by_index.items() if idx not in seen_indices
@@ -395,6 +418,7 @@ async def run_source(
     settings: Settings,
     embedding_provider: EmbeddingProvider | None = None,
     prompt_injection_phrases: list[str] | None = None,
+    sensitive_patterns: list[Any] | None = None,
 ) -> IngestionSummary:
     """Run the full pipeline for a single source. Writes an ingestion_runs row.
 
@@ -442,6 +466,7 @@ async def run_source(
             summary=summary,
             touched_doc_ids=touched_doc_ids,
             prompt_injection_phrases=prompt_injection_phrases,
+            sensitive_patterns=sensitive_patterns,
         )
 
     if embedding_provider is not None:

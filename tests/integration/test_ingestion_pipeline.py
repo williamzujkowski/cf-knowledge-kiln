@@ -468,3 +468,40 @@ async def test_pipeline_skips_oversize_frontmatter(session: AsyncSession, tmp_pa
     # The bad file is recorded with the dedicated skip reason.
     assert summary.skip_reasons.get("frontmatter_too_large", 0) == 1
     assert any("huge.md" in err and "frontmatter too large" in err for err in summary.errors)
+
+
+async def test_pipeline_stamps_sensitive_content_when_pattern_matches(
+    session: AsyncSession, tmp_path: Path
+) -> None:
+    """#100: ingest-time scanner stamps has_sensitive_content on chunks.
+
+    Mirrors the prompt-injection regression test but for the regex-based
+    sensitive-content scanner. A doc whose body matches a configured
+    pattern gets the boolean stamped; downstream retrieval emits the
+    warning and the agent serializer drops the chunk from the body.
+    """
+    import re
+
+    from cf_knowledge_kiln.ingestion.sensitive_content import _CompiledPattern
+
+    (tmp_path / "secret.md").write_text(
+        "# Secret runbook\n\n"
+        "Use the access key AKIAIOSFODNN7EXAMPLE for the deploy step.\n",  # pragma: allowlist secret
+        encoding="utf-8",
+    )
+    src = LocalSource(name="secrets", type="local", path=str(tmp_path), include=["*.md"])
+    patterns = [
+        _CompiledPattern(
+            source="AKIA[0-9A-Z]{16}",
+            compiled=re.compile("AKIA[0-9A-Z]{16}"),
+        ),
+    ]
+    summary = await run_source(
+        session, source=src, settings=_settings(), sensitive_patterns=patterns
+    )
+    await session.commit()
+    assert summary.chunks_with_sensitive_content == 1
+
+    chunks = (await session.execute(select(DocumentChunk))).scalars().all()
+    assert any(c.extra.get("has_sensitive_content") for c in chunks)
+    assert any(c.extra.get("matched_sensitive_pattern") == "AKIA[0-9A-Z]{16}" for c in chunks)

@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
@@ -49,6 +50,29 @@ _PROMPT_INJECTION_PHRASES = [
     "developer message",
     "you must comply",
 ]
+
+
+def _sensitive_patterns() -> list[Any]:
+    """Regex patterns the sensitive-content scanner watches for (#100).
+
+    Kept in sync with config/security.example.yaml. Built lazily so the
+    import-order doesn't drag re/scanner internals into the module
+    top-level — the journey tests are the only callers.
+    """
+    import re
+
+    from cf_knowledge_kiln.ingestion.sensitive_content import _CompiledPattern
+
+    raw = [
+        r"AKIA[0-9A-Z]{16}",
+        r"xox[baprs]-[0-9a-zA-Z]{10,}",
+        r"gh[ps]_[0-9a-zA-Z]{36,}",
+        # Eval-only synthetic marker — avoids gitleaks false-positives
+        # on the adversarial fixture while still proving the scanner
+        # wire-up works end-to-end.
+        r"INTERNAL-SECRET-[A-Z0-9]{8}",
+    ]
+    return [_CompiledPattern(source=s, compiled=re.compile(s)) for s in raw]
 
 
 def _eval_settings() -> Settings:
@@ -118,6 +142,7 @@ def seeded_db_with_adversarial(database_url: str) -> Iterator[None]:
                 # The repo docs/ stay scan-clean — the production
                 # filter list never matches benign architecture or
                 # security prose.
+                sensitive = _sensitive_patterns()
                 await run_source(
                     session,
                     source=LocalSource(
@@ -129,6 +154,7 @@ def seeded_db_with_adversarial(database_url: str) -> Iterator[None]:
                     settings=_eval_settings(),
                     embedding_provider=MockEmbeddingProvider(),
                     prompt_injection_phrases=_PROMPT_INJECTION_PHRASES,
+                    sensitive_patterns=sensitive,
                 )
                 await run_source(
                     session,
@@ -141,6 +167,7 @@ def seeded_db_with_adversarial(database_url: str) -> Iterator[None]:
                     settings=_eval_settings(),
                     embedding_provider=MockEmbeddingProvider(),
                     prompt_injection_phrases=_PROMPT_INJECTION_PHRASES,
+                    sensitive_patterns=sensitive,
                 )
                 await session.commit()
         finally:

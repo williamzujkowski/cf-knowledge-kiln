@@ -163,9 +163,16 @@ def assemble_context_pack(
     max_tokens: int,
 ) -> ContextPackResponse:
     """Compose the full :class:`ContextPackResponse` for an agent caller."""
-    contents = [inputs.chunk_text.get(c.chunk_id, "") for c in inputs.chunks]
+    # #100: sensitive content is allowed to surface in human search
+    # results (with a warning) but MUST be dropped from agent context
+    # packs entirely. Filter the input chunks before token budgeting
+    # so a sensitive chunk never consumes evidence slots either. The
+    # warning was already emitted by the engine; the agent caller sees
+    # it via inputs.warnings + the requires_human_review trip.
+    safe_inputs = [c for c in inputs.chunks if not c.has_sensitive_content]
+    contents = [inputs.chunk_text.get(c.chunk_id, "") for c in safe_inputs]
     kept, used = trim_evidence_to_budget(
-        inputs.chunks, contents=contents, max_chunks=max_chunks, max_tokens=max_tokens
+        safe_inputs, contents=contents, max_chunks=max_chunks, max_tokens=max_tokens
     )
     evidence = [_to_evidence_chunk(c, inputs.chunk_text, inputs.document_refs) for c in kept]
     needs_review = requires_human_review(kept, inputs.warnings, inputs.conflicts)
