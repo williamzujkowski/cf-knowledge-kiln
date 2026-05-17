@@ -26,8 +26,19 @@ def test_v1_agent_context_pack_returns_501(client: TestClient) -> None:
 
 
 def test_v1_search_returns_501_on_empty_body(client: TestClient) -> None:
-    """No body should still get the 501 — we don't pre-validate yet."""
+    """An empty JSON body should still get the 501 — no pre-validation yet."""
     response = client.post("/v1/search", json={})
+    assert response.status_code == 501
+
+
+def test_v1_search_returns_501_when_body_omitted(client: TestClient) -> None:
+    """POST with no body at all → still 501, not a 422 body-required error.
+
+    The stubs deliberately accept any body (including none) so the
+    501 contract is consistent regardless of what clients send while
+    Phase 5 is in flight.
+    """
+    response = client.post("/v1/search")
     assert response.status_code == 501
 
 

@@ -187,3 +187,51 @@ class TestSchemasAgree:
                 f"hand-only={sorted(hand_props - app_props)}, "
                 f"app-only={sorted(app_props - hand_props)}"
             )
+
+    def test_enum_values_match_for_shared_schema_properties(
+        self, hand_spec: dict[str, Any], app_spec: dict[str, Any]
+    ) -> None:
+        """Catch enum drift — the kind of bug a future Literal-type change
+        introduces if the contract isn't kept in sync.
+
+        Pydantic emits a single-value Literal as ``const: "X"`` and a
+        multi-value Literal as ``enum: ["X", "Y"]``. Both are valid
+        JSON Schema; this test normalizes ``const: X`` into
+        ``enum: [X]`` before comparing.
+        """
+        hand_schemas = hand_spec.get("components", {}).get("schemas", {})
+        app_schemas = app_spec.get("components", {}).get("schemas", {})
+        for name in sorted(set(hand_schemas) & set(app_schemas)):
+            if name in PHASE_5_ONLY_SCHEMAS:
+                continue
+            hand_props = hand_schemas[name].get("properties", {})
+            app_props = app_schemas[name].get("properties", {})
+            for prop in sorted(set(hand_props) & set(app_props)):
+                hand_enum = _enum_or_const(hand_props[prop])
+                app_enum = _enum_or_const(app_props[prop])
+                if hand_enum is None and app_enum is None:
+                    continue
+                assert hand_enum is not None and app_enum is not None, (
+                    f"schema {name}.{prop}: one side constrains values, the other doesn't. "
+                    f"hand={hand_enum}, app={app_enum}"
+                )
+                assert set(hand_enum) == set(app_enum), (
+                    f"schema {name}.{prop}: enum drift. "
+                    f"hand-only={sorted(set(hand_enum) - set(app_enum))}, "
+                    f"app-only={sorted(set(app_enum) - set(hand_enum))}"
+                )
+
+
+def _enum_or_const(schema: dict[str, Any]) -> list[Any] | None:
+    """Return the value set a property is constrained to, or None.
+
+    Treats JSON Schema ``const: X`` as equivalent to ``enum: [X]``; both
+    say "this property must be exactly X". Pydantic emits ``const`` for
+    single-value Literals and ``enum`` for multi-value ones.
+    """
+    if "enum" in schema:
+        result = schema["enum"]
+        return list(result) if isinstance(result, list) else [result]
+    if "const" in schema:
+        return [schema["const"]]
+    return None

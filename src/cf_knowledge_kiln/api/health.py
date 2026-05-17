@@ -26,7 +26,7 @@ ReadyStatus = Literal["ready", "degraded"]
 
 
 class HealthResponse(BaseModel):
-    status: str
+    status: Literal["ok"]
     service: str
 
 
