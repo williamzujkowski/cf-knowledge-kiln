@@ -1,0 +1,58 @@
+version: 1
+# Bootstrap golden set: queries against the repo's own docs/ tree.
+#
+# corpus: docs/  (ingested via LocalSource named "cf-knowledge-kiln")
+#
+# Each case names a query, optional filters, and the (repo, path,
+# heading_path) tuples we expect to surface. Heading_path comes from
+# the parser's H1/H2/H3 chain; an empty heading_path matches any
+# chunk in the document ("doc-anywhere" mode).
+#
+# Thresholds are deliberately loose at bootstrap. The harness runs
+# under MockEmbeddingProvider in pytest, so the vector arm is noise;
+# what we measure here is FTS + RRF stability over time.
+cases:
+  - case_id: arch-four-layer
+    query: "four-layer architecture experience retrieval index ingestion"
+    filters: {status: [active]}
+    expected:
+      - repo: cf-knowledge-kiln
+        path: architecture.md
+        heading_path: []
+        must_appear_within_k: 10
+
+  - case_id: untrusted-input-policy
+    query: "untrusted input handling indexed content markers"
+    filters: {status: [active]}
+    expected:
+      - repo: cf-knowledge-kiln
+        path: security.md
+        heading_path: []
+        must_appear_within_k: 10
+
+  - case_id: configuration-env-vars
+    query: "KILN environment variables configuration precedence"
+    filters: {status: [active]}
+    expected:
+      - repo: cf-knowledge-kiln
+        path: configuration.md
+        heading_path: []
+        must_appear_within_k: 10
+
+  - case_id: cf-deployment-manifest
+    query: "Cloud Foundry deployment manifest cf push two apps"
+    filters: {status: [active]}
+    expected:
+      - repo: cf-knowledge-kiln
+        path: deployment-cloud-foundry.md
+        heading_path: []
+        must_appear_within_k: 10
+
+  - case_id: data-sources-allowlist
+    query: "ingestion source allowlist configuration repo path"
+    filters: {status: [active]}
+    expected:
+      - repo: cf-knowledge-kiln
+        path: data-sources.md
+        heading_path: []
+        must_appear_within_k: 10

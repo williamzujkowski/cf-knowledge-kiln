@@ -18,7 +18,7 @@ PKG       := cf_knowledge_kiln
 .DEFAULT_GOAL := help
 
 .PHONY: help bootstrap install lint format typecheck test test-unit test-integration \
-        security sbom scan openapi-lint run run-worker migrate migrate-down \
+        eval security sbom scan openapi-lint run run-worker migrate migrate-down \
         ingest cf-push verify clean
 
 help: ## Show this help.
@@ -48,6 +48,9 @@ test-unit: ## Run fast unit tests (no DB, no network).
 
 test-integration: ## Run integration tests (requires running Postgres+pgvector).
 	@$(PYTEST) $(TESTS_DIR)/integration -q
+
+eval: ## Run retrieval eval harness (requires Postgres+pgvector; opt-in).
+	@$(PYTEST) $(TESTS_DIR)/eval -q -m "eval"
 
 openapi-lint: ## Validate OpenAPI 3.1 spec.
 	@$(PY) scripts/lint_openapi.py openapi/openapi.yaml
