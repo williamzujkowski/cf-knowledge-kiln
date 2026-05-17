@@ -30,7 +30,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final, Literal
 
-from cf_knowledge_kiln.ingestion.sources import GitSource, LocalSource, Source
+from cf_knowledge_kiln.ingestion.sources import GitSource, HttpSource, LocalSource, Source
 
 logger = logging.getLogger(__name__)
 
@@ -279,9 +279,16 @@ def fetch_source(source: Source, caps: IngestionCaps) -> FetchResult:
         return GitConnector(caps).fetch(source)
     if isinstance(source, LocalSource):
         return LocalConnector(caps).fetch(source)
+    if isinstance(source, HttpSource):
+        return HttpConnector(caps).fetch(source)
     # Exhaustive: Pydantic schema rejects unknown types at load time.
     raise TypeError(f"unsupported source type: {type(source).__name__}")  # pragma: no cover
 
 
 def _git_available() -> bool:  # pragma: no cover - convenience for callers
     return shutil.which("git") is not None
+
+
+# HttpConnector lives in _http_connector.py to keep this file under
+# the ≤400-line budget. Re-exported here so existing imports work.
+from cf_knowledge_kiln.ingestion._http_connector import HttpConnector  # noqa: E402
