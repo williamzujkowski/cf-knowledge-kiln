@@ -337,6 +337,7 @@ components:
             - weak_evidence
             - prompt_injection_pattern
             - sensitive_content
+            - query_normalized
         message:
           type: string
         source_id:

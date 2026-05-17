@@ -30,6 +30,7 @@ from cf_knowledge_kiln.db.connection import Database
 from cf_knowledge_kiln.db.repositories._hybrid import SearchRow
 from cf_knowledge_kiln.db.repositories.documents import ChunksRepository
 from cf_knowledge_kiln.retrieval.config import RetrievalConfig
+from cf_knowledge_kiln.retrieval.query_normalization import normalize_query
 from cf_knowledge_kiln.retrieval.ranking import (
     RankedChunk,
     apply_boosts,
@@ -114,11 +115,17 @@ class HybridRetriever:
         config: RetrievalConfig,
         *,
         ef_search: int = 200,
+        prompt_injection_phrases: list[str] | None = None,
     ) -> None:
         self._db = db
         self._provider = embedding_provider
         self._config = config
         self._ef_search = ef_search
+        # #100: phrases used by normalize_query() to strip operator
+        # markers from the inbound query. None / empty list disables
+        # normalization — the retrieval path then behaves exactly as
+        # it did before the feature landed.
+        self._prompt_injection_phrases = prompt_injection_phrases or []
 
     async def search(
         self,
@@ -139,7 +146,14 @@ class HybridRetriever:
         telemetry, halving the per-request connection count.
         """
         _require_nonempty(query)
-        rows = await self._fetch_candidates(query, filters, session=session)
+        # #100: strip configured prompt-injection markers from the
+        # query before retrieval. If everything got stripped the call
+        # treats it as an empty query (400 at the API layer).
+        cleaned, removed_phrases = normalize_query(query, self._prompt_injection_phrases)
+        if removed_phrases and not cleaned:
+            raise ValueError("query consists entirely of prompt-injection markers")
+        effective = cleaned if removed_phrases else query
+        rows = await self._fetch_candidates(effective, filters, session=session)
         chunks = [_row_to_ranked_chunk(r) for r in rows]
         boosted = apply_boosts(chunks, config=self._config, today=date.today())
         boosted.sort(key=lambda c: c.score, reverse=True)
@@ -147,6 +161,8 @@ class HybridRetriever:
         warnings = _collect_warnings(
             trimmed, today=date.today(), stale_after_days=self._config.stale_after_days
         )
+        if removed_phrases:
+            warnings.append(_query_normalized_warning(removed_phrases))
         trimmed_ids = {c.chunk_id for c in trimmed}
         return SearchResult(
             chunks=trimmed,
@@ -189,7 +205,12 @@ class HybridRetriever:
         _require_nonempty(query)
         if not task or not task.strip():
             raise ValueError("task must be a non-empty string")
-        rows = await self._fetch_candidates(query, filters, session=session)
+        # #100: same normalization the human path does.
+        cleaned, removed_phrases = normalize_query(query, self._prompt_injection_phrases)
+        if removed_phrases and not cleaned:
+            raise ValueError("query consists entirely of prompt-injection markers")
+        effective = cleaned if removed_phrases else query
+        rows = await self._fetch_candidates(effective, filters, session=session)
         chunks = [_row_to_ranked_chunk(r) for r in rows]
         boosted = apply_boosts(chunks, config=self._config, today=date.today())
         boosted.sort(key=lambda c: c.score, reverse=True)
@@ -200,6 +221,8 @@ class HybridRetriever:
         )
         conflicts = detect_conflicts(trimmed)
         warnings.extend(_conflict_warnings(conflicts))
+        if removed_phrases:
+            warnings.append(_query_normalized_warning(removed_phrases))
         inputs = SerializerInputs(
             chunks=trimmed,
             warnings=warnings,
@@ -314,6 +337,25 @@ def _conflict_warnings(conflicts: list[Conflict]) -> list[Warning]:
         )
         for c in conflicts
     ]
+
+
+def _query_normalized_warning(removed_phrases: list[str]) -> Warning:
+    """One ``query_normalized`` warning when the caller's query was sanitized (#100).
+
+    Lists the phrase sources that matched so an operator auditing the
+    response can spot a query attempting to exfiltrate prompt-
+    injection content from the corpus. The list is informational —
+    the cleaned query has already gone through retrieval.
+    """
+    sample = ", ".join(repr(p) for p in removed_phrases[:3])
+    suffix = f" (and {len(removed_phrases) - 3} more)" if len(removed_phrases) > 3 else ""
+    return Warning(
+        type="query_normalized",
+        message=(
+            f"Query contained prompt-injection markers; stripped before retrieval: "
+            f"{sample}{suffix}."
+        ),
+    )
 
 
 def _document_refs_from_rows(rows: list[SearchRow]) -> dict[UUID, Any]:

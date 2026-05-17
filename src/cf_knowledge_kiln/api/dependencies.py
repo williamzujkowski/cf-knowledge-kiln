@@ -90,12 +90,22 @@ def get_hybrid_retriever(
     The retriever is cheap to construct (no I/O); building per-request
     keeps it stateless and avoids accidentally sharing transaction
     state across concurrent calls.
+
+    #100: load the prompt-injection phrase list once per request so
+    the engine can normalize the inbound query. ``load_phrases``
+    re-reads the YAML each call — cheap, and means an operator
+    editing config/security.yaml + restaging picks up the new list
+    without a redeploy.
     """
+    from cf_knowledge_kiln.ingestion.prompt_injection import load_phrases
+
+    phrases = load_phrases(settings.security_config_path)
     return HybridRetriever(
         db=db,
         embedding_provider=provider,
         config=config,
         ef_search=settings.hnsw_ef_search,
+        prompt_injection_phrases=phrases,
     )
 
 

@@ -35,6 +35,7 @@ WarningType = Literal[
     "weak_evidence",
     "prompt_injection_pattern",
     "sensitive_content",
+    "query_normalized",
 ]
 """Warning code enum — matches openapi.yaml Warning.type."""
 
