@@ -39,6 +39,7 @@ SkipReason = Literal[
     "unsupported_file_type",
     "too_large",
     "binary_content",
+    "symlink_escape",
 ]
 
 _SUPPORTED_SUFFIXES: Final = frozenset({".md", ".markdown"})
@@ -143,10 +144,21 @@ def _walk(root: Path, source: Source, caps: IngestionCaps, commit_sha: str | Non
     result = FetchResult(commit_sha=commit_sha)
     total_bytes = 0
     file_count = 0
+    root_resolved = root.resolve()
     for path in sorted(root.rglob("*")):
         if not path.is_file():
             continue
         rel = path.relative_to(root).as_posix()
+        # rglob follows symlinks; verify the resolved target still lives
+        # under root so a symlink can't reach /etc/passwd (or anything else
+        # the worker UID can read) from inside the allowlisted source.
+        try:
+            path.resolve(strict=True).relative_to(root_resolved)
+        except (ValueError, FileNotFoundError):
+            result.skipped.append(
+                SkippedFile(rel, "symlink_escape", "symlink target outside source root")
+            )
+            continue
         if _is_denied_by_default(rel):
             result.skipped.append(
                 SkippedFile(rel, "excluded_by_pattern", "dotfile / vendored-tree default-deny")
