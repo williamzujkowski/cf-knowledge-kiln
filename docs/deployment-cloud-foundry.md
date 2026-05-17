@@ -71,8 +71,12 @@ make run
 ## Push
 
 ```bash
-cf push -f manifest.yml
+cf push -f manifest.yml --strategy rolling
 ```
+
+`--strategy rolling` keeps the previous app running until the new instance passes healthchecks, so a botched buildpack upgrade or a regression in `/readyz` can't tear down the live API mid-deploy. The Concourse `deploy-cf` job uses the same flag. Drop `--strategy rolling` for the first ever push (when there's nothing live to roll over).
+
+For deployments where zero downtime matters more than the simpler ops surface, swap in a blue-green pattern (`cf push <name>-green` → swap routes → `cf delete <name>-blue`) or the `cf-cli` blue-green plugin.
 
 This deploys two apps:
 
