@@ -14,6 +14,7 @@ import os
 import textwrap
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 import pytest_asyncio
@@ -213,3 +214,75 @@ def test_context_pack_persists_context_packs_row(
 
     n = asyncio.get_event_loop().run_until_complete(_count())
     assert n == 1
+
+
+# ─── #74: single DB session per request ─────────────────────────────
+
+
+def test_search_request_uses_one_db_session(
+    client: TestClient, session: AsyncSession, small_corpus: Path
+) -> None:
+    """Issue #74: a /v1/search request must check out exactly ONE session.
+
+    Before #74 the handler opened one session inside the engine for
+    the CTE and a second inside the telemetry writer — capping
+    concurrency at ~8 with default pool settings. After #74 the
+    handler opens one session via get_session and passes it to both
+    paths.
+
+    We assert this by patching Database.session to count calls during
+    a single request.
+    """
+    import asyncio
+    from unittest.mock import patch
+
+    asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
+
+    from cf_knowledge_kiln.db.connection import Database
+
+    real_session = Database.session
+    calls: list[int] = []
+
+    def counting_session(self: Database) -> Any:
+        calls.append(1)
+        return real_session(self)
+
+    with patch.object(Database, "session", counting_session):
+        response = client.post("/v1/search", json={"query": "widgets"})
+    assert response.status_code == 200
+    assert sum(calls) == 1, (
+        f"expected ONE Database.session() call per /v1/search request, "
+        f"got {sum(calls)}. #74 regression — telemetry should share the "
+        f"handler's session, not open its own."
+    )
+
+
+def test_context_pack_request_uses_one_db_session(
+    client: TestClient, session: AsyncSession, small_corpus: Path
+) -> None:
+    """Issue #74: a /v1/agent/context-pack request must check out exactly ONE session."""
+    import asyncio
+    from unittest.mock import patch
+
+    asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
+
+    from cf_knowledge_kiln.db.connection import Database
+
+    real_session = Database.session
+    calls: list[int] = []
+
+    def counting_session(self: Database) -> Any:
+        calls.append(1)
+        return real_session(self)
+
+    with patch.object(Database, "session", counting_session):
+        response = client.post(
+            "/v1/agent/context-pack",
+            json={"task": "explain", "query": "widgets"},
+        )
+    assert response.status_code == 200
+    assert sum(calls) == 1, (
+        f"expected ONE Database.session() call per /v1/agent/context-pack request, "
+        f"got {sum(calls)}. #74 regression — telemetry should share the "
+        f"handler's session, not open its own."
+    )
