@@ -61,7 +61,7 @@ jobs:
             type: registry-image
             source:
               repository: python
-              tag: "3.12-slim"
+              tag: "3.12.7-slim"
           inputs:
             - name: source
           run:
@@ -101,7 +101,7 @@ jobs:
             type: registry-image
             source:
               repository: python
-              tag: "3.12-slim"
+              tag: "3.12.7-slim"
           inputs:
             - name: source
           run:
@@ -117,6 +117,7 @@ jobs:
 
   # ─── gitleaks: full-history secret scan ───
   - name: gitleaks
+    serial: true
     plan:
       - get: source
         trigger: true
@@ -127,10 +128,13 @@ jobs:
             type: registry-image
             source:
               repository: zricethezav/gitleaks
-              tag: latest
+              tag: "v8.30.1"
           inputs:
             - name: source
           run:
+            # The git resource clones into ./source, which collides with
+            # gitleaks's --source flag naming. Keep both — the path is
+            # unambiguous and renaming the resource would cascade.
             path: gitleaks
             args:
               - detect
@@ -140,6 +144,7 @@ jobs:
 
   # ─── shellcheck ───
   - name: shellcheck
+    serial: true
     plan:
       - get: source
         trigger: true
@@ -150,7 +155,7 @@ jobs:
             type: registry-image
             source:
               repository: koalaman/shellcheck-alpine
-              tag: stable
+              tag: "v0.10.0"
           inputs:
             - name: source
           run:
@@ -163,6 +168,7 @@ jobs:
 
   # ─── markdownlint ───
   - name: markdownlint
+    serial: true
     plan:
       - get: source
         trigger: true
@@ -173,7 +179,7 @@ jobs:
             type: registry-image
             source:
               repository: davidanson/markdownlint-cli2
-              tag: latest
+              tag: "v0.18.1"
           inputs:
             - name: source
           run:
@@ -192,6 +198,14 @@ jobs:
   # Generates an SPDX SBOM via syft and scans it via grype. Fails the
   # build on HIGH/CRITICAL findings to mirror the GH workflow's
   # severity-cutoff: high policy.
+  #
+  # Implementation notes:
+  # * Both anchore/* images are FROM scratch — no shell, no apt. The
+  #   tasks invoke the binary directly via `path: /syft` / `path: /grype`.
+  # * The install task uses `pip install --target=./vendor` so the
+  #   transitive deps land in a directory we can hand to syft as input
+  #   (a plain `pip install -e` writes to the container's global
+  #   site-packages which isn't copied into the next task's input).
   - name: sbom-scan
     serial: true
     plan:
@@ -204,7 +218,7 @@ jobs:
             type: registry-image
             source:
               repository: python
-              tag: "3.12-slim"
+              tag: "3.12.7-slim"
           inputs:
             - name: source
           outputs:
@@ -217,8 +231,7 @@ jobs:
                 cd source
                 apt-get update -qq && apt-get install -y --no-install-recommends git
                 python -m pip install --upgrade pip
-                pip install -e ".[dev,db,ingestion]"
-                # Copy the populated venv + repo into the next task's input.
+                pip install --target=./vendor -e ".[dev,db,ingestion]"
                 cp -a . ../installed/
       - task: sbom
         config:
@@ -227,17 +240,18 @@ jobs:
             type: registry-image
             source:
               repository: anchore/syft
-              tag: latest
+              tag: "v1.44.0"
           inputs:
             - name: installed
           outputs:
             - name: sbom-out
           run:
-            path: sh
+            # anchore/syft is FROM scratch — no shell. Invoke binary directly.
+            path: /syft
             args:
-              - -euc
-              - |
-                syft installed -o spdx-json=sbom-out/sbom.spdx.json
+              - installed
+              - -o
+              - spdx-json=sbom-out/sbom.spdx.json
       - task: grype
         config:
           platform: linux
@@ -245,15 +259,16 @@ jobs:
             type: registry-image
             source:
               repository: anchore/grype
-              tag: latest
+              tag: "v0.112.0"
           inputs:
             - name: sbom-out
           run:
-            path: sh
+            # anchore/grype is FROM scratch — no shell. Invoke binary directly.
+            path: /grype
             args:
-              - -euc
-              - |
-                grype sbom:sbom-out/sbom.spdx.json --fail-on high
+              - sbom:sbom-out/sbom.spdx.json
+              - --fail-on
+              - high
 
   # ─── deploy (manual gate) ───
   # Manual-only by virtue of `trigger: false` on the get. Requires every
@@ -283,7 +298,7 @@ jobs:
             type: registry-image
             source:
               repository: cloudfoundry/cli
-              tag: latest
+              tag: "8.18.3"
           inputs:
             - name: source
           run:

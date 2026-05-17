@@ -62,7 +62,7 @@ Concourse tasks are single-container by design. The community workarounds (`oci-
 
 - **No `permissions:` block.** Concourse uses worker / team ACLs instead.
 - **No `concurrency:` cancel.** Concourse uses `serial: true` per job; the homelab target's small worker count makes serial execution the safer default.
-- **No CodeQL job.** CodeQL is GitHub-native; the closest Concourse equivalent is `bandit` (already in `verify`) plus `grype` (in `sbom-scan`). Operators who want richer SAST should add a `semgrep` task using `returntocorp/semgrep` image.
+- **No CodeQL job.** CodeQL is GitHub-native; the closest Concourse equivalent is `bandit` (already in `verify`) plus `grype` (in `sbom-scan`). Operators who want richer SAST should add a `semgrep` task using the `semgrep/semgrep` image (`returntocorp/semgrep` is deprecated).
 
 ## Validation status
 
