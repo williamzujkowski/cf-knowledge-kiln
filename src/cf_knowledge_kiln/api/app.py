@@ -26,6 +26,7 @@ from fastapi import FastAPI
 
 from cf_knowledge_kiln import __version__
 from cf_knowledge_kiln.api.health import router as health_router
+from cf_knowledge_kiln.api.retrieval import router as retrieval_router
 from cf_knowledge_kiln.config import get_settings
 from cf_knowledge_kiln.db import Database, resolve_database_url
 from cf_knowledge_kiln.ingestion.embedding import EmbeddingProvider
@@ -73,6 +74,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     app.include_router(health_router)
+    app.include_router(retrieval_router)
     return app
 
 
