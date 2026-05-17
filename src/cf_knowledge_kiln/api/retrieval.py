@@ -14,6 +14,7 @@ match ``openapi/openapi.yaml`` 1:1 and the drift test in
 
 from __future__ import annotations
 
+import logging
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -31,6 +32,7 @@ from cf_knowledge_kiln.retrieval import (
     SearchResponse,
 )
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["search"])
 
 
@@ -62,7 +64,12 @@ async def human_search(
     response = SearchResponse(
         query=body.query,
         results=[
-            _chunk_to_result_card(c, result.document_refs.get(c.document_id)) for c in result.chunks
+            _chunk_to_result_card(
+                c,
+                result.document_refs.get(c.document_id),
+                result.chunk_text.get(c.chunk_id, ""),
+            )
+            for c in result.chunks
         ],
         warnings=result.warnings or None,
     )
@@ -122,21 +129,21 @@ def _empty_filters() -> Any:
     return RetrievalFilters()
 
 
-def _chunk_to_result_card(chunk: RankedChunk, ref: object | None) -> ResultCard:
-    """Map a :class:`RankedChunk` + :class:`DocumentRef` to a :class:`ResultCard`.
+def _chunk_to_result_card(chunk: RankedChunk, ref: object | None, content: str) -> ResultCard:
+    """Map a :class:`RankedChunk` + :class:`DocumentRef` + content to a card.
 
-    The HybridRetriever returns scored chunks plus a ``document_refs``
-    map carrying the per-document title/repo/path/etc. — we pull from
-    that map here. A missing ref means the document was deleted
-    between retrieval and serialization; we degrade to a minimal card
-    rather than 500 the whole response.
+    ``content`` is the chunk's raw text — supplied via
+    ``SearchResult.chunk_text`` — so we can derive a real excerpt
+    instead of falling back to the (empty) chunk metadata blob. A
+    missing ``ref`` means the document was deleted between retrieval
+    and serialization; we degrade rather than 500 the whole response.
     """
     title = getattr(ref, "title", None) or "(unknown)"
     return ResultCard(
         chunk_id=chunk.chunk_id,
         document_id=chunk.document_id,
         title=title,
-        excerpt=str(chunk.chunk_metadata.get("text") or "")[:500],
+        excerpt=content[:500],
         heading_path=list(chunk.heading_path) or None,
         repo=getattr(ref, "repo", None),
         path=getattr(ref, "path", None),
@@ -156,34 +163,44 @@ async def _log_rag_query(
     filters: dict[str, Any],
     chunk_ids: list[Any],
 ) -> None:
-    """Append a row to ``rag_queries``. Failures are logged but not fatal."""
-    async with db.session() as session, session.begin():
-        await QueriesRepository(session).create(
-            query=query,
-            consumer_type=consumer_type,
-            filters=filters,
-            retrieved_chunk_ids=chunk_ids,
-        )
+    """Append a row to ``rag_queries``. Failures are logged, NOT raised.
+
+    A transient DB error during telemetry persistence must not turn a
+    successful retrieval into a 500 for the caller.
+    """
+    try:
+        async with db.session() as session, session.begin():
+            await QueriesRepository(session).create(
+                query=query,
+                consumer_type=consumer_type,
+                filters=filters,
+                retrieved_chunk_ids=chunk_ids,
+            )
+    except Exception:
+        logger.exception("rag_queries telemetry write failed (non-fatal)")
 
 
 async def _log_context_pack(
     db: Database, *, body: ContextPackRequest, pack: ContextPackResponse
 ) -> None:
-    """Append a row to ``context_packs``."""
-    async with db.session() as session, session.begin():
-        await ContextPacksRepository(session).create(
-            query=body.query,
-            task=body.task,
-            token_budget=pack.token_budget.requested,
-            filters=(body.filters.model_dump(exclude_none=True) if body.filters else {}),
-            evidence_chunk_ids=[e.chunk_id for e in pack.evidence],
-            token_estimate=pack.token_budget.used_estimate,
-            confidence=pack.confidence,
-            # mode='json' serializes UUIDs/dates as strings so they
-            # round-trip through the JSONB column cleanly.
-            warnings=[w.model_dump(mode="json") for w in pack.warnings],
-            requires_human_review=pack.requires_human_review,
-        )
+    """Append a row to ``context_packs``. Failures are logged, NOT raised."""
+    try:
+        async with db.session() as session, session.begin():
+            await ContextPacksRepository(session).create(
+                query=body.query,
+                task=body.task,
+                token_budget=pack.token_budget.requested,
+                filters=(body.filters.model_dump(exclude_none=True) if body.filters else {}),
+                evidence_chunk_ids=[e.chunk_id for e in pack.evidence],
+                token_estimate=pack.token_budget.used_estimate,
+                confidence=pack.confidence,
+                # mode='json' serializes UUIDs/dates as strings so they
+                # round-trip through the JSONB column cleanly.
+                warnings=[w.model_dump(mode="json") for w in pack.warnings],
+                requires_human_review=pack.requires_human_review,
+            )
+    except Exception:
+        logger.exception("context_packs telemetry write failed (non-fatal)")
 
 
 __all__ = ["router"]

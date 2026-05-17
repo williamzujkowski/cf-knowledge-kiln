@@ -116,7 +116,12 @@ def test_search_returns_200_with_results(
     top = body["results"][0]
     assert top["chunk_id"]
     assert top["document_id"]
-    assert top["title"]
+    # Real title, not the "(unknown)" fallback. Proves document_refs
+    # are actually plumbed through, not silently degraded.
+    assert top["title"] and top["title"] != "(unknown)"
+    # Real excerpt from chunk content (was always-empty before slice 4
+    # fix that plumbed chunk_text through SearchResult).
+    assert top["excerpt"], "excerpt must be the chunk content, not empty"
     assert top["status"]
     assert top["score"] >= 0
 
