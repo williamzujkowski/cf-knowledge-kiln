@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from datetime import date, datetime
 from typing import Any
 from uuid import UUID
 
@@ -132,7 +133,37 @@ def _resolve_doc_defaults(metadata: dict[str, Any], source_defaults: Source) -> 
         # javascript:/data:/file: which would be a stored-XSS sink
         # when the template renders the value into an href.
         "source_url": _safe_source_url(metadata.get("source_url")),
+        # #100: last_reviewed feeds the freshness boost + the
+        # stale_source warning. Frontmatter ships an ISO date which
+        # yaml.safe_load already returns as datetime.date; the
+        # parser-side jsonify() converts it to "YYYY-MM-DD" so we
+        # coerce back to date here for the SQLA column.
+        "last_reviewed": _coerce_iso_date(metadata.get("last_reviewed")),
     }
+
+
+def _coerce_iso_date(raw: Any) -> Any:
+    """Convert an ISO-8601 date string back to ``datetime.date``.
+
+    The parser runs ``jsonify`` over the frontmatter dict before
+    handing it to us, which turns ``date(2024, 1, 15)`` into
+    ``"2024-01-15"``. The ``documents.last_reviewed`` column is
+    ``DATE``, so the SQLA layer needs a real date object. None /
+    bad values pass through as None so the upsert leaves the column
+    NULL (the existing default).
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, datetime):
+        return raw.date()
+    if isinstance(raw, date):
+        return raw
+    if not isinstance(raw, str):
+        return None
+    try:
+        return date.fromisoformat(raw)
+    except ValueError:
+        return None
 
 
 def _safe_source_url(raw: Any) -> str | None:
