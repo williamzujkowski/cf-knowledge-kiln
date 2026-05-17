@@ -27,6 +27,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from cf_knowledge_kiln import __version__
+from cf_knowledge_kiln.api.auth import configure_auth
 from cf_knowledge_kiln.api.health import router as health_router
 from cf_knowledge_kiln.api.retrieval import router as retrieval_router
 from cf_knowledge_kiln.api.web import router as web_router
@@ -78,6 +79,10 @@ def create_app() -> FastAPI:
         redoc_url="/redoc",
         lifespan=lifespan,
     )
+    # Auth middleware is configured BEFORE routers are included so it
+    # wraps every endpoint. configure_auth raises at startup for
+    # obviously-wrong configs (none-in-prod, bearer-without-token).
+    configure_auth(app, settings)
     app.include_router(health_router)
     app.include_router(retrieval_router)
     app.include_router(web_router)
