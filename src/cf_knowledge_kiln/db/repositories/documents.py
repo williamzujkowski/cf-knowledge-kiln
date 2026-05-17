@@ -1,9 +1,18 @@
-"""Repositories for documents, chunks, and chunk embeddings."""
+"""Repositories for documents, chunks, and chunk embeddings.
+
+Phase 5 hybrid retrieval (slice 2): :meth:`ChunksRepository.hybrid_search`
+issues a single CTE per ADR-0009 §5 — vector arm + FTS arm rank-fused
+via Reciprocal Rank Fusion (k=60), with metadata filters pushed into
+both arms before the union. :meth:`ChunksRepository.search_by_fts` is
+the FTS-only fallback used when no embedding provider is configured.
+The SQL builders live in :mod:`._hybrid` to keep this file under the
+400-line budget.
+"""
 
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from sqlalchemy import delete, select
@@ -11,6 +20,20 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from cf_knowledge_kiln.db.models import ChunkEmbedding, Document, DocumentChunk
 from cf_knowledge_kiln.db.repositories._base import BaseRepository
+from cf_knowledge_kiln.db.repositories._hybrid import (
+    SearchRow,
+    build_fts_only_select,
+    build_hybrid_select,
+    row_to_search_row,
+    set_local_ef_search,
+)
+
+if TYPE_CHECKING:
+    # Avoid an import cycle: ``retrieval/__init__.py`` exports
+    # HybridRetriever, which imports ChunksRepository from this
+    # module. Annotations are strings (``from __future__ import
+    # annotations``); the actual build_predicates call is lazy.
+    from cf_knowledge_kiln.retrieval.types import RetrievalFilters
 
 
 class DocumentsRepository(BaseRepository):
@@ -125,6 +148,64 @@ class ChunksRepository(BaseRepository):
     async def delete(self, id: UUID) -> None:
         await self._session.execute(delete(DocumentChunk).where(DocumentChunk.id == id))
 
+    async def hybrid_search(
+        self,
+        *,
+        query_text: str,
+        query_embedding: Sequence[float],
+        dimensions: int,
+        filters: RetrievalFilters,
+        top_per_arm: int = 100,
+        final_limit: int = 20,
+        rrf_k: int = 60,
+        ef_search: int = 200,
+    ) -> Sequence[SearchRow]:
+        """Hybrid pgvector + FTS search fused via RRF in a single CTE.
+
+        Implements ADR-0009 §5. Both arms apply the same metadata
+        predicates from :func:`build_predicates`. ``SET LOCAL
+        hnsw.ef_search`` is issued so the vector arm hits the recall
+        target without leaking the setting beyond this transaction.
+        """
+        from cf_knowledge_kiln.retrieval.filters import build_predicates
+
+        await set_local_ef_search(self._session, ef_search)
+        predicates = build_predicates(filters)
+        stmt = build_hybrid_select(
+            query_text=query_text,
+            query_embedding=query_embedding,
+            dimensions=dimensions,
+            predicates=predicates,
+            top_per_arm=top_per_arm,
+            final_limit=final_limit,
+            rrf_k=rrf_k,
+        )
+        result = await self._session.execute(stmt)
+        return [row_to_search_row(row) for row in result.mappings()]
+
+    async def search_by_fts(
+        self,
+        *,
+        query_text: str,
+        filters: RetrievalFilters,
+        limit: int = 100,
+    ) -> Sequence[SearchRow]:
+        """FTS-only fallback for when no embedding provider is wired.
+
+        Same row shape as :meth:`hybrid_search`; ``score`` is
+        ``ts_rank_cd`` (unbounded but positive, so the boost
+        multipliers in retrieval/ranking apply without renormalization).
+        """
+        from cf_knowledge_kiln.retrieval.filters import build_predicates
+
+        stmt = build_fts_only_select(
+            query_text=query_text,
+            predicates=build_predicates(filters),
+            limit=limit,
+        )
+        result = await self._session.execute(stmt)
+        return [row_to_search_row(row) for row in result.mappings()]
+
 
 class EmbeddingsRepository(BaseRepository):
     async def create(
@@ -229,3 +310,11 @@ class EmbeddingsRepository(BaseRepository):
         )
         rows = (await self._session.execute(stmt)).all()
         return {row[0]: row[1] for row in rows}
+
+
+__all__ = [
+    "ChunksRepository",
+    "DocumentsRepository",
+    "EmbeddingsRepository",
+    "SearchRow",
+]

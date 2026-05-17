@@ -62,6 +62,10 @@ class Settings(BaseSettings):
     default_max_chunks: int = 8
     default_max_tokens: int = 3000
     default_status_preference: str = "active,approved"
+    # Per ADR-0009 §1 — hnsw.ef_search controls recall/latency on the
+    # vector arm. The pgvector default (40) is too low for the
+    # recall@10 target on small corpora.
+    hnsw_ef_search: int = 200
 
     # Embedding provider config (Phase 4).
     models_config_path: str = "config/models.yaml"
