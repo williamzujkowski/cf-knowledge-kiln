@@ -1,0 +1,7 @@
+{# HTMX-swappable error fragment. Rendered when the search backend
+   fails — kept lightweight so HTMX can swap it into #results without
+   wiping the page chrome. #}
+<div class="error-fragment" role="alert">
+  <span class="error-icon" aria-hidden="true">!</span>
+  <p class="error-message">{{ message }}</p>
+</div>

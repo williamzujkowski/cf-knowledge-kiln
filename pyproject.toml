@@ -29,6 +29,13 @@ dependencies = [
   "structlog>=24.4,<25.0",
   "pyyaml>=6.0,<7.0",
   "httpx>=0.27,<1.0",
+  # Phase 6 — Jinja2 server-rendered templates for the human search
+  # UI. No build step; HTMX loaded from CDN. See docs/user-journeys.md.
+  "jinja2>=3.1,<4.0",
+  # FastAPI Form() parameters require python-multipart for the
+  # form-encoded body parser. The HTMX search form posts as
+  # application/x-www-form-urlencoded.
+  "python-multipart>=0.0.20,<1.0",
 ]
 
 [project.optional-dependencies]

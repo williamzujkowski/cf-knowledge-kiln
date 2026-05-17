@@ -1,0 +1,66 @@
+{# HTMX-swappable fragment: rendered both on initial page load and as
+   the response body to POST /search. Keep self-contained — no <html>,
+   <head>, or <body>. The .results-fade wrapper carries the subtle
+   fade-in animation when HTMX swaps a new fragment in. #}
+<div class="results-fade">
+
+{% if warnings %}
+  <ul class="warnings" role="status">
+    {% for w in warnings %}
+      <li class="warning warning-{{ w.type }}">
+        <span class="warning-icon" aria-hidden="true">!</span>
+        <span class="warning-message">{{ w.message }}</span>
+      </li>
+    {% endfor %}
+  </ul>
+{% endif %}
+
+{% if results %}
+  <p class="results-count">
+    <span class="count">{{ results | length }}</span>
+    {% if results | length == 1 %}result{% else %}results{% endif %}
+    for &ldquo;{{ query }}&rdquo;.
+  </p>
+  <ol class="results-list">
+    {% for r in results %}
+      <li class="result-card status-{{ r.status }}" data-document-id="{{ r.document_id }}">
+        <span class="result-index" aria-hidden="true">{{ '%02d' % loop.index }}</span>
+        <div class="result-body">
+          <header class="result-header">
+            <h3 class="result-title">{{ r.title }}</h3>
+            <span class="status-badge status-{{ r.status }}">{{ r.status }}</span>
+          </header>
+          {% if r.heading_path %}
+            <p class="heading-path">
+              {% for part in r.heading_path %}<span>{{ part }}</span>{% if not loop.last %} <span class="sep" aria-hidden="true">›</span> {% endif %}{% endfor %}
+            </p>
+          {% endif %}
+          <p class="excerpt">{{ r.excerpt }}</p>
+          <footer class="result-footer">
+            <span class="source-line">
+              {% if r.repo and r.path %}
+                <span class="source">{{ r.repo }}/{{ r.path }}</span>
+              {% endif %}
+              {% if r.last_reviewed %}
+                <time datetime="{{ r.last_reviewed }}" class="freshness">
+                  Reviewed {{ r.last_reviewed }}
+                </time>
+              {% endif %}
+            </span>
+            <span class="score" title="Hybrid retrieval score (higher is more relevant)">
+              <span class="score-label">score</span>
+              <span class="score-value">{{ '%.3f' % r.score }}</span>
+            </span>
+          </footer>
+        </div>
+      </li>
+    {% endfor %}
+  </ol>
+{% elif query %}
+  <p class="empty-results">
+    No results for &ldquo;<span class="empty-query">{{ query }}</span>&rdquo;.
+    <span class="empty-suggestion">Try fewer or different keywords, or widen the status filters above.</span>
+  </p>
+{% endif %}
+
+</div>

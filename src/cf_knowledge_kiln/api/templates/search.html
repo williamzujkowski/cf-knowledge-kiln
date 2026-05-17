@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}Search · cf-knowledge-kiln{% endblock %}
+
+{% block content %}
+<section class="search">
+  <form
+    class="search-form"
+    hx-post="/search"
+    hx-target="#results"
+    hx-swap="innerHTML"
+    hx-indicator=".htmx-bar"
+    hx-trigger="submit, keyup changed delay:300ms from:input[name=query]">
+
+    <div class="query-row">
+      <label for="query" class="query-label">Query</label>
+      <input
+        type="search"
+        id="query"
+        name="query"
+        class="query-input"
+        placeholder="What are you looking for?"
+        autocomplete="off"
+        autofocus
+        spellcheck="false"
+        value="{{ query or '' }}">
+      <button type="submit" class="query-submit">Search</button>
+    </div>
+
+    <fieldset class="filters" aria-label="Status filters">
+      <legend class="filters-legend">Status</legend>
+      {# Hidden marker so the handler distinguishes "user unchecked all
+         status boxes" (POST with `_filters_set=1` + status=[]) from
+         "no form submitted yet" (no _filters_set field at all). #}
+      <input type="hidden" name="_filters_set" value="1">
+      <label class="pill">
+        <input type="checkbox" name="status" value="active" checked>
+        <span>Active</span>
+      </label>
+      <label class="pill">
+        <input type="checkbox" name="status" value="approved" checked>
+        <span>Approved</span>
+      </label>
+      <label class="pill">
+        <input type="checkbox" name="status" value="draft">
+        <span>Draft</span>
+      </label>
+      <label class="pill pill-warn">
+        <input type="checkbox" name="status" value="deprecated">
+        <span>Deprecated</span>
+      </label>
+    </fieldset>
+  </form>
+
+  <section id="results" class="results" aria-live="polite" aria-busy="false">
+    {% if initial_results is not none %}
+      {% include "_results.html" %}
+    {% else %}
+      <p class="empty-hint">Type a query above to search.</p>
+    {% endif %}
+  </section>
+</section>
+{% endblock %}
