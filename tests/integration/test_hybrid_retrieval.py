@@ -257,9 +257,12 @@ async def test_retriever_emits_deprecated_warning(
         filters=RetrievalFilters(),  # no status filter; deprecated may match
         max_results=5,
     )
-    deprecated_paths = {c.document_id for c in result.chunks if c.status == "deprecated"}
-    if deprecated_paths:
-        assert any(w.type == "deprecated_source" for w in result.warnings)
+    # Precondition: the deprecated doc must actually appear in the
+    # ranked output for the warning to be exercised. If the query
+    # doesn't surface it, the test would pass vacuously.
+    deprecated_chunks = [c for c in result.chunks if c.status == "deprecated"]
+    assert deprecated_chunks, "expected beta.md (deprecated) to be in top-5 results"
+    assert any(w.type == "deprecated_source" for w in result.warnings)
 
 
 async def test_retriever_emits_stale_warning_for_old_doc(
@@ -282,8 +285,13 @@ async def test_retriever_emits_stale_warning_for_old_doc(
         filters=RetrievalFilters(),
         max_results=5,
     )
-    if any(c.status == "active" and c.last_reviewed == very_old for c in result.chunks):
-        assert any(w.type == "stale_source" for w in result.warnings)
+    # Precondition: the stale doc must actually appear so the warning
+    # path is exercised — otherwise the assertion would pass vacuously.
+    stale_chunks = [
+        c for c in result.chunks if c.status == "active" and c.last_reviewed == very_old
+    ]
+    assert stale_chunks, "expected beta.md (stale) to be in top-5 results"
+    assert any(w.type == "stale_source" for w in result.warnings)
 
 
 async def test_retriever_surfaces_prompt_injection_warning(
