@@ -1,0 +1,6 @@
+{# HTMX swaps this in place of the feedback form after a successful
+   write. Compact + accessible. #}
+<div class="feedback feedback-ack" role="status">
+  <span class="fb-ack-icon" aria-hidden="true">✓</span>
+  Thanks &mdash; logged as <em>{{ signal | replace("_", " ") }}</em>.
+</div>

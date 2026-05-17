@@ -52,6 +52,13 @@
               <span class="score-value">{{ '%.3f' % r.score }}</span>
             </span>
           </footer>
+          {# Feedback widget only renders when query_id was persisted —
+             otherwise the FK in rag_feedback can't be satisfied. #}
+          {% if query_id %}
+            {% with chunk_id = r.chunk_id, query_id = query_id %}
+              {% include "_feedback_widget.html" %}
+            {% endwith %}
+          {% endif %}
         </div>
       </li>
     {% endfor %}
