@@ -13,9 +13,11 @@ than a 500.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from cf_knowledge_kiln.config import Settings, get_settings
 from cf_knowledge_kiln.db.connection import Database
@@ -37,6 +39,20 @@ def get_db(request: Request) -> Database:
         )
     assert isinstance(db, Database)
     return db
+
+
+async def get_session(
+    db: Annotated[Database, Depends(get_db)],
+) -> AsyncIterator[AsyncSession]:
+    """Yield ONE session + transaction per request (issue #74).
+
+    Both retrieval and the per-request telemetry write share this
+    session. FastAPI calls the dependency once per request; the
+    ``yield`` form ensures the transaction commits on success and
+    rolls back on a handler exception.
+    """
+    async with db.session() as session, session.begin():
+        yield session
 
 
 def get_embedding_provider(request: Request) -> EmbeddingProvider | None:
@@ -87,4 +103,5 @@ __all__ = [
     "get_embedding_provider",
     "get_hybrid_retriever",
     "get_retrieval_config",
+    "get_session",
 ]

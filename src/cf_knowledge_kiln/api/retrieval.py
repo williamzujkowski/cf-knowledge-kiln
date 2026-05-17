@@ -18,9 +18,9 @@ import logging
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from cf_knowledge_kiln.api.dependencies import get_db, get_hybrid_retriever
-from cf_knowledge_kiln.db.connection import Database
+from cf_knowledge_kiln.api.dependencies import get_hybrid_retriever, get_session
 from cf_knowledge_kiln.db.repositories import ContextPacksRepository, QueriesRepository
 from cf_knowledge_kiln.retrieval import (
     ContextPackRequest,
@@ -47,16 +47,19 @@ router = APIRouter(tags=["search"])
 async def human_search(
     body: SearchRequest,
     retriever: Annotated[HybridRetriever, Depends(get_hybrid_retriever)],
-    db: Annotated[Database, Depends(get_db)],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> SearchResponse:
     """Run a hybrid retrieval query and return ranked result cards.
 
     Persists the query into ``rag_queries`` (consumer_type='human') for
-    the Phase 9 eval harness.
+    the Phase 9 eval harness. Issue #74: retrieval + telemetry share
+    one DB session per request.
     """
     filters = body.filters or _empty_filters()
     try:
-        result = await retriever.search(body.query, filters=filters, max_results=body.max_results)
+        result = await retriever.search(
+            body.query, filters=filters, max_results=body.max_results, session=session
+        )
     except ValueError as exc:
         # Defensive: Pydantic min_length=1 catches empty already.
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
@@ -74,7 +77,7 @@ async def human_search(
         warnings=result.warnings or None,
     )
     await _log_rag_query(
-        db,
+        session,
         query=body.query,
         consumer_type="human",
         filters=filters.model_dump(exclude_none=True),
@@ -95,12 +98,13 @@ async def human_search(
 async def agent_context_pack(
     body: ContextPackRequest,
     retriever: Annotated[HybridRetriever, Depends(get_hybrid_retriever)],
-    db: Annotated[Database, Depends(get_db)],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> ContextPackResponse:
     """Build a bounded, cited context pack for an agent consumer.
 
     Persists into ``context_packs`` so an operator can audit what the
-    agent saw (and so the eval harness can replay).
+    agent saw (and so the eval harness can replay). Issue #74:
+    retrieval + telemetry share one DB session per request.
     """
     filters = body.filters or _empty_filters()
     try:
@@ -110,11 +114,12 @@ async def agent_context_pack(
             filters=filters,
             max_chunks=body.max_chunks,
             max_tokens=body.max_tokens,
+            session=session,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
-    await _log_context_pack(db, body=body, pack=pack)
+    await _log_context_pack(session, body=body, pack=pack)
     return pack
 
 
@@ -156,7 +161,7 @@ def _chunk_to_result_card(chunk: RankedChunk, ref: object | None, content: str) 
 
 
 async def _log_rag_query(
-    db: Database,
+    session: AsyncSession,
     *,
     query: str,
     consumer_type: str,
@@ -165,11 +170,16 @@ async def _log_rag_query(
 ) -> None:
     """Append a row to ``rag_queries``. Failures are logged, NOT raised.
 
-    A transient DB error during telemetry persistence must not turn a
-    successful retrieval into a 500 for the caller.
+    Writes inside the caller's session — issue #74 — so retrieval +
+    telemetry commit (or roll back) atomically.
+
+    A transient DB error during telemetry persistence must not turn
+    a successful retrieval into a 500 for the caller. We catch and
+    rollback the savepoint; the outer transaction stays alive so the
+    handler can still return its 200 response.
     """
     try:
-        async with db.session() as session, session.begin():
+        async with session.begin_nested():
             await QueriesRepository(session).create(
                 query=query,
                 consumer_type=consumer_type,
@@ -181,11 +191,11 @@ async def _log_rag_query(
 
 
 async def _log_context_pack(
-    db: Database, *, body: ContextPackRequest, pack: ContextPackResponse
+    session: AsyncSession, *, body: ContextPackRequest, pack: ContextPackResponse
 ) -> None:
     """Append a row to ``context_packs``. Failures are logged, NOT raised."""
     try:
-        async with db.session() as session, session.begin():
+        async with session.begin_nested():
             await ContextPacksRepository(session).create(
                 query=body.query,
                 task=body.task,

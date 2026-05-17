@@ -18,10 +18,13 @@ handlers calling these two methods.
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Protocol
 from uuid import UUID
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from cf_knowledge_kiln.db.connection import Database
 from cf_knowledge_kiln.db.repositories._hybrid import SearchRow
@@ -122,14 +125,20 @@ class HybridRetriever:
         *,
         filters: RetrievalFilters,
         max_results: int = 10,
+        session: AsyncSession | None = None,
     ) -> SearchResult:
         """Run a query, return ranked chunks + warnings.
 
         Raises ``ValueError`` on empty/whitespace queries — the API
         layer (slice 4) translates this to a 400.
+
+        When ``session`` is provided, the retrieval CTE runs on it (no
+        new connection from the pool). Issue #74 — the API handler
+        passes its own session so the same transaction can also write
+        telemetry, halving the per-request connection count.
         """
         _require_nonempty(query)
-        rows = await self._fetch_candidates(query, filters)
+        rows = await self._fetch_candidates(query, filters, session=session)
         chunks = [_row_to_ranked_chunk(r) for r in rows]
         boosted = apply_boosts(chunks, config=self._config, today=date.today())
         boosted.sort(key=lambda c: c.score, reverse=True)
@@ -153,6 +162,7 @@ class HybridRetriever:
         filters: RetrievalFilters,
         max_chunks: int = 8,
         max_tokens: int = 3000,
+        session: AsyncSession | None = None,
     ) -> ContextPackResponse:
         """Build a bounded, cited :class:`ContextPackResponse` for an agent.
 
@@ -164,6 +174,10 @@ class HybridRetriever:
           :func:`assemble_context_pack` — token budgeting + the
           standard untrusted-content notice + canonical
           ``requires_human_review`` decision
+
+        ``session`` parameter behaves identically to :meth:`search` —
+        the API handler passes its own session so retrieval +
+        telemetry share one transaction (issue #74).
         """
         # Lazy import — see TYPE_CHECKING block at top for why.
         from cf_knowledge_kiln.agent.serializers import (
@@ -174,7 +188,7 @@ class HybridRetriever:
         _require_nonempty(query)
         if not task or not task.strip():
             raise ValueError("task must be a non-empty string")
-        rows = await self._fetch_candidates(query, filters)
+        rows = await self._fetch_candidates(query, filters, session=session)
         chunks = [_row_to_ranked_chunk(r) for r in rows]
         boosted = apply_boosts(chunks, config=self._config, today=date.today())
         boosted.sort(key=lambda c: c.score, reverse=True)
@@ -197,26 +211,57 @@ class HybridRetriever:
             inputs, task=task, query=query, max_chunks=max_chunks, max_tokens=max_tokens
         )
 
-    async def _fetch_candidates(self, query: str, filters: RetrievalFilters) -> list[SearchRow]:
+    async def _fetch_candidates(
+        self,
+        query: str,
+        filters: RetrievalFilters,
+        *,
+        session: AsyncSession | None,
+    ) -> list[SearchRow]:
         """Fan out to hybrid CTE or FTS-only fallback, depending on provider.
 
-        Opens a transaction so ``SET LOCAL hnsw.ef_search`` is scoped
-        correctly. The repo method handles the SET internally.
+        Uses the caller's ``session`` when provided (the API hot path
+        — issue #74). Otherwise opens a fresh one + transaction. The
+        repo method issues ``SET LOCAL hnsw.ef_search`` inside the
+        transaction so the setting doesn't leak past it.
         """
-        async with self._db.session() as session, session.begin():
-            repo = ChunksRepository(session)
-            if self._provider is None:
-                rows = await repo.search_by_fts(query_text=query, filters=filters)
-                return list(rows)
-            embedding = (await self._provider.embed([query]))[0]
-            rows = await repo.hybrid_search(
-                query_text=query,
-                query_embedding=embedding,
-                dimensions=self._provider.dimensions,
-                filters=filters,
-                ef_search=self._ef_search,
-            )
+        async with self._session_in_txn(session) as txn_session:
+            return await self._run_query(txn_session, query, filters)
+
+    @asynccontextmanager
+    async def _session_in_txn(
+        self, session: AsyncSession | None
+    ) -> Any:  # AsyncIterator[AsyncSession]
+        """Yield a session inside a transaction.
+
+        * Caller-supplied session: assume they own the lifecycle and
+          have already started (or will start) a transaction. Yield
+          as-is.
+        * No session: open one via the pool and start a transaction.
+        """
+        if session is not None:
+            # Caller owns the session + transaction (e.g. API handler).
+            yield session
+            return
+        async with self._db.session() as fresh, fresh.begin():
+            yield fresh
+
+    async def _run_query(
+        self, session: AsyncSession, query: str, filters: RetrievalFilters
+    ) -> list[SearchRow]:
+        repo = ChunksRepository(session)
+        if self._provider is None:
+            rows = await repo.search_by_fts(query_text=query, filters=filters)
             return list(rows)
+        embedding = (await self._provider.embed([query]))[0]
+        rows = await repo.hybrid_search(
+            query_text=query,
+            query_embedding=embedding,
+            dimensions=self._provider.dimensions,
+            filters=filters,
+            ef_search=self._ef_search,
+        )
+        return list(rows)
 
 
 def _row_to_ranked_chunk(row: SearchRow) -> RankedChunk:
