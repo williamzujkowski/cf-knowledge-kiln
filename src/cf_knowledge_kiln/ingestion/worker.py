@@ -95,24 +95,49 @@ class Worker:
         logger.info("worker shutdown complete")
 
     async def _recover_stale_running(self) -> None:
-        """Requeue any `running` rows older than the recovery window.
+        """Reconcile any `running` rows left over from a crashed worker.
 
-        A clean shutdown finishes its current job first. A hard kill
-        leaves rows in `running`. On startup we treat any `running` row
-        older than ``ingest_recovery_window_seconds`` as orphaned and
-        push it back to `queued` so this worker (or a peer) can pick it
-        up.
+        Three possibilities for each row:
+
+        1. ``result_run_id`` is set AND the referenced ``ingestion_runs``
+           row is ``succeeded`` / ``partial`` → the work is durably
+           persisted; the crash happened between the run-update commit
+           and the job-update commit. Mark the job ``succeeded``
+           instead of redoing work (issue #47).
+        2. ``result_run_id`` is set but the run is still ``running`` or
+           ``failed`` → the work didn't finish; requeue.
+        3. ``result_run_id`` is unset → never got past run_source's
+           opening transaction; requeue.
+
+        A clean shutdown finishes its current job first; this sweep
+        only ever sees rows from hard kills (SIGKILL, OOM, container
+        eviction).
         """
-        recovered = 0
+        from cf_knowledge_kiln.db.models import IngestionRun
+
+        recovered_marked_done = 0
+        recovered_requeued = 0
         async with self._db.session() as session:
             jobs = IngestionJobsRepository(session)
             stale = await jobs.list(status="running")
             for job in stale:
+                if job.result_run_id is not None:
+                    run = await session.get(IngestionRun, job.result_run_id)
+                    if run is not None and run.status in ("succeeded", "partial"):
+                        await jobs.mark_done(job.id, result_run_id=job.result_run_id)
+                        recovered_marked_done += 1
+                        continue
                 await jobs.requeue(job.id)
-                recovered += 1
+                recovered_requeued += 1
             await session.commit()
-        if recovered:
-            logger.warning("requeued %d orphaned running job(s) at startup", recovered)
+        if recovered_marked_done:
+            logger.warning(
+                "reconciled %d orphaned job(s) to succeeded "
+                "(work was durably persisted before crash)",
+                recovered_marked_done,
+            )
+        if recovered_requeued:
+            logger.warning("requeued %d orphaned running job(s) at startup", recovered_requeued)
 
     async def _tick(self) -> bool:
         """One poll cycle. Returns True iff a job was processed.
@@ -150,6 +175,13 @@ class Worker:
         if not isinstance(source_name, str):
             raise ValueError(f"job {job_id} payload missing 'source_name' string; got {payload!r}")
         source = self._allowlist.get(source_name)  # raises SourceNotAllowedError
+        # Single session for the whole job (#47). run_source commits
+        # internally on success / cap-violation; mark_done runs in a
+        # follow-up transaction on the same session + connection. This
+        # halves the per-job pool checkouts vs the old two-session
+        # design and lets us link mark_done to the run_id for the
+        # recovery sweep to recognize crashes that happened AFTER
+        # work was durably persisted.
         async with self._db.session() as session:
             summary = await run_source(
                 session,
@@ -158,9 +190,7 @@ class Worker:
                 embedding_provider=self._embedding_provider,
                 prompt_injection_phrases=self._prompt_injection_phrases,
             )
-            await session.commit()
-        async with self._db.session() as session:
-            await IngestionJobsRepository(session).mark_done(job_id)
+            await IngestionJobsRepository(session).mark_done(job_id, result_run_id=summary.run_id)
             await session.commit()
         logger.info(
             "job %s done: %d indexed, %d skipped, %d chunks created",

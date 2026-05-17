@@ -191,12 +191,14 @@ class TestRecoverStaleRunningUsesRepo:
     async def test_stale_rows_get_requeued_one_by_one(
         self, empty_allowlist: SourceAllowlist, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """Rows without a result_run_id are requeued (work didn't finish)."""
         fake_session = _FakeAsyncContext()
         fake_db = _SingleSessionDatabase(fake_session)
         stale_jobs = [_StubJob("a"), _StubJob("b"), _StubJob("c")]
         fake_repo = AsyncMock()
         fake_repo.list = AsyncMock(return_value=stale_jobs)
         fake_repo.requeue = AsyncMock()
+        fake_repo.mark_done = AsyncMock()
         monkeypatch.setattr(worker_mod, "IngestionJobsRepository", lambda _session: fake_repo)
         worker = Worker(
             db=fake_db,  # type: ignore[arg-type]
@@ -206,11 +208,73 @@ class TestRecoverStaleRunningUsesRepo:
         await worker._recover_stale_running()
         assert fake_repo.requeue.await_count == 3
         assert [c.args[0] for c in fake_repo.requeue.await_args_list] == ["a", "b", "c"]
+        fake_repo.mark_done.assert_not_called()
+
+    async def test_stale_row_with_succeeded_run_gets_marked_done_not_requeued(
+        self, empty_allowlist: SourceAllowlist, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """#47: a crash AFTER run_source committed but BEFORE mark_done
+        leaves a `running` job whose result_run_id points at a succeeded
+        run. The recovery sweep recognizes this and marks the job done
+        instead of re-doing the work.
+        """
+        from uuid import uuid4
+
+        run_id = uuid4()
+        # Session needs to answer .get(IngestionRun, run_id) with a
+        # succeeded run.
+        fake_session = _FakeAsyncContext()
+        fake_run = type("FakeRun", (), {"status": "succeeded"})()
+        fake_session.get = AsyncMock(return_value=fake_run)  # type: ignore[attr-defined]
+        fake_db = _SingleSessionDatabase(fake_session)
+        stale_jobs = [_StubJob("a", result_run_id=run_id)]
+        fake_repo = AsyncMock()
+        fake_repo.list = AsyncMock(return_value=stale_jobs)
+        fake_repo.requeue = AsyncMock()
+        fake_repo.mark_done = AsyncMock()
+        monkeypatch.setattr(worker_mod, "IngestionJobsRepository", lambda _session: fake_repo)
+        worker = Worker(
+            db=fake_db,  # type: ignore[arg-type]
+            allowlist=empty_allowlist,
+            settings=_settings(),
+        )
+        await worker._recover_stale_running()
+        fake_repo.requeue.assert_not_called()
+        fake_repo.mark_done.assert_awaited_once_with("a", result_run_id=run_id)
+
+    async def test_stale_row_with_failed_run_gets_requeued(
+        self, empty_allowlist: SourceAllowlist, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A run that's still `running` / `failed` → requeue (work didn't durably persist)."""
+        from uuid import uuid4
+
+        run_id = uuid4()
+        fake_session = _FakeAsyncContext()
+        fake_run = type("FakeRun", (), {"status": "failed"})()
+        fake_session.get = AsyncMock(return_value=fake_run)  # type: ignore[attr-defined]
+        fake_db = _SingleSessionDatabase(fake_session)
+        stale_jobs = [_StubJob("a", result_run_id=run_id)]
+        fake_repo = AsyncMock()
+        fake_repo.list = AsyncMock(return_value=stale_jobs)
+        fake_repo.requeue = AsyncMock()
+        fake_repo.mark_done = AsyncMock()
+        monkeypatch.setattr(worker_mod, "IngestionJobsRepository", lambda _session: fake_repo)
+        worker = Worker(
+            db=fake_db,  # type: ignore[arg-type]
+            allowlist=empty_allowlist,
+            settings=_settings(),
+        )
+        await worker._recover_stale_running()
+        fake_repo.requeue.assert_awaited_once_with("a")
+        fake_repo.mark_done.assert_not_called()
 
 
 class _StubJob:
-    def __init__(self, id: str) -> None:
+    """Minimal IngestionJob stand-in for the recovery-sweep tests."""
+
+    def __init__(self, id: str, *, result_run_id: object | None = None) -> None:
         self.id = id
+        self.result_run_id = result_run_id
 
 
 class _FakeAsyncContext:
