@@ -1,7 +1,7 @@
 # Handoff notes
 
 **As of:** 2026-05-17
-**Status:** Phase 0–4 complete + all Phase 5 prep merged + Phase 5 slice 1 (pure-logic retrieval primitives) merged. Slice 2 (DB-touching `HybridRetriever` engine) is the immediate next chunk. CI green on `main` (258 unit + 48 integration tests).
+**Status:** Phase 0–5 complete. `/v1/search` and `/v1/agent/context-pack` are live, cited, and persisted to telemetry tables. CI green on `main` (298 unit + 72 integration tests).
 
 This file is the "where we are, what's next, what's been decided" briefing. For *how* to work in the repo, read [AGENTS.md](./AGENTS.md). For *what* the project is, read [README.md](./README.md). For *the plan*, read [plans/cf-rag-plan.md](./plans/cf-rag-plan.md).
 
@@ -11,19 +11,24 @@ This file is the "where we are, what's next, what's been decided" briefing. For 
 
 cf-knowledge-kiln is a Cloud Foundry RAG knowledge app — a `cf push`'d Python/FastAPI app that binds to a Postgres + pgvector service and serves cited retrieval to humans (search UI) and AI agents (bounded context packs). Architecture is hybrid retrieval (pgvector similarity + Postgres FTS + metadata ranking) per [ADR-0002](./docs/adr/0002-postgres-pgvector.md) (reaffirmed by [ADR-0008](./docs/adr/0008-pgvector-mvp-critical.md)), with ranking + index decisions captured in [ADR-0009](./docs/adr/0009-hybrid-retrieval.md).
 
-Phase 4 (embeddings) landed (#43) and was followed by eight prep PRs that merged on 2026-05-17 (#67, #60, #61, #62, #63, #64, #65, #66): symlink-traversal guard + Makefile/README fixes + Worker tests (#67), Phase 5 design doc + ADR-0009 (#60), shared embedding-provider factory used by both worker and API lifespan (#61), ingest-time prompt-injection scanner stamping `chunk.metadata.has_prompt_injection` (#62), `/readyz` 503-on-degraded for CF LB compatibility (#63), Phase 5 contract surface as 501 stubs + OpenAPI drift test (#64), `redact_dsn` helper for safe DB-URL logging (#65), and integration coverage for the `IngestionJobsRepository` mutation methods (#66).
+**Phase 5 shipped in four slices on 2026-05-17:**
 
-**Slice 1 (PR #69, commit `ff65268`) just merged** — pure-logic retrieval primitives in `src/cf_knowledge_kiln/retrieval/`: `types.py` (Pydantic models matching openapi.yaml), `config.py` (`RetrievalConfig` from `config/security.yaml`), `filters.py` (`build_predicates` → SQLAlchemy WHERE fragments), `ranking.py` (`rrf_fuse`, `apply_boosts`, warning emitters, `detect_conflicts`, `requires_human_review`). 67 unit tests; no DB, no HTTP.
+- **Slice 1** (PR [#69](https://github.com/williamzujkowski/cf-knowledge-kiln/pull/69), `ff65268`) — pure-logic retrieval primitives under `src/cf_knowledge_kiln/retrieval/`: `types.py`, `config.py`, `filters.py`, `ranking.py`. 67 unit tests; no DB, no HTTP.
+- **Slice 2** (PR [#71](https://github.com/williamzujkowski/cf-knowledge-kiln/pull/71), `dc44c9d`) — `ChunksRepository.hybrid_search` + `search_by_fts` (single CTE per ADR-0009 §5, RRF k=60, vector + FTS arms with filter pushdown). `HybridRetriever.search()` engine. `KILN_HNSW_EF_SEARCH` setting (default 200). 10 new integration tests; HNSW index usage verified via live EXPLAIN ANALYZE.
+- **Slice 3** (PR [#72](https://github.com/williamzujkowski/cf-knowledge-kiln/pull/72), `9e2b7ad`) — `HybridRetriever.context_pack()` + new `src/cf_knowledge_kiln/agent/serializers.py` (token budgeting via tiktoken, `UNTRUSTED_CONTENT_NOTICE` preamble, `derive_confidence`, `assemble_context_pack`). Pydantic models for `ContextPackRequest/Response`, `EvidenceChunk`, `RelatedSource`, `TokenBudget`. Direct Pydantic↔hand-spec drift parametrize cases.
+- **Slice 4** (PR [#73](https://github.com/williamzujkowski/cf-knowledge-kiln/pull/73), `e6b07bc`) — wired `POST /v1/search` → `SearchResponse` and `POST /v1/agent/context-pack` → `ContextPackResponse`. New `src/cf_knowledge_kiln/api/dependencies.py` for FastAPI `Depends`-able providers (`get_db`, `get_embedding_provider`, `get_retrieval_config`, `get_hybrid_retriever`). Each handler appends a telemetry row to `rag_queries` / `context_packs`. `PHASE_5_ONLY_SCHEMAS` tolerance set is empty now — drift test enforces strict matching for all Phase-5 schemas. Reviewer-caught: telemetry now wrapped in try/except so logging failures don't cascade to 500; excerpt now derived from real chunk content via `SearchResult.chunk_text` (was always empty before).
 
-Next concrete chunk of work: **Phase 5 slice 2 — the DB-touching `HybridRetriever` engine.** Specifically:
+Bonus from the slice 3 stack: **issue [#70](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/70) closed** — pre-commit ruff bumped to v0.15.13 to match CI's pyproject pin. No more local/CI format drift.
 
-1. **`ChunksRepository.hybrid_search(query_text, query_embedding, dimensions, filters, top_per_arm=100, final_limit=20, rrf_k=60)`** in `src/cf_knowledge_kiln/db/repositories/documents.py`. Single SQL round-trip per ADR-0009 §5 — the CTE pattern is already sketched in the ADR. The repo returns rows shaped to construct `RankedChunk` from `retrieval.ranking`. Also add `search_by_fts(query_text, filters, limit=100)` for the no-embeddings fallback (used when no embedding provider is configured).
-2. **`HybridRetriever` class** in new file `src/cf_knowledge_kiln/retrieval/engine.py`. Takes `Database`, `EmbeddingProvider`, `RetrievalConfig`. Exposes one method for slice 2: `search(query, *, filters, max_results=10) -> list[RankedChunk]`. Flow: embed the query → call `hybrid_search` → convert rows to `RankedChunk` → `apply_boosts` → sort → take top N → emit warnings (stale + deprecated + prompt_injection + weak_evidence) → return.
-3. **Integration tests** in `tests/integration/test_hybrid_retrieval.py`. Seed a small corpus (fixture corpus from existing pipeline tests works — re-use `_CountingMockProvider`). Assert ranking properties: matching content scores higher, status pushdown removes deprecated docs from `filters.status=["active"]`, freshness boost orders fresh > stale at equal RRF.
+**Next concrete chunk of work (in priority order):**
 
-After slice 2, slice 3 is `context_pack()` + agent serializers + token budgeting; slice 4 replaces the 501 stubs in `src/cf_knowledge_kiln/api/retrieval.py` with real handlers. The OpenAPI drift test will keep the contract honest as new schemas land.
+1. **Issue [#74](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/74)** — collapse `/v1/search` and `/v1/agent/context-pack` to 1 DB session per request (currently each opens 2: retrieval + telemetry). The cleanest fix is to pass the handler's session down into the engine + telemetry writers. The independent reviewer flagged this as HIGH on the slice 4 PR; deferred so slice 4 could land. Small refactor (≤200 lines) — should be one PR. **Recommended starting point** because it's a follow-up to just-merged work, the constraint is visible, and the user already authorized autonomous merging.
+2. **Phase 6** (epic [#5](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/5)) — Human search UX (HTMX-on-FastAPI baseline). Child issues: [#23](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/23) UI scaffold, [#24](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/24) result-card component, [#25](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/25) feedback writes to `rag_feedback`. Meaningful pivot to UI work — new templating choice (Jinja vs alternative), HTMX dep, browser testing. Worth a fresh session to plan and may want user input on UI choices.
+3. **Phase 7** ([#6](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/6)) — CF packaging polish + HTTP source ingestion with SSRF guard.
+4. **Phase 8** ([#7](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/7)) — auth middleware (the `/v1/*` endpoints are currently unguarded; this is deferred-not-bug per the plan).
+5. **Phase 9** ([#8](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/8)) — QA harness + docs polish, including [#68](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/68) end-to-end eval harness.
 
-The CF deploy gate still depends on [bosh-pgvector-release#3](https://github.com/williamzujkowski/bosh-pgvector-release/issues/3) (operator runbook).
+The CF deploy gate still depends on [bosh-pgvector-release#3](https://github.com/williamzujkowski/bosh-pgvector-release/issues/3) (operator runbook). Independent of the Phase 6+ work; can be tackled in parallel.
 
 ---
 
@@ -49,7 +54,7 @@ Local dev and CI sidestep all of this with `docker run pgvector/pgvector:pg16`.
 
 ---
 
-## What's done (Phase 0 + Phase 1 + Phase 2 + Phase 3 + Phase 4 + Phase 5 prep + Phase 5 slice 1)
+## What's done (Phases 0–5 complete)
 
 ### Phase 0 — Discovery
 
@@ -123,79 +128,73 @@ Pure-logic retrieval primitives. No DB, no HTTP, no embedding provider. All unde
 - **`config.py`** — `RetrievalConfig` + `load_retrieval_config(path)` reading `retrieval.status_weights` + `freshness.stale_after_days` from `config/security.yaml`. Missing file → defaults + warning; malformed YAML or out-of-range weights → fatal `RetrievalConfigError`. `field_validator` on `status_weights` enforces `0 < weight <= 1.0` (zero rejected because that would silently zero-out a status — operator should use a tiny + number or filter at query time).
 - **`filters.py`** — `build_predicates(filters) -> list[ColumnElement[bool]]`. Per-field `IN (…)` for status/doc_type/repo/owner/system/authority/sensitivity; `LIKE 'prefix%' ESCAPE …` for `path_prefix` (autoescape protects against user wildcards); JSONB `?|` "exists any" for tags + control_id; `>=` predicate for `last_reviewed_after`. Empty filter returns `[]` which is a valid no-op.
 - **`ranking.py`** — pure functions: `rrf_fuse(arms, k=60)` (Reciprocal Rank Fusion); `apply_boosts(chunks, *, config, today)` (status × freshness multiplier, linear decay past `stale_after_days` with a 0.3 floor at 2× the window); `stale_warnings` / `deprecated_warnings` / `prompt_injection_warnings` / `weak_evidence_warning` emitters, each de-duping per `document_id`; `detect_conflicts(chunks)` (syntactic — same `heading_path` + ≥2 distinct active docs); `requires_human_review(evidence, warnings, conflicts)` — single canonical decision function returning True iff any of: conflict present, empty evidence, all-deprecated, all-draft, prompt_injection/sensitive_content warning, or top score < 0.5.
-- **`__init__.py`** — re-exports the public surface so callers can do `from cf_knowledge_kiln.retrieval import HybridRetriever, ...` (slice 2 adds `HybridRetriever`).
-- **Tests** — 67 new unit tests across `tests/unit/test_retrieval_{types,config,filters,ranking}.py`. Integration suite still passes (no production code in other modules changed). Total `make verify`: 258 unit + 48 integration.
+- **`__init__.py`** — re-exports the public surface so callers can do `from cf_knowledge_kiln.retrieval import HybridRetriever, ...`.
+- **Tests** — 67 new unit tests across `tests/unit/test_retrieval_{types,config,filters,ranking}.py`.
+
+### Phase 5 slice 2 (PR #71, commit `dc44c9d`, merged 2026-05-17)
+
+`HybridRetriever.search()` engine + the single-CTE SQL backing it.
+
+- **`db/repositories/_hybrid.py`** (new) — SQL builders for the CTE pattern: `build_hybrid_select` (vector arm via `cast(embedding, Vector(N)).op('<=>')(...)` to honor the partial HNSW index, FTS arm via `func.ts_rank_cd(func.to_tsvector(...), func.plainto_tsquery(...))`, RRF fusion via `SUM(1.0 / (k + rnk))` over UNION ALL); `build_fts_only_select`; `SearchRow` dataclass; `set_local_ef_search`; `row_to_search_row`.
+- **`db/repositories/documents.py`** — `ChunksRepository.hybrid_search` and `search_by_fts` methods, each lazy-importing `build_predicates` to break the retrieval↔db cycle.
+- **`retrieval/engine.py`** (new) — `HybridRetriever` + `SearchResult` dataclass. `search()` flow: embed → CTE → `apply_boosts` → sort → trim → emit warnings → return.
+- **`KILN_HNSW_EF_SEARCH`** setting (default 200) wired into engine via `ef_search=settings.hnsw_ef_search`.
+- **Tests** — 10 new integration tests in `tests/integration/test_hybrid_retrieval.py`. **HNSW index usage verified** via live `EXPLAIN ANALYZE` in `docker exec kiln-pg psql ...` — both `embedding::vector(768)` and `CAST(embedding AS VECTOR(768))` produce `Index Scan using ix_chunk_embeddings_hnsw_768`.
+
+### Phase 5 slice 3 (PR #72, commit `9e2b7ad`, merged 2026-05-17)
+
+`HybridRetriever.context_pack()` + agent-shape serialization.
+
+- **`retrieval/types.py`** — added Pydantic models for `ContextPackRequest`, `ContextPackResponse`, `EvidenceChunk`, `RelatedSource`, `TokenBudget`, plus the `Confidence` and `Relationship` Literals. All `extra="forbid"`.
+- **`src/cf_knowledge_kiln/agent/serializers.py`** (new): `UNTRUSTED_CONTENT_NOTICE` constant, `DocumentRef` dataclass, `SerializerInputs` bundle dataclass, `trim_evidence_to_budget` (tiktoken-counted prefix; always keeps ≥1 chunk so empty packs never come back for a clear best match), `derive_confidence` (heuristic high/medium/low/none), `assemble_context_pack` (composes the full response, always sets the notice, calls `requires_human_review`).
+- **`HybridRetriever.context_pack`** — wires the engine to the serializer. Calls `detect_conflicts` and surfaces results both as structured `Conflict` entries AND `conflicting_sources` warnings (the structured list is canonical for `requires_human_review` per `ranking.py`).
+- **Lazy imports** in `engine.context_pack` + `_document_refs_from_rows` break the retrieval↔agent cycle.
+- **Drift test tightening** — new `TestPydanticModelsMatchHandSpec` parametrize-checks each Pydantic model's required-field + property-name sets against `openapi.yaml` directly via `model_json_schema()`. Catches drift even when the model isn't yet wired to a route.
+- **Hand-spec fix** — `EvidenceChunk.source_url` dropped from required (real ingested docs often have no URL).
+- **Bonus**: **issue #70 closed** by bumping pre-commit ruff to v0.15.13 (CI uses pyproject's `>=0.7,<1.0`, which installs v0.15.x). The two were drifting; aligned now.
+- **Tests** — +27 unit serializer + 17 unit type/drift + 7 integration `context_pack`.
+
+### Phase 5 slice 4 (PR #73, commit `e6b07bc`, merged 2026-05-17)
+
+The 501 stubs are gone. `/v1/search` and `/v1/agent/context-pack` are live, cited, and persisted.
+
+- **`api/dependencies.py`** (new) — FastAPI `Depends`-able providers: `get_db` (503 if unbound), `get_embedding_provider`, `get_retrieval_config`, `get_hybrid_retriever`.
+- **`api/retrieval.py`** — `POST /v1/search` → `SearchResponse`, `POST /v1/agent/context-pack` → `ContextPackResponse`. Each handler appends a row to `rag_queries` / `context_packs` via the corresponding repository. **Telemetry writes wrapped in `try/except logger.exception`** so a transient DB failure during logging doesn't turn a successful retrieval into a 500 (reviewer-caught HIGH).
+- **`retrieval/types.py`** — added `SearchRequest`, `SearchResponse`, `ResultCard` Pydantic models. `ResultCard.source_url` optional; `ResultCard.score` no longer capped at 1 (post-boost RRF / FTS-only `ts_rank_cd` can exceed it).
+- **`retrieval/engine.SearchResult`** now also carries `document_refs` (UUID → DocumentRef) AND `chunk_text` (UUID → raw content). The handler uses these for ResultCard's title/repo/path/etc. and for the `excerpt` field (previously the excerpt was always empty because `chunk.chunk_metadata` only carries ingest-time prompt-injection flags — reviewer-caught MEDIUM).
+- **Hand-spec** — dropped the dummy `501` responses from `/v1/search` + `/v1/agent/context-pack`; relaxed `ResultCard.score.maximum`; updated descriptions.
+- **Drift test** — `PHASE_5_ONLY_SCHEMAS` is now empty (strict matching applies uniformly). `_enum_or_const` updated to resolve Pydantic's `Optional[Enum]` shape (`anyOf: [{$ref}, {type: null}]`) so optional enum fields don't false-negative against the hand-spec's flat enum form.
+- **Deleted** `tests/unit/test_retrieval_stubs.py` (501-stub assertions no longer match runtime).
+- **Tests** — +7 integration in `tests/integration/test_api_routes.py`. Smoke test asserts real title (not the `"(unknown)"` defensive fallback) and non-empty excerpt — these prove `document_refs` + `chunk_text` actually plumb data through.
 
 ---
 
 ## What's next (in order)
 
-### Immediate: Phase 5 slice 2 — `HybridRetriever` engine + CTE SQL
+### Immediate: issue [#74](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/74) — collapse to 1 DB session per request
 
-**Goal**: end-to-end retrieval that takes a query string, returns a list of `RankedChunk` ordered by RRF + boosts, with warnings emitted. No HTTP yet (that's slice 4).
+Reviewer-flagged on slice 4. Each `/v1/search` and `/v1/agent/context-pack` request opens **two** sessions: one inside `HybridRetriever._fetch_candidates` for the hybrid CTE (transactional for `SET LOCAL hnsw.ef_search`) and a second inside `_log_rag_query` / `_log_context_pack` for telemetry. With `KILN_PG_POOL_SIZE=5` + `KILN_PG_POOL_MAX_OVERFLOW=10` (15 connections total), the API ceilings at ~8 concurrent requests.
 
-**Concrete file plan:**
+**Recommended fix (option B in #74):** Have the API handler open one session, pass it as an optional parameter to `HybridRetriever.search` / `.context_pack`, and have the retriever use it when provided (falling back to `db.session()` only when called outside an HTTP context). Telemetry repos take the same session. The `SET LOCAL` still scopes correctly because both retrieval and logging live inside the same transaction.
 
-1. **Extend `src/cf_knowledge_kiln/db/repositories/documents.py`** — add two methods on `ChunksRepository`:
-   - `hybrid_search(query_text, query_embedding, dimensions, filters, top_per_arm=100, final_limit=20, rrf_k=60) -> Sequence[Row]`. One SQL statement following the CTE in ADR-0009 §5. Each row carries `chunk_id`, `document_id`, `content`, `heading_path`, `status`, `authority`, `owner`, `last_reviewed`, `commit_sha`, `repo`, `path`, `title`, `rrf_score`, and `metadata` (the chunk's JSONB — needed for `has_prompt_injection` lookup). Use `cf_knowledge_kiln.retrieval.filters.build_predicates(filters)` to compose the WHERE clauses, AND'd into **both** the vector arm and the FTS arm before the union.
-   - `search_by_fts(query_text, filters, limit=100) -> Sequence[Row]`. FTS-only fallback for when no embedding provider is configured (`/v1/search` should still work, just less semantic). Same row shape minus the vector signal.
-2. **New file `src/cf_knowledge_kiln/retrieval/engine.py`** — `HybridRetriever` class:
+**File plan:**
 
-   ```python
-   class HybridRetriever:
-       def __init__(self, db: Database, embedding_provider: EmbeddingProvider | None, config: RetrievalConfig) -> None: ...
-       async def search(self, query: str, *, filters: RetrievalFilters, max_results: int = 10) -> SearchResult: ...
-   ```
+1. Extend `HybridRetriever.search` + `context_pack` signatures with `session: AsyncSession | None = None`. When None, open one as today.
+2. Refactor `_fetch_candidates` to use the provided session if any, else open one.
+3. API handlers in `api/retrieval.py` open one session via a new `Depends(get_session)` dep (or via `async with db.session() as session, session.begin():` at the top of each handler) and pass it through both engine + telemetry.
+4. Add an integration test that asserts the connection count under load (or at least verifies a single transaction by mocking `db.session()` and counting calls).
 
-   `SearchResult` is a small dataclass (chunks: list[RankedChunk], warnings: list[Warning]). Internal flow:
-   - Empty/whitespace query → raise `ValueError` (API layer turns into 400).
-   - If `embedding_provider` is None: call `search_by_fts`; build `RankedChunk` per row with score = ts_rank_cd.
-   - Else: `embedding = (await provider.embed([query]))[0]`; call `hybrid_search`; build `RankedChunk` with score = RRF.
-   - `apply_boosts(chunks, config=config, today=date.today())` → sort by score desc → take `max_results`.
-   - Emit `stale_warnings` + `deprecated_warnings` + `prompt_injection_warnings` + `weak_evidence_warning`. Concatenate.
-   - Return `SearchResult(chunks=…, warnings=…)`.
-3. **Update `src/cf_knowledge_kiln/retrieval/__init__.py`** — export `HybridRetriever`, `SearchResult`.
-4. **Integration tests in `tests/integration/test_hybrid_retrieval.py`** — seed corpus via existing `_CountingMockProvider` from `tests/integration/test_ingestion_pipeline.py` (or refactor that to a fixture module if reusing is awkward; lean toward duplicating fixtures over expanding shared scope). Suggested assertions:
-   - **Smoke**: a query matching one chunk returns it; result has the right `chunk_id` and `document_id`.
-   - **Status pushdown**: query with `filters=RetrievalFilters(status=["active"])` excludes a deprecated doc that would otherwise match.
-   - **Status boost**: equal RRF, the active doc beats the deprecated.
-   - **Freshness boost**: equal RRF, the fresh doc beats the stale.
-   - **FTS-only fallback**: pass `embedding_provider=None`, verify ranking still works on a keyword match.
-   - **Prompt-injection warning**: ingest a chunk with a flagged phrase (re-use `feat/ingest-prompt-injection-scan` test fixture pattern); query that surfaces it; assert `prompt_injection_pattern` warning + correct `source_id`.
-   - **Conflict detection**: ingest two docs with chunks under the same `heading_path`; query; assert one `conflicting_sources` warning. **Note**: `detect_conflicts` lives in `ranking.py` but is NOT called by `HybridRetriever.search` in slice 2 — it's for the context-pack path (slice 3). If a slice-2 test wants to exercise it, call it directly on the chunks the engine returned.
+This is a follow-up to just-merged work; small refactor (≤200 lines), one PR. User pre-authorized autonomous merging.
 
-**Pitfalls to watch:**
+### Then: Phase 6 — Human search UX (epic [#5](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/5))
 
-- The vector index is partial on `dimensions = 768`. When the active embedding model is 768-dim (default), no special handling needed. If a different dimension is registered later, the operator must create a partial HNSW index for that dimension (ADR-0009 §6).
-- The CTE needs `plainto_tsquery('english', $q)` for the FTS arm. Don't construct it with string interpolation — bind it as a parameter so query strings can contain anything safely.
-- `chunks_table.c.metadata` is the SQL column name for the renamed-in-ORM `extra` field. Pipeline writes `has_prompt_injection` there; retrieval should `SELECT metadata->>'has_prompt_injection'` (the boolean) into a row column and pass it into `RankedChunk(has_prompt_injection=...)`.
-- `Document.title` exists on the documents table but `RankedChunk` doesn't carry it. Slice 2 can add a `title: str | None = None` field to `RankedChunk` (forward-compat), or carry titles in a parallel structure — small design call.
-- Set `SET LOCAL hnsw.ef_search = 200` at the start of the transaction (ADR-0009 §1). Expose via `KILN_HNSW_EF_SEARCH` env var in `Settings`.
+HTMX-on-FastAPI baseline. Child issues:
 
-**Branch + PR pattern:**
+- **[#23](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/23)** — Search box, filter panel, result list, document preview. Server-rendered Jinja templates + HTMX for partial updates. No build step. Acceptance: user can search a fixture corpus and see cited results; filters narrow without page reload; deprecated results visually flagged; browser smoke-tested.
+- **[#24](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/24)** — Result card component with status badge, freshness indicator, source link.
+- **[#25](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/25)** — Feedback buttons that write to `rag_feedback`.
 
-```bash
-git checkout main && git pull
-git checkout -b feat/phase-5-engine
-# … write code + tests
-make verify            # local gate (258 unit minimum baseline)
-export KILN_DATABASE_URL=postgresql+asyncpg://kiln:kiln@localhost:5432/kiln  # pragma: allowlist secret
-.venv/bin/pytest tests/integration -q   # 48 baseline; goal: more
-# Before push, run `ruff format src tests` explicitly — local pre-commit
-# disagrees with CI ruff format on some edge cases (issue #70).
-git push -u origin feat/phase-5-engine
-gh pr create --base main …
-```
-
-After push: fan out an Explore reviewer subagent (see prior turns' patterns) for blind QA before merging. The reviewer caught one HIGH + one MEDIUM finding on slice 1 — that workflow paid off.
-
-### Slice 3 (after slice 2)
-
-`HybridRetriever.context_pack(query, *, task, filters, max_chunks=8, max_tokens=3000)` returning a `ContextPack` dataclass. New `src/cf_knowledge_kiln/agent/serializers.py` for token budgeting + agent-shape formatting. This is where `detect_conflicts` actually gets called, where `requires_human_review` makes the call, and where the `untrusted_content_notice` preamble lands. ContextPackResponse Pydantic model goes in `retrieval/types.py` (the OpenAPI drift test will start enforcing it once it's in scope — currently in `PHASE_5_ONLY_SCHEMAS` tolerance set in `tests/unit/test_openapi_drift.py`).
-
-### Slice 4 (after slice 3)
-
-Replace the 501 stubs in `src/cf_knowledge_kiln/api/retrieval.py` with real handlers that call `HybridRetriever.search` and `.context_pack`. Add `src/cf_knowledge_kiln/api/dependencies.py` for FastAPI dependency injection. Log query into `rag_queries`, context-pack into `context_packs`. Remove all entries from `PHASE_5_ONLY_SCHEMAS` once Pydantic models exist — the drift test should pass strict matching at that point.
+**Pivot worth flagging to the user before starting**: this is the first UI work in the repo. Choices that benefit from input: templating engine (Jinja2 is the obvious FastAPI default), styling approach (vanilla CSS vs Tailwind), HTMX version pin. Suggest a quick read of [docs/user-journeys.md](./docs/user-journeys.md) for the intended human flow.
 
 ### Parallel (operator track)
 
@@ -203,9 +202,8 @@ Replace the 501 stubs in `src/cf_knowledge_kiln/api/retrieval.py` with real hand
 
 ### Later phases (epics)
 
-- Phase 6 ([#5](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/5)) — Human search UX (HTMX baseline).
 - Phase 7 ([#6](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/6)) — CF packaging polish + HTTP source ingestion with SSRF guard.
-- Phase 8 ([#7](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/7)) — CI/CD + security hardening (auth middleware, SBOM/grype, Concourse pipeline).
+- Phase 8 ([#7](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/7)) — CI/CD + security hardening (auth middleware lands here — the `/v1/*` endpoints are currently unguarded by design until then; current `manifest.yml` deliberately leaves `KILN_AUTH_MODE` unset).
 - Phase 9 ([#8](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/8)) — QA harness + docs polish for forkability; includes [#68](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/68) (end-to-end evaluation harness for human + agent user journeys).
 
 ---
@@ -268,16 +266,18 @@ export KILN_DATABASE_URL=postgresql+asyncpg://kiln:kiln@localhost:5432/kiln  # p
 
 ## Open follow-ups (filed as issues; do NOT inline-fix unless you happen to be in adjacent code)
 
+- **[#74](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/74)** — `/v1/search` and `/v1/agent/context-pack` open 2 DB sessions per request (retrieval + telemetry). Caps practical concurrency. Recommended fix in the issue body. **This is the recommended next chunk of work.**
 - **[#37 (kiln)](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/37)** — Layer-2 code-review follow-ups from the 2026-05-16 pass: production fail-fast on missing DB URL, worker exit-code instead of `sleep infinity`, per-worker connection-pool math docs, OpenAPI contract drift items, replacing the homegrown `lint_openapi.py` with `openapi-spec-validator`, a handful of smaller items.
-- **[#47](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/47)** — `Worker._process` opens two sessions; a mid-process crash leaves the job in `running` until the recovery sweep requeues it (which then redoes idempotent work). Owner-input design decision.
+- **[#47](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/47)** — `Worker._process` opens two sessions; a mid-process crash leaves the job in `running` until the recovery sweep requeues it (which then redoes idempotent work). Owner-input design decision. (Related to #74 — both about 2-session-per-operation patterns.)
 - **[#49](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/49)** — DRY the create-and-refresh + filtered-list pattern across 9 repos. Mixin or generic base.
 - **[#53, #54](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/53)** — Low-priority code cleanup and test-coverage bundles. Bite-sized.
 - **[#55](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/55)** — Add CODEOWNERS + evaluate Semgrep/CodeQL alongside existing bandit.
 - **[#68](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/68)** — End-to-end evaluation harness for human + agent user journeys (Phase 9 scope).
-- **[#70](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/70)** — CI ruff-format and local pre-commit ruff-format disagree on edge cases. Every Phase 5 PR has bounced on this; worth fixing once. Workaround for now: run `.venv/bin/ruff format src tests` explicitly before pushing.
 - **[#19 (kiln)](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/19)** — Body still references the reversed ADR-0007 ("FTS-only"). Comment posted; needs owner edit.
 - **[#34 (kiln)](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/34)** — Public/template readiness review before flipping the repo public.
 - **[bosh-pgvector-release#2](https://github.com/williamzujkowski/bosh-pgvector-release/issues/2)** — Layer-2 follow-ups for the BOSH release.
+
+Closed during Phase 5: #70 (ruff pre-commit/CI version drift, fixed in slice 3 by pinning pre-commit to ruff v0.15.13).
 
 ---
 
@@ -291,8 +291,13 @@ export KILN_DATABASE_URL=postgresql+asyncpg://kiln:kiln@localhost:5432/kiln  # p
 6. **Don't run pip-audit with `--strict --skip-editable`.** Strict refuses editable installs; the CI command is just `--skip-editable`. This was a real failure mode caught earlier.
 7. **Don't try to use cf-local-service-broker against a kind cluster you don't have.** The broker repo's README originally framed it as CF-on-kind; that framing was corrected in the merged PR #2 doc-repositioning commit. It works against any CF — read the current README, not your memory of the old one.
 8. **Don't `git pull` after a squash-merge of a stacked PR without also `git reset --hard origin/main`.** When a parent PR is squashed and its branch deleted, the child PR auto-closes; the workaround is to retarget the child to main via `gh api repos/.../pulls/N -X PATCH -f base=main`, rebase the child onto main (git's cherry-pick detection auto-drops the already-applied parent commits), force-push, re-dispatch CI. Pattern was exercised end-to-end on PRs #56→#67 / #60–#66 / #69; works fine but takes time.
-9. **GitHub Actions PR `synchronize` events aren't firing reliably on this repo** (cause unknown — likely a setting or rate-limit). Until #70 or a sibling issue is filed, use `gh workflow run ci.yml --ref BRANCH` after each push to force a CI run that associates with the PR.
+9. **GitHub Actions PR `synchronize` events aren't firing reliably on this repo** (cause unknown — likely a setting or rate-limit). Use `gh workflow run ci.yml --ref BRANCH` after each push to force a CI run that associates with the PR. This pattern is now baked into the workflow yaml's `workflow_dispatch` trigger.
 10. **Don't use `session.expire_all()` after a raw-SQL UPDATE in async tests.** It triggers a sync lazy-load on the next attribute access; SQLAlchemy 2.0 async refuses it with `MissingGreenlet`. Use `await session.refresh(claimed_row)` instead. See PR #66 for the pattern.
+11. **Don't wire ANYTHING in `retrieval/__init__.py` that imports a module which back-references `retrieval`.** Three Phase-5 PRs hit this cycle (slice 2's `documents.py → retrieval.filters`, slice 3's `engine.py → agent.serializers → retrieval.ranking`). The fix that has worked twice: lazy-import the offending name *inside* the method/function that needs it, and either gate type annotations behind `TYPE_CHECKING` or use `Any` (since `from __future__ import annotations` is everywhere, annotations are strings already).
+12. **Persist UUIDs to JSONB columns with `model_dump(mode="json")`, not raw `model_dump()`.** Default Pydantic dump returns `UUID` instances that asyncpg's JSON encoder rejects. The `_log_context_pack` helper in `api/retrieval.py` shows the pattern.
+13. **Telemetry writes must NOT cascade to 500s.** Wrap any "log this query happened" code in `try/except logger.exception` — a transient DB failure during telemetry is not a user-visible error. Slice 4's `_log_rag_query` and `_log_context_pack` are the canonical examples.
+14. **Slice tests that exercise warning paths must assert the precondition.** Several slice 2/3/4 tests originally said `if X in result: assert warning` — which passes vacuously if `X` isn't returned. Use `assert X` first to prove the precondition fires, then assert the warning. Reviewer caught this on slice 2.
+15. **The score field is unbounded.** Hand-spec used to cap `ResultCard.score` at 1.0; that's not true — FTS-only fallback uses raw `ts_rank_cd` which can exceed it. Slice 4 dropped the cap. Clients that validated the old schema strictly may need updates.
 
 ---
 
@@ -315,12 +320,28 @@ cd /home/william/git/cf-knowledge-kiln
 git checkout main && git pull
 docker start kiln-pg  # pgvector container; ignore "already running"
 export KILN_DATABASE_URL=postgresql+asyncpg://kiln:kiln@localhost:5432/kiln  # pragma: allowlist secret
-PY=.venv/bin/python make verify       # 258 unit baseline
-KILN_DATABASE_URL=$KILN_DATABASE_URL \
-  .venv/bin/pytest tests/integration -q   # 48 integration baseline
-# Then read this file (HANDOFF.md) "Phase 5 slice 2" section + ADR-0009
-# + docs/phase-5-design.md, and branch:
-git checkout -b feat/phase-5-engine
+PY=.venv/bin/python make verify             # 298 unit baseline
+.venv/bin/pytest tests/integration -q       # 72 integration baseline
+```
+
+For the next chunk (#74 — collapse to one DB session per request):
+
+```bash
+git checkout -b fix/74-one-session-per-request
+gh issue view 74              # read the recommended fix
+# Touch points:
+#   src/cf_knowledge_kiln/retrieval/engine.py  (signature + _fetch_candidates)
+#   src/cf_knowledge_kiln/api/retrieval.py     (handler opens session, passes it down)
+#   src/cf_knowledge_kiln/api/dependencies.py  (add get_session dep)
+#   tests/integration/test_api_routes.py       (add concurrency assertion)
+```
+
+For Phase 6 (HTMX UI), ask the user about templating + styling choices first — this is the first UI work in the repo:
+
+```bash
+gh issue view 5                # epic
+gh issue view 23               # first child (search UI scaffold)
+cat docs/user-journeys.md      # intended human flow
 ```
 
 Or, to start the operator track in parallel:
