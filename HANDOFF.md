@@ -1,7 +1,7 @@
 # Handoff notes
 
-**As of:** 2026-05-17 (late-night autonomous run)
-**Status:** Phases 0–6 complete + Phase 7 HTTP/SSRF + Phase 8 auth/SBOM/CodeQL shipped. The product is feature-complete for the MVP except for the CF deploy gate (operator track) and Phase 9 polish (eval harness + forking docs). CI green on `main` (369 unit + 96 integration tests, 11 PRs merged since the slice-4 HANDOFF).
+**As of:** 2026-05-17 (Phase 9 readiness pass)
+**Status:** Phases 0–8 complete. Phase 9 in progress — retrieval eval harness landed (`make eval`); public/template readiness pass merging now; forking guide + end-to-end UX eval still open. CI green on `main` (454 unit + 101 integration tests; PRs #88–#95 in the latest run).
 
 This file is the "where we are, what's next, what's been decided" briefing. For *how* to work in the repo, read [AGENTS.md](./AGENTS.md). For *what* the project is, read [README.md](./README.md). For *the plan*, read [plans/cf-rag-plan.md](./plans/cf-rag-plan.md).
 
@@ -13,26 +13,24 @@ cf-knowledge-kiln is a Cloud Foundry RAG knowledge app — a `cf push`'d Python/
 
 **Phase 5 shipped 2026-05-17** in four slices (PRs #69, #71, #72, #73). After-the-slice-4 follow-up #75 collapsed handlers to one DB session per request. Editorial-design UI scaffold (PR #76) and the feedback widget (PR #78) shipped Phase 6 entirely. Phase 7 HTTP source + SSRF guard landed (PR #80) with 6to4-bypass fix included after independent review. Phase 8 hardening landed: bearer-token auth (PR #77, with path-traversal fix), SBOM + grype CI (PR #82), CODEOWNERS + CodeQL (PR #83). Worker session lifecycle + smart crash recovery (PR #85) and DRY refactor of the repo layer (PR #84) closed two carry-over backlog items. Final cleanup of over-cap functions in pipeline.py (PR #86) closed #53.
 
-**Net effect of the late-night run (2026-05-17 evening):** 11 PRs merged from #75 through #86. Issues closed: #25, #27, #28, #29, #47, #49, #53, #55, #70, #74 in this repo + #11, #12, #14, #15, #17, #18, #19, #20, #21, #22, #40 in a parallel issue-tracker sweep where prior phase merges had silently completed work. Issues filed for follow-up: #79 (rate-limit /feedback), #81 (TOCTOU DNS-pinning), #82 (already closed).
+**Net effect of the late-night + readiness runs:** 8 more PRs merged after the slice-6 HANDOFF — #88 (#26 smoke test), #89 (#81 DNS pinning), #90 (#79 rate limit), #92 (#31 eval harness), #94 (#91 JSON-safe frontmatter), plus #95 (#34 public-readiness) merging now. Issues filed: #91 (fixed in #94), #93 (admin-only: enable repo code scanning so the CodeQL workflow's SARIF upload stops failing on every PR).
 
-**Phases 0–8 substantially complete.** What remains:
+**Phase 8 complete. Phase 9 substantially started.** What remains:
 
 | Phase | Status | Remaining |
 |---|---|---|
 | 0–6 | ✅ Complete | — |
-| 7 | ✅ HTTP source + SSRF done | #26 smoke-test script + apps.internal route docs (small) |
-| 8 | ✅ Auth + SBOM + CodeQL done | #30 Concourse pipeline (mirror of GH Actions), mTLS mode (follow-up to #29), #79 rate limiting |
-| 9 | Not started | #31 eval harness, #32 forking guide, #34 public/template readiness, #68 end-to-end UX evaluation |
+| 7 | ✅ Complete (#26 merged in #88) | — |
+| 8 | ✅ Complete (#79 rate limit in #90; #81 DNS pin in #89) | #30 Concourse pipeline (CF-foundation-native CI mirror; operator deliverable); mTLS auth mode (follow-up to #29) |
+| 9 | In progress — #31 eval harness (#92), #34 public-readiness (#95) done | #32 forking guide (capstone), #68 end-to-end UX eval |
 
 **Next concrete chunks of work (in recommended order):**
 
-1. **Phase 9 #31 — eval harness.** The repository now has stable retrieval + context-pack APIs to score against; this is the unlock for benchmarking + iterating on ranking quality. Most impactful next chunk.
-2. **Phase 7 #26 — smoke-test script + apps.internal docs.** Small; closes Phase 7 entirely.
-3. **Phase 8 #30 — Concourse pipeline.** Mirrors `.github/workflows/ci.yml` to keep CF-foundation-native pipelines green. Operator deliverable.
-4. **#81 — TOCTOU DNS-pinning for HTTP connector.** Reviewer-flagged on PR #80; needs a custom httpx transport.
-5. **#79 — rate limit /feedback + /search.** Reviewer-flagged on PR #78; defense in depth.
-6. **#54 — small test-coverage gaps bundle.** Bite-sized.
-7. **Phase 9 #32 — forking guide.** Phase 9 capstone. Needs Phase 8 done first.
+1. **Phase 9 #32 — forking guide.** Capstone for Phase 9. README now has a "Fork & repurpose" short-form section (#95); #32 is the expanded walkthrough.
+2. **Phase 9 #68 — end-to-end UX eval.** Complements #31's retrieval-quality harness with a journey-level scorer.
+3. **Phase 8 #30 — Concourse pipeline.** Mirrors `.github/workflows/ci.yml` for CF-foundation-native CI.
+4. **#54 — small test-coverage gaps bundle.** Bite-sized.
+5. **#93 — enable code scanning on the repo (admin only).** Drops the spurious CodeQL failure on every PR.
 
 The CF deploy gate still depends on [bosh-pgvector-release#3](https://github.com/williamzujkowski/bosh-pgvector-release/issues/3) (operator runbook). Independent of all the above; happens on the operator track.
 
@@ -44,7 +42,7 @@ You'll likely touch all three at some point. Keep their roles separate.
 
 | Repo | Role | State |
 |------|------|-------|
-| **`cf-knowledge-kiln`** (this repo) | The RAG CF app. `cf push` deploys it. | Phase 1 scaffold complete; CI green on `main` |
+| **`cf-knowledge-kiln`** (this repo) | The RAG CF app. `cf push` deploys it. | Phases 0–8 complete + Phase 9 eval harness shipped; CI green on `main` |
 | [**`bosh-pgvector-release`**](https://github.com/williamzujkowski/bosh-pgvector-release) | Public BOSH release providing PostgreSQL + pgvector for any CF foundation that wants it. Fork of `cloudfoundry/postgres-release`. | Buildable release tarball merged on `main`; **operator deployment to the BOSH director still pending** ([#3](https://github.com/williamzujkowski/bosh-pgvector-release/issues/3)) |
 | [**`cf-local-service-broker`**](https://github.com/williamzujkowski/cf-local-service-broker) | OSBAPI v2 broker that exposes the pgvector Postgres as a CF marketplace service. Originally built for CF-on-kind; reframed to work against any CF/BOSH foundation. | `pgvector` plan merged on `main` |
 

@@ -2,9 +2,13 @@
 
 ## Reporting a vulnerability
 
-Email the repository owner directly. Do not file a public GitHub issue for security-sensitive reports.
+Use **GitHub's private vulnerability reporting** for this repository:
+<https://github.com/williamzujkowski/cf-knowledge-kiln/security/advisories/new>.
+The report stays private to the maintainers and avoids leaking the details into a public issue queue.
 
-We aim to acknowledge within 72 hours.
+If GitHub private reporting is unavailable for any reason, contact the repository owner via the address on their GitHub profile.
+
+We aim to acknowledge within 72 hours and to ship a fix or mitigation within 30 days for high-severity issues.
 
 ## Threat model (summary)
 
@@ -16,7 +20,7 @@ We aim to acknowledge within 72 hours.
 4. **Source ingestion is allowlisted.** Agents cannot trigger arbitrary repository clones or URL fetches. Sources are added through reviewed config changes.
 5. **Generated answers cite their evidence.** An uncited generated answer is a bug, not a feature.
 
-Full threat model: [docs/security.md](./docs/security.md) (once Phase 8 lands).
+Full threat model: [docs/security.md](./docs/security.md).
 
 ## Disclosure standards
 

@@ -23,13 +23,13 @@ sources:
     default_sensitivity: internal
     last_reviewed_required: false
 
-  - name: homelab-iac-docs
+  - name: platform-runbooks
     type: git
-    repo: williamzujkowski/homelab-iac
+    repo: owner/platform-runbooks            # change to your repo
     branch: main
     include:
       - "docs/**/*.md"
-      - "docs/components/**/*.md"
+      - "runbooks/**/*.md"
       - "AGENTS.md"
     exclude:
       - "docs/generated/**"
