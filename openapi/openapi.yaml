@@ -408,7 +408,9 @@ components:
 
     EvidenceChunk:
       type: object
-      required: [chunk_id, document_id, title, text, source_url, status, score]
+      # source_url is optional — not every ingested document has one
+      # (e.g., local-source ingestion only knows the relative path).
+      required: [chunk_id, document_id, title, text, status, score]
       properties:
         chunk_id:
           type: string

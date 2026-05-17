@@ -34,6 +34,16 @@ import yaml
 from fastapi.testclient import TestClient
 
 from cf_knowledge_kiln.api.app import create_app
+from cf_knowledge_kiln.retrieval.types import (
+    Conflict,
+    ContextPackRequest,
+    ContextPackResponse,
+    EvidenceChunk,
+    RelatedSource,
+    RetrievalFilters,
+    TokenBudget,
+    Warning,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 HAND_SPEC_PATH = REPO_ROOT / "openapi" / "openapi.yaml"
@@ -115,9 +125,9 @@ class TestOperationsAgree:
             app_methods = {
                 m for m in app_spec["paths"][path] if m in {"get", "post", "put", "delete", "patch"}
             }
-            assert hand_methods == app_methods, (
-                f"{path}: methods drift. hand={hand_methods}, app={app_methods}"
-            )
+            assert (
+                hand_methods == app_methods
+            ), f"{path}: methods drift. hand={hand_methods}, app={app_methods}"
 
     def test_operation_ids_match(self, hand_spec: dict[str, Any], app_spec: dict[str, Any]) -> None:
         for path in self._shared_paths(hand_spec, app_spec):
@@ -126,9 +136,9 @@ class TestOperationsAgree:
                     continue
                 hand_id = hand_spec["paths"][path][method].get("operationId")
                 app_id = app_spec["paths"][path][method].get("operationId")
-                assert hand_id == app_id, (
-                    f"{method.upper()} {path}: operationId drift. hand={hand_id!r}, app={app_id!r}"
-                )
+                assert (
+                    hand_id == app_id
+                ), f"{method.upper()} {path}: operationId drift. hand={hand_id!r}, app={app_id!r}"
 
     def test_declared_status_codes_match(
         self, hand_spec: dict[str, Any], app_spec: dict[str, Any]
@@ -234,3 +244,59 @@ def _enum_or_const(schema: dict[str, Any]) -> list[Any] | None:
     if "const" in schema:
         return [schema["const"]]
     return None
+
+
+# ─── Direct Pydantic-vs-hand-spec checks (slice 3+) ──────────────────
+#
+# The schema-drift tests above only cross-check schemas that exist in
+# BOTH the hand-spec and FastAPI's generated /openapi.json. A Pydantic
+# model that isn't yet wired to a route falls out of that intersection
+# and the hand-spec drifts uncaught. This block closes that gap by
+# checking the Pydantic models directly via ``model_json_schema()``.
+
+_PYDANTIC_TO_HAND_SCHEMA: list[tuple[str, type]] = [
+    ("RetrievalFilters", RetrievalFilters),
+    ("Warning", Warning),
+    ("Conflict", Conflict),
+    ("ContextPackRequest", ContextPackRequest),
+    ("ContextPackResponse", ContextPackResponse),
+    ("EvidenceChunk", EvidenceChunk),
+    ("RelatedSource", RelatedSource),
+    ("TokenBudget", TokenBudget),
+]
+
+
+class TestPydanticModelsMatchHandSpec:
+    """Pydantic models in retrieval/types.py must agree with openapi.yaml.
+
+    Runs against the in-process model schema, so it catches drift even
+    when the model isn't yet wired to a FastAPI route. Each model is
+    checked for the same required-fields + property-name sets as the
+    hand-spec schema with the same name.
+    """
+
+    @pytest.mark.parametrize("schema_name,model_cls", _PYDANTIC_TO_HAND_SCHEMA)
+    def test_required_fields_match(
+        self, schema_name: str, model_cls: type, hand_spec: dict[str, Any]
+    ) -> None:
+        hand_schema = hand_spec["components"]["schemas"][schema_name]
+        hand_required = set(hand_schema.get("required", []))
+        pydantic_required = set(model_cls.model_json_schema().get("required", []))
+        assert hand_required == pydantic_required, (
+            f"{schema_name}: required-field drift between Pydantic and hand-spec. "
+            f"hand-only={sorted(hand_required - pydantic_required)}, "
+            f"pydantic-only={sorted(pydantic_required - hand_required)}"
+        )
+
+    @pytest.mark.parametrize("schema_name,model_cls", _PYDANTIC_TO_HAND_SCHEMA)
+    def test_property_names_match(
+        self, schema_name: str, model_cls: type, hand_spec: dict[str, Any]
+    ) -> None:
+        hand_schema = hand_spec["components"]["schemas"][schema_name]
+        hand_props = set(hand_schema.get("properties", {}))
+        pydantic_props = set(model_cls.model_json_schema().get("properties", {}))
+        assert hand_props == pydantic_props, (
+            f"{schema_name}: property-name drift between Pydantic and hand-spec. "
+            f"hand-only={sorted(hand_props - pydantic_props)}, "
+            f"pydantic-only={sorted(pydantic_props - hand_props)}"
+        )
