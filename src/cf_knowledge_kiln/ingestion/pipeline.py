@@ -52,7 +52,14 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class IngestionSummary:
-    """Per-source ingestion result. Mirrors `ingestion_runs.stats`."""
+    """Per-source ingestion result. Mirrors `ingestion_runs.stats`.
+
+    ``run_id`` is set after :func:`run_source` writes the initial
+    ``ingestion_runs`` row, so a caller (e.g. the worker) can link
+    a downstream ``ingestion_jobs.mark_done`` to the exact run that
+    produced the work — important for the crash-recovery sweep
+    described in issue #47.
+    """
 
     files_scanned: int = 0
     files_indexed: int = 0
@@ -66,6 +73,7 @@ class IngestionSummary:
     warnings: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     skip_reasons: dict[str, int] = field(default_factory=dict)
+    run_id: UUID | None = None
 
     def as_stats(self) -> dict[str, Any]:
         return {
@@ -289,6 +297,7 @@ async def run_source(
 
     src_row = await _ensure_data_source_row(sources_repo, source)
     run = await runs_repo.create(source_id=src_row.id, status="running")
+    summary.run_id = run.id
     try:
         fetch = fetch_source(source, _caps_from_settings(settings))
     except IngestionCapExceeded as exc:
