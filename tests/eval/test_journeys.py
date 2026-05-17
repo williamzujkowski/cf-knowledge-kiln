@@ -293,3 +293,87 @@ def _persist_latency(metrics: Any) -> None:
         f"- **ceiling (p95):** {LATENCY_P95_CEILING_S:.2f} s\n"
     )
     path.write_text(body, encoding="utf-8")
+
+
+# ─── #100: extended adversarial coverage ────────────────────────────
+
+
+def test_human_journey_staleness_warning_on_old_doc(
+    adversarial_retriever: HybridRetriever,
+) -> None:
+    """#100: a doc with an old ``last_reviewed`` must emit stale_source.
+
+    The fixture has ``last_reviewed: 2022-01-15`` — well past the
+    default stale window — so the warning should surface whenever
+    the chunk appears in a result set. Scope to the adversarial repo
+    so the stale chunk reliably surfaces.
+    """
+
+    async def _go() -> Any:
+        return await adversarial_retriever.search(
+            "verbena-five rotation stale runbook",
+            filters=RetrievalFilters(status=["active"], repo=["adversarial-fixtures"]),
+            max_results=10,
+        )
+
+    result = _run(_go())
+    kinds = warning_kinds_in(result)
+    assert any("stale" in k.lower() for k in kinds), (
+        f"expected a stale_source warning, got kinds={kinds!r}"
+    )
+
+
+def test_agent_journey_conflict_warning_on_same_heading(
+    adversarial_retriever: HybridRetriever,
+) -> None:
+    """#100: two docs sharing a heading_path must trip the conflict warning.
+
+    The /v1/agent/context-pack path runs ``detect_conflicts`` (syntactic
+    same-heading across distinct active docs). The fixtures conflict-a.md
+    and conflict-b.md both heading_path = ["Saxon-blue migration steps"].
+    """
+
+    async def _go() -> Any:
+        return await adversarial_retriever.context_pack(
+            query="saxon-blue migration steps",
+            task="report the procedure",
+            filters=RetrievalFilters(repo=["adversarial-fixtures"]),
+            max_chunks=10,
+            max_tokens=2000,
+        )
+
+    pack = _run(_go())
+    # Conflict surfaces both in pack.conflicts AND as a warning of
+    # type "conflicting_sources" appended in the engine.
+    kinds = warning_kinds_in(pack)
+    assert any("conflict" in k.lower() for k in kinds), (
+        f"expected a conflicting_sources warning, got kinds={kinds!r}; "
+        f"conflicts={[c.topic for c in pack.conflicts]!r}"
+    )
+    assert pack.conflicts, "expected at least one Conflict in pack.conflicts"
+
+
+def test_human_journey_deprecation_warning_under_default_filter(
+    adversarial_retriever: HybridRetriever,
+) -> None:
+    """#100: deprecation warning surfaces without an explicit status filter.
+
+    The deprecated fixture (deprecated.md) is now boosted with repeated
+    keywords + a recent last_reviewed so FTS dominates the
+    status-weight penalty. Default filter (no status restriction)
+    should still surface the deprecated chunk in the top 10, and the
+    warning must fire.
+    """
+
+    async def _go() -> Any:
+        return await adversarial_retriever.search(
+            "thiamine-zero thiamine-zero pipeline deprecated runbook",
+            filters=_empty_filters(),  # no status restriction
+            max_results=10,
+        )
+
+    result = _run(_go())
+    kinds = warning_kinds_in(result)
+    assert any("deprecat" in k.lower() for k in kinds), (
+        f"expected a deprecation warning under the default filter, got kinds={kinds!r}"
+    )
