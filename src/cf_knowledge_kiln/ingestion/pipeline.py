@@ -35,6 +35,7 @@ from cf_knowledge_kiln.db.repositories import (
     DataSourcesRepository,
     IngestionRunsRepository,
 )
+from cf_knowledge_kiln.ingestion._jsonsafe import jsonify
 from cf_knowledge_kiln.ingestion.chunking import parse_document
 from cf_knowledge_kiln.ingestion.connectors import (
     FetchedFile,
@@ -141,12 +142,17 @@ async def _upsert_document(
     """
     table = Document.__table__
     defaults = _resolve_doc_defaults(metadata, source_defaults)
+    # Defensive coercion (#91): the parser already runs jsonify(), but
+    # any future caller that hands us a custom metadata dict could
+    # smuggle a non-JSON-native value past it. Idempotent on already-
+    # safe inputs and cheap.
+    safe_metadata = jsonify(metadata)
     insert_stmt = pg_insert(table).values(  # type: ignore[arg-type]
         {
             table.c.repo: repo,
             table.c.path: path,
             table.c.title: title,
-            table.c.metadata: metadata,
+            table.c.metadata: safe_metadata,
             table.c.commit_sha: commit_sha,
             **{table.c[k]: v for k, v in defaults.items()},
         }

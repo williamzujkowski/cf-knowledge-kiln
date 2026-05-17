@@ -393,3 +393,38 @@ async def test_pipeline_records_skip_reasons_in_run_stats(
         await session.execute(text("SELECT stats FROM ingestion_runs ORDER BY started_at DESC"))
     ).scalar_one()
     assert last_run["skip_reasons"]["unsupported_file_type"] >= 1
+
+
+async def test_pipeline_ingests_adr_with_date_frontmatter(
+    session: AsyncSession, tmp_path: Path
+) -> None:
+    """#91: ADR-style YAML date frontmatter must not crash the JSONB upsert.
+
+    YAML's safe_load returns a ``date`` object for ``date: 2026-05-16``;
+    before the fix, asyncpg blew up trying to serialize it into the
+    ``documents.metadata`` JSONB column. The parser now coerces dates
+    (and other non-JSON-native types) at the boundary, so the upsert
+    succeeds and the value lands as an ISO-8601 string.
+    """
+    (tmp_path / "adr.md").write_text(
+        textwrap.dedent(
+            """\
+            ---
+            id: ADR-0001
+            title: Use Python
+            status: accepted
+            date: 2026-05-16
+            ---
+            # ADR-0001
+            Body.
+            """
+        )
+    )
+    src = LocalSource(name="adr", type="local", path=str(tmp_path), include=["*.md"])
+    summary = await run_source(session, source=src, settings=_settings())
+    await session.commit()
+    assert summary.files_indexed == 1
+
+    doc = (await session.execute(select(Document))).scalars().one()
+    assert doc.extra["date"] == "2026-05-16"
+    assert doc.extra["id"] == "ADR-0001"
