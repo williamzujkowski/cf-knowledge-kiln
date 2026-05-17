@@ -32,6 +32,7 @@ from cf_knowledge_kiln.api.dependencies import (
     get_hybrid_retriever,
     get_search_limiter,
     get_session,
+    get_trust_xff,
 )
 from cf_knowledge_kiln.api.rate_limit import TokenBucketLimiter, client_ip
 from cf_knowledge_kiln.db.repositories import FeedbackRepository, QueriesRepository
@@ -65,6 +66,7 @@ async def search_partial(
     retriever: Annotated[HybridRetriever, Depends(get_hybrid_retriever)],
     session: Annotated[AsyncSession, Depends(get_session)],
     limiter: Annotated[TokenBucketLimiter, Depends(get_search_limiter)],
+    trust_xff: Annotated[bool, Depends(get_trust_xff)],
     query: Annotated[str, Form()] = "",
     status: Annotated[list[str] | None, Form()] = None,
     filters_set: Annotated[str | None, Form(alias="_filters_set")] = None,
@@ -80,9 +82,10 @@ async def search_partial(
     friendly message into ``#results`` instead of FastAPI's bare
     500 body. Telemetry stays best-effort.
     """
-    if not limiter.hit(client_ip(request)):
+    key = client_ip(request, trust_xff=trust_xff)
+    if not limiter.hit(key):
         # HTMX-friendly fragment with the same template the error path uses.
-        retry = limiter.retry_after(client_ip(request))
+        retry = limiter.retry_after(key)
         return templates.TemplateResponse(
             request,
             "_error.html",
@@ -161,6 +164,7 @@ async def submit_feedback(
     request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
     limiter: Annotated[TokenBucketLimiter, Depends(get_feedback_limiter)],
+    trust_xff: Annotated[bool, Depends(get_trust_xff)],
     query_id: Annotated[str, Form()],
     chunk_id: Annotated[str, Form()],
     signal: Annotated[str, Form()],
@@ -182,8 +186,9 @@ async def submit_feedback(
     * Phase 8 bearer auth (#77) protects the API in production.
     * Per-IP rate limit (issue #79) caps feedback noise; see below.
     """
-    if not limiter.hit(client_ip(request)):
-        retry = limiter.retry_after(client_ip(request))
+    key = client_ip(request, trust_xff=trust_xff)
+    if not limiter.hit(key):
+        retry = limiter.retry_after(key)
         return _feedback_error_with_status(
             request,
             f"Too many feedback submissions. Try again in {retry}s.",

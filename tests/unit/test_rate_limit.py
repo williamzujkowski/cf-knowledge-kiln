@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+
 import pytest
 from fastapi import HTTPException, Request
 
@@ -74,6 +76,69 @@ class TestTokenBucketLimiter:
         retry = limiter.retry_after("k", now=0.0)
         assert retry >= 1
 
+    def test_clock_jump_backward_does_not_negative_refill(self) -> None:
+        """A non-monotonic ``now`` must not subtract tokens."""
+        limiter = TokenBucketLimiter(capacity=2, window_seconds=60.0)
+        assert limiter.hit("k", now=10.0) is True
+        # Time jumps backward — elapsed must clamp to 0, not go negative.
+        assert limiter.hit("k", now=5.0) is True
+        # The first call drained 1 token. The second (backward jump) drained
+        # the other. Now we're at zero — third call should deny.
+        assert limiter.hit("k", now=5.0) is False
+        # retry_after under a backward jump must still return ≥1.
+        assert limiter.retry_after("k", now=4.0) >= 1
+
+    def test_evicts_oldest_when_max_buckets_exceeded(self) -> None:
+        """LRU eviction keeps the bucket dict from growing without bound."""
+        limiter = TokenBucketLimiter(capacity=1, window_seconds=60.0, max_buckets=3)
+        # Fill to cap, drain each.
+        for k in ("a", "b", "c"):
+            assert limiter.hit(k, now=0.0) is True
+            assert limiter.hit(k, now=0.0) is False
+        # Hit a new key — should evict "a" (oldest).
+        assert limiter.hit("d", now=0.0) is True
+        # "a" is gone — fresh bucket means a clean allow.
+        assert limiter.hit("a", now=0.0) is True
+
+    def test_recent_keys_promoted_against_eviction(self) -> None:
+        """Accessing an existing key keeps it from being evicted."""
+        limiter = TokenBucketLimiter(capacity=3, window_seconds=60.0, max_buckets=3)
+        # Seed three buckets — each holds 2 tokens after one hit.
+        limiter.hit("a", now=0.0)
+        limiter.hit("b", now=0.0)
+        limiter.hit("c", now=0.0)
+        # Touch "a" — makes "a" the most-recently used; "b" is now oldest.
+        limiter.hit("a", now=0.0)
+        # Fourth distinct key triggers eviction of "b" (the oldest).
+        limiter.hit("d", now=0.0)
+        # "a" still has its existing bucket — drained 2 of 3, so 1 token left.
+        assert limiter.hit("a", now=0.0) is True
+        assert limiter.hit("a", now=0.0) is False
+        # "b" was evicted — fresh bucket with capacity 3.
+        for _ in range(3):
+            assert limiter.hit("b", now=0.0) is True
+        assert limiter.hit("b", now=0.0) is False
+
+    def test_concurrent_hits_respect_capacity(self) -> None:
+        """Lock prevents over-spend under thread contention."""
+        limiter = TokenBucketLimiter(capacity=100, window_seconds=60.0)
+
+        # Fire 200 hits across 8 workers — at the same monotonic moment,
+        # so no refill happens between them. Exactly 100 should allow.
+        def fire() -> bool:
+            return limiter.hit("shared", now=0.0)
+
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            results = list(pool.map(lambda _: fire(), range(200)))
+        allows = sum(1 for r in results if r)
+        denies = sum(1 for r in results if not r)
+        assert allows == 100
+        assert denies == 100
+
+    def test_max_buckets_must_be_positive(self) -> None:
+        with pytest.raises(ValueError):
+            TokenBucketLimiter(capacity=1, window_seconds=60.0, max_buckets=0)
+
 
 class TestClientIp:
     def _make_request(
@@ -98,16 +163,39 @@ class TestClientIp:
         req = self._make_request(peer="10.0.0.1")
         assert client_ip(req) == "10.0.0.1"
 
-    def test_single_xff_returns_it(self) -> None:
+    def test_xff_ignored_when_trust_xff_false(self) -> None:
+        """Default: never trust client-supplied XFF — local-dev safe."""
         req = self._make_request(peer="10.0.0.1", xff="198.51.100.7")
-        assert client_ip(req) == "198.51.100.7"
+        assert client_ip(req) == "10.0.0.1"
+        assert client_ip(req, trust_xff=False) == "10.0.0.1"
 
-    def test_multi_hop_xff_returns_first(self) -> None:
+    def test_single_xff_returns_it_when_trusted(self) -> None:
+        req = self._make_request(peer="10.0.0.1", xff="198.51.100.7")
+        assert client_ip(req, trust_xff=True) == "198.51.100.7"
+
+    def test_multi_hop_xff_returns_first_when_trusted(self) -> None:
         req = self._make_request(
             peer="10.0.0.1",
             xff="198.51.100.7, 10.0.0.2, 10.0.0.3",
         )
-        assert client_ip(req) == "198.51.100.7"
+        assert client_ip(req, trust_xff=True) == "198.51.100.7"
+
+    def test_ipv6_brackets_normalized(self) -> None:
+        """``[::1]`` and ``::1`` must map to the same key."""
+        req_brackets = self._make_request(peer="10.0.0.1", xff="[::1]")
+        req_plain = self._make_request(peer="10.0.0.1", xff="::1")
+        assert client_ip(req_brackets, trust_xff=True) == client_ip(req_plain, trust_xff=True)
+
+    def test_ipv6_brackets_with_port_normalized(self) -> None:
+        """``[::1]:1234`` collapses to ``::1`` (port stripped, case-folded)."""
+        req = self._make_request(peer=None, xff="[::1]:1234")
+        assert client_ip(req, trust_xff=True) == "::1"
+
+    def test_case_folded(self) -> None:
+        """IPv6 hex case is normalized so ``::FFFF`` == ``::ffff``."""
+        upper = self._make_request(peer=None, xff="2001:DB8::1")
+        lower = self._make_request(peer=None, xff="2001:db8::1")
+        assert client_ip(upper, trust_xff=True) == client_ip(lower, trust_xff=True)
 
     def test_missing_client_falls_back_to_unknown(self) -> None:
         req = self._make_request(peer=None, xff=None)

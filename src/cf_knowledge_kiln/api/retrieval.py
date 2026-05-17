@@ -24,6 +24,7 @@ from cf_knowledge_kiln.api.dependencies import (
     get_hybrid_retriever,
     get_search_limiter,
     get_session,
+    get_trust_xff,
 )
 from cf_knowledge_kiln.api.rate_limit import (
     TokenBucketLimiter,
@@ -61,6 +62,7 @@ async def human_search(
     retriever: Annotated[HybridRetriever, Depends(get_hybrid_retriever)],
     session: Annotated[AsyncSession, Depends(get_session)],
     limiter: Annotated[TokenBucketLimiter, Depends(get_search_limiter)],
+    trust_xff: Annotated[bool, Depends(get_trust_xff)],
 ) -> SearchResponse:
     """Run a hybrid retrieval query and return ranked result cards.
 
@@ -68,7 +70,7 @@ async def human_search(
     the Phase 9 eval harness. Issue #74: retrieval + telemetry share
     one DB session per request. Issue #79: per-IP rate limit.
     """
-    raise_429_if_limited(limiter, request)
+    raise_429_if_limited(limiter, request, trust_xff=trust_xff)
     filters = body.filters or _empty_filters()
     try:
         result = await retriever.search(
@@ -118,6 +120,7 @@ async def agent_context_pack(
     retriever: Annotated[HybridRetriever, Depends(get_hybrid_retriever)],
     session: Annotated[AsyncSession, Depends(get_session)],
     limiter: Annotated[TokenBucketLimiter, Depends(get_search_limiter)],
+    trust_xff: Annotated[bool, Depends(get_trust_xff)],
 ) -> ContextPackResponse:
     """Build a bounded, cited context pack for an agent consumer.
 
@@ -126,7 +129,7 @@ async def agent_context_pack(
     retrieval + telemetry share one DB session per request. Issue #79:
     per-IP rate limit (same bucket as /v1/search; both are DB-heavy).
     """
-    raise_429_if_limited(limiter, request)
+    raise_429_if_limited(limiter, request, trust_xff=trust_xff)
     filters = body.filters or _empty_filters()
     try:
         pack = await retriever.context_pack(

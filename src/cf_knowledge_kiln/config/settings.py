@@ -80,6 +80,10 @@ class Settings(BaseSettings):
     # needs a shared backend — separate follow-up.
     rate_limit_search_per_min: int = 60
     rate_limit_feedback_per_min: int = 30
+    # Honor X-Forwarded-For for rate-limit keying. True in CF (the
+    # gorouter strips/sets this header reliably). False elsewhere so a
+    # local client can't bypass the limiter by spoofing XFF.
+    trust_forwarded_for: bool = False
 
     # Telemetry.
     otel_exporter_otlp_endpoint: str | None = None

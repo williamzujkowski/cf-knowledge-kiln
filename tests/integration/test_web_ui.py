@@ -304,7 +304,6 @@ def test_htmx_search_429_returns_error_fragment(rate_limited_client: TestClient)
     second = rate_limited_client.post("/search", data=data)
     assert second.status_code == 429
     # Same fragment shape as /search's other error path, so HTMX swaps it cleanly.
-    assert "error-fragment" in second.text or "Too many requests" in second.text
     assert "Too many requests" in second.text
     assert int(second.headers["retry-after"]) >= 1
 

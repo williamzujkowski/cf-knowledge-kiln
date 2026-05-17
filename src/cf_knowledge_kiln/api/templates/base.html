@@ -25,6 +25,19 @@
       const r = document.getElementById("results");
       if (r) r.setAttribute("aria-busy", "false");
     });
+    // HTMX 2.x drops 4xx/5xx swaps by default. We deliberately render
+    // a swap-friendly fragment on 429 (rate limit) and 503 (retrieval
+    // outage) — let those statuses swap so the user sees the inline
+    // error instead of a silent no-op. Status comes back via
+    // detail.xhr.status because HX-Retarget on the server is too
+    // coarse for an inline form replacement.
+    document.addEventListener("htmx:beforeSwap", (e) => {
+      const s = e.detail.xhr.status;
+      if (s === 429 || s === 503 || s === 400) {
+        e.detail.shouldSwap = true;
+        e.detail.isError = false;
+      }
+    });
   </script>
 </head>
 <body>

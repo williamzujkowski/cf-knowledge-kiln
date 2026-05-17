@@ -25,11 +25,21 @@ substitute for upstream rate-limiting at the CF gorouter / CDN.
 
 from __future__ import annotations
 
+import math
 import time
+from collections import OrderedDict
 from dataclasses import dataclass
 from threading import Lock
 
 from fastapi import HTTPException, Request, status
+
+# Cap the per-key bucket dict so a spray of distinct keys (e.g. random
+# X-Forwarded-For values) can't grow it without bound. 50k entries is
+# generous for any plausible single-instance deployment; eviction is
+# strictly oldest-first, which is fine because an evicted key just
+# resets to full capacity on its next hit (worst case: one free token
+# for an attacker that already spent theirs).
+_MAX_BUCKETS = 50_000
 
 
 @dataclass
@@ -54,15 +64,27 @@ class TokenBucketLimiter:
     concern, swap in an LRU at the dict layer.
     """
 
-    def __init__(self, *, capacity: int, window_seconds: float) -> None:
+    def __init__(
+        self,
+        *,
+        capacity: int,
+        window_seconds: float,
+        max_buckets: int = _MAX_BUCKETS,
+    ) -> None:
         if capacity <= 0:
             raise ValueError(f"capacity must be positive, got {capacity}")
         if window_seconds <= 0:
             raise ValueError(f"window_seconds must be positive, got {window_seconds}")
+        if max_buckets <= 0:
+            raise ValueError(f"max_buckets must be positive, got {max_buckets}")
         self._capacity = float(capacity)
         self._window = float(window_seconds)
+        # At default 60/60 this is 1 token/sec, which is also the
+        # smallest deficit retry_after can report.
         self._refill_per_sec = self._capacity / self._window
-        self._buckets: dict[str, _Bucket] = {}
+        # OrderedDict + move_to_end gives us O(1) LRU eviction.
+        self._buckets: OrderedDict[str, _Bucket] = OrderedDict()
+        self._max_buckets = max_buckets
         self._lock = Lock()
 
     def hit(self, key: str, *, now: float | None = None) -> bool:
@@ -73,6 +95,13 @@ class TokenBucketLimiter:
             if bucket is None:
                 bucket = _Bucket(tokens=self._capacity, last_refill=t)
                 self._buckets[key] = bucket
+                # Evict the oldest bucket if we're over budget. Worst
+                # case: an evicted attacker gets a fresh full bucket
+                # on their next hit — bounded by the eviction rate.
+                if len(self._buckets) > self._max_buckets:
+                    self._buckets.popitem(last=False)
+            else:
+                self._buckets.move_to_end(key)
             elapsed = max(0.0, t - bucket.last_refill)
             bucket.tokens = min(self._capacity, bucket.tokens + elapsed * self._refill_per_sec)
             bucket.last_refill = t
@@ -95,32 +124,51 @@ class TokenBucketLimiter:
             if tokens >= 1.0:
                 return 1
             deficit = 1.0 - tokens
-            return max(1, int(deficit / self._refill_per_sec) + 1)
+            return max(1, math.ceil(deficit / self._refill_per_sec))
 
 
-def client_ip(request: Request) -> str:
+def _normalize_ip(raw: str) -> str:
+    """Strip brackets/whitespace and case-fold IPv6 so the key is canonical."""
+    s = raw.strip()
+    # IPv6-in-brackets ("[::1]" / "[::1]:port") — drop brackets and any port.
+    if s.startswith("["):
+        end = s.find("]")
+        if end != -1:
+            s = s[1:end]
+    return s.casefold()
+
+
+def client_ip(request: Request, *, trust_xff: bool = False) -> str:
     """Best-effort client IP for rate-limit keying.
 
-    Honors ``X-Forwarded-For`` (CF gorouter sets it) — falls back to
-    the immediate peer. The first XFF entry is treated as the original
-    client. **Do not** use this for security decisions — XFF is
-    client-controllable for unauthenticated callers.
+    Honors ``X-Forwarded-For`` only when ``trust_xff`` is set (the CF
+    gorouter strips/sets it reliably, but a direct caller can spoof
+    it). The first XFF entry is treated as the original client.
+    Returns a normalized lowercase string with IPv6 brackets stripped.
+
+    **Do not** use this for security decisions — XFF is operator-
+    controllable for unauthenticated callers even when ``trust_xff``
+    is True.
     """
-    xff = request.headers.get("x-forwarded-for")
-    if xff:
-        return xff.split(",")[0].strip()
+    if trust_xff:
+        xff = request.headers.get("x-forwarded-for")
+        if xff:
+            first = xff.split(",", 1)[0]
+            return _normalize_ip(first)
     if request.client is not None:
-        return request.client.host
+        return _normalize_ip(request.client.host)
     return "unknown"
 
 
-def raise_429_if_limited(limiter: TokenBucketLimiter, request: Request) -> None:
+def raise_429_if_limited(
+    limiter: TokenBucketLimiter, request: Request, *, trust_xff: bool = False
+) -> None:
     """Standard 429 raise for the JSON-API routes.
 
     HTML/HTMX routes that want a fragment instead of a JSON body call
     ``limiter.hit()`` directly and render their own response.
     """
-    key = client_ip(request)
+    key = client_ip(request, trust_xff=trust_xff)
     if not limiter.hit(key):
         retry = limiter.retry_after(key)
         raise HTTPException(
