@@ -71,7 +71,33 @@ class LocalSource(_SourceBase):
     path: str = Field(min_length=1)
 
 
-Source = GitSource | LocalSource
+class HttpSource(_SourceBase):
+    """An HTTP-hosted source — fetch a list of documents over HTTPS.
+
+    Phase 7 (#27) addition. Each URL is fetched with an SSRF guard that
+    refuses RFC1918 / link-local / loopback / metadata-service IPs;
+    the ``host_allowlist`` is enforced both before DNS resolution AND
+    after redirect chains so a 302 to an internal host cannot smuggle
+    a request past the guard.
+
+    The connector limits per-response size via the same
+    :class:`IngestionCaps.max_file_bytes` knob used by local + git
+    sources, and refuses any response > the cap rather than partially
+    indexing.
+
+    URLs MUST use the ``https`` scheme by default; ``http`` is
+    rejected unless the host is explicitly allowed via
+    ``allow_http_hosts``. The default is `[]` — operators must opt
+    each plain-HTTP host in by name.
+    """
+
+    type: Literal["http"]
+    urls: list[str] = Field(min_length=1)
+    host_allowlist: list[str] = Field(min_length=1)
+    allow_http_hosts: list[str] = Field(default_factory=list)
+
+
+Source = GitSource | LocalSource | HttpSource
 
 
 class _Registry(BaseModel):
