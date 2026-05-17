@@ -105,14 +105,67 @@ Full env reference: [configuration.md](./configuration.md).
 The manifest points CF's HTTP health check at `/healthz` with a 10-
 second invocation timeout. If you customize, keep `/healthz` cheap.
 
-## Internal route deployment
+## Internal route deployment (apps.internal)
 
-If you only want internal access, change the route at push time:
+For deployments where only other CF apps in the same foundation should
+reach kiln (e.g., an agent host that consumes `/v1/agent/context-pack`),
+prefer an `apps.internal` route to a public gorouter route. Traffic
+stays inside the CF overlay network and never traverses the public
+Diego edge.
+
+**Push without a public route:**
 
 ```bash
 cf push -f manifest.yml --no-route
 cf map-route cf-knowledge-kiln-api apps.internal --hostname cf-knowledge-kiln-api
 ```
+
+The internal route resolves DNS-style from inside the same CF org
+(`cf-knowledge-kiln-api.apps.internal`). Resolution from outside the
+foundation will not work — that's the point.
+
+**Open a network policy so consumer apps can reach kiln:**
+
+`apps.internal` routes are deny-by-default at the container-network
+layer. Each consumer app needs an explicit policy:
+
+```bash
+# Allow `my-agent-app` to call kiln on port 8080.
+cf add-network-policy my-agent-app \
+    --destination-app cf-knowledge-kiln-api \
+    --protocol tcp \
+    --port 8080
+```
+
+Verify with `cf network-policies`. Without this, the consumer app gets
+a connection-refused at TCP level (visible as a httpx `ConnectError`
+or similar in its logs).
+
+**Consumer apps still need a bearer token.** Network-layer isolation
+is necessary but not sufficient — `KILN_AUTH_MODE=bearer` (the
+production default; see `manifest.yml`) still requires the
+`Authorization: Bearer <token>` header on every `/v1/*` request. Bind
+the token via a CF user-provided service so each consumer reads it
+from its own `VCAP_SERVICES` rather than its own env:
+
+```bash
+cf cups kiln-token -p '{"token": "<generated>"}'
+cf bind-service my-agent-app kiln-token
+cf restart my-agent-app
+```
+
+In the consumer app, read `VCAP_SERVICES.user-provided[].credentials.token`.
+
+**Healthz from inside the foundation:**
+
+```bash
+cf ssh my-agent-app -c 'curl -fsS http://cf-knowledge-kiln-api.apps.internal:8080/healthz'
+```
+
+The port (`8080`) is the container port from `manifest.yml`, not the
+public 443/80 the gorouter uses. `apps.internal` traffic is plain
+HTTP — no TLS terminator sits in front, so requests inside the
+foundation use `http://`.
 
 ## Scaling
 
@@ -123,12 +176,37 @@ queue to coordinate them.
 
 ## Smoke test after push
 
+A canonical `scripts/smoke-test.sh` walks `/healthz`, `/version`,
+`/readyz`, and a real `/v1/search` round-trip. It honors
+`KILN_AUTH_MODE=bearer` (the production default) by attaching the
+`Authorization` header when `KILN_BEARER_TOKEN` is set.
+
 ```bash
 APP_URL="https://$(cf app cf-knowledge-kiln-api | awk '/routes:/ {print $2}')"
+TOKEN="$(cf env cf-knowledge-kiln-api | awk '/KILN_BEARER_TOKEN/ {print $2}')"
 
+KILN_URL="$APP_URL" KILN_BEARER_TOKEN="$TOKEN" \
+    ./scripts/smoke-test.sh
+```
+
+Quick one-liner without the script (skips the search round-trip):
+
+```bash
 curl -fsS "$APP_URL/healthz"   # expect 200 {"status":"ok",...}
-curl -fsS "$APP_URL/readyz"    # expect 200 {"status":"ready",...}
+curl -fsS "$APP_URL/readyz"    # expect 200 or 503 {"checks":{...}}
 curl -fsS "$APP_URL/version"   # expect 200 {"version":"0.1.0"}
+```
+
+For an apps.internal-only deployment, smoke-test from inside the
+foundation via `cf ssh`:
+
+```bash
+cf ssh my-agent-app -c '
+  TOKEN=$(jq -r ".\"user-provided\"[0].credentials.token" <<< "$VCAP_SERVICES")
+  KILN_URL=http://cf-knowledge-kiln-api.apps.internal:8080 \
+  KILN_BEARER_TOKEN="$TOKEN" \
+  /path/to/cloned/cf-knowledge-kiln/scripts/smoke-test.sh
+'
 ```
 
 ## Logs
