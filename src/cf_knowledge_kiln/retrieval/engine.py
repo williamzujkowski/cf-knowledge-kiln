@@ -234,13 +234,16 @@ class HybridRetriever:
     ) -> Any:  # AsyncIterator[AsyncSession]
         """Yield a session inside a transaction.
 
-        * Caller-supplied session: assume they own the lifecycle and
-          have already started (or will start) a transaction. Yield
-          as-is.
-        * No session: open one via the pool and start a transaction.
+        * Caller-supplied session: caller MUST have already started an
+          active transaction (e.g., the API handler via
+          ``Depends(get_session)``). Passing an un-transactioned
+          session is undefined behavior — the per-query
+          ``SET LOCAL hnsw.ef_search`` won't take effect outside a
+          transaction and the recall target will silently regress.
+        * No session: open one via the pool and start a transaction
+          here.
         """
         if session is not None:
-            # Caller owns the session + transaction (e.g. API handler).
             yield session
             return
         async with self._db.session() as fresh, fresh.begin():
