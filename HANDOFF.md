@@ -1,7 +1,7 @@
 # Handoff notes
 
-**As of:** 2026-05-17
-**Status:** Phase 0–5 complete. `/v1/search` and `/v1/agent/context-pack` are live, cited, and persisted to telemetry tables. CI green on `main` (298 unit + 72 integration tests).
+**As of:** 2026-05-17 (late-night autonomous run)
+**Status:** Phases 0–6 complete + Phase 7 HTTP/SSRF + Phase 8 auth/SBOM/CodeQL shipped. The product is feature-complete for the MVP except for the CF deploy gate (operator track) and Phase 9 polish (eval harness + forking docs). CI green on `main` (369 unit + 96 integration tests, 11 PRs merged since the slice-4 HANDOFF).
 
 This file is the "where we are, what's next, what's been decided" briefing. For *how* to work in the repo, read [AGENTS.md](./AGENTS.md). For *what* the project is, read [README.md](./README.md). For *the plan*, read [plans/cf-rag-plan.md](./plans/cf-rag-plan.md).
 
@@ -11,24 +11,30 @@ This file is the "where we are, what's next, what's been decided" briefing. For 
 
 cf-knowledge-kiln is a Cloud Foundry RAG knowledge app — a `cf push`'d Python/FastAPI app that binds to a Postgres + pgvector service and serves cited retrieval to humans (search UI) and AI agents (bounded context packs). Architecture is hybrid retrieval (pgvector similarity + Postgres FTS + metadata ranking) per [ADR-0002](./docs/adr/0002-postgres-pgvector.md) (reaffirmed by [ADR-0008](./docs/adr/0008-pgvector-mvp-critical.md)), with ranking + index decisions captured in [ADR-0009](./docs/adr/0009-hybrid-retrieval.md).
 
-**Phase 5 shipped in four slices on 2026-05-17:**
+**Phase 5 shipped 2026-05-17** in four slices (PRs #69, #71, #72, #73). After-the-slice-4 follow-up #75 collapsed handlers to one DB session per request. Editorial-design UI scaffold (PR #76) and the feedback widget (PR #78) shipped Phase 6 entirely. Phase 7 HTTP source + SSRF guard landed (PR #80) with 6to4-bypass fix included after independent review. Phase 8 hardening landed: bearer-token auth (PR #77, with path-traversal fix), SBOM + grype CI (PR #82), CODEOWNERS + CodeQL (PR #83). Worker session lifecycle + smart crash recovery (PR #85) and DRY refactor of the repo layer (PR #84) closed two carry-over backlog items. Final cleanup of over-cap functions in pipeline.py (PR #86) closed #53.
 
-- **Slice 1** (PR [#69](https://github.com/williamzujkowski/cf-knowledge-kiln/pull/69), `ff65268`) — pure-logic retrieval primitives under `src/cf_knowledge_kiln/retrieval/`: `types.py`, `config.py`, `filters.py`, `ranking.py`. 67 unit tests; no DB, no HTTP.
-- **Slice 2** (PR [#71](https://github.com/williamzujkowski/cf-knowledge-kiln/pull/71), `dc44c9d`) — `ChunksRepository.hybrid_search` + `search_by_fts` (single CTE per ADR-0009 §5, RRF k=60, vector + FTS arms with filter pushdown). `HybridRetriever.search()` engine. `KILN_HNSW_EF_SEARCH` setting (default 200). 10 new integration tests; HNSW index usage verified via live EXPLAIN ANALYZE.
-- **Slice 3** (PR [#72](https://github.com/williamzujkowski/cf-knowledge-kiln/pull/72), `9e2b7ad`) — `HybridRetriever.context_pack()` + new `src/cf_knowledge_kiln/agent/serializers.py` (token budgeting via tiktoken, `UNTRUSTED_CONTENT_NOTICE` preamble, `derive_confidence`, `assemble_context_pack`). Pydantic models for `ContextPackRequest/Response`, `EvidenceChunk`, `RelatedSource`, `TokenBudget`. Direct Pydantic↔hand-spec drift parametrize cases.
-- **Slice 4** (PR [#73](https://github.com/williamzujkowski/cf-knowledge-kiln/pull/73), `e6b07bc`) — wired `POST /v1/search` → `SearchResponse` and `POST /v1/agent/context-pack` → `ContextPackResponse`. New `src/cf_knowledge_kiln/api/dependencies.py` for FastAPI `Depends`-able providers (`get_db`, `get_embedding_provider`, `get_retrieval_config`, `get_hybrid_retriever`). Each handler appends a telemetry row to `rag_queries` / `context_packs`. `PHASE_5_ONLY_SCHEMAS` tolerance set is empty now — drift test enforces strict matching for all Phase-5 schemas. Reviewer-caught: telemetry now wrapped in try/except so logging failures don't cascade to 500; excerpt now derived from real chunk content via `SearchResult.chunk_text` (was always empty before).
+**Net effect of the late-night run (2026-05-17 evening):** 11 PRs merged from #75 through #86. Issues closed: #25, #27, #28, #29, #47, #49, #53, #55, #70, #74 in this repo + #11, #12, #14, #15, #17, #18, #19, #20, #21, #22, #40 in a parallel issue-tracker sweep where prior phase merges had silently completed work. Issues filed for follow-up: #79 (rate-limit /feedback), #81 (TOCTOU DNS-pinning), #82 (already closed).
 
-Bonus from the slice 3 stack: **issue [#70](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/70) closed** — pre-commit ruff bumped to v0.15.13 to match CI's pyproject pin. No more local/CI format drift.
+**Phases 0–8 substantially complete.** What remains:
 
-**Next concrete chunk of work (in priority order):**
+| Phase | Status | Remaining |
+|---|---|---|
+| 0–6 | ✅ Complete | — |
+| 7 | ✅ HTTP source + SSRF done | #26 smoke-test script + apps.internal route docs (small) |
+| 8 | ✅ Auth + SBOM + CodeQL done | #30 Concourse pipeline (mirror of GH Actions), mTLS mode (follow-up to #29), #79 rate limiting |
+| 9 | Not started | #31 eval harness, #32 forking guide, #34 public/template readiness, #68 end-to-end UX evaluation |
 
-1. **Issue [#74](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/74)** — collapse `/v1/search` and `/v1/agent/context-pack` to 1 DB session per request (currently each opens 2: retrieval + telemetry). The cleanest fix is to pass the handler's session down into the engine + telemetry writers. The independent reviewer flagged this as HIGH on the slice 4 PR; deferred so slice 4 could land. Small refactor (≤200 lines) — should be one PR. **Recommended starting point** because it's a follow-up to just-merged work, the constraint is visible, and the user already authorized autonomous merging.
-2. **Phase 6** (epic [#5](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/5)) — Human search UX (HTMX-on-FastAPI baseline). Child issues: [#23](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/23) UI scaffold, [#24](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/24) result-card component, [#25](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/25) feedback writes to `rag_feedback`. Meaningful pivot to UI work — new templating choice (Jinja vs alternative), HTMX dep, browser testing. Worth a fresh session to plan and may want user input on UI choices.
-3. **Phase 7** ([#6](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/6)) — CF packaging polish + HTTP source ingestion with SSRF guard.
-4. **Phase 8** ([#7](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/7)) — auth middleware (the `/v1/*` endpoints are currently unguarded; this is deferred-not-bug per the plan).
-5. **Phase 9** ([#8](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/8)) — QA harness + docs polish, including [#68](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/68) end-to-end eval harness.
+**Next concrete chunks of work (in recommended order):**
 
-The CF deploy gate still depends on [bosh-pgvector-release#3](https://github.com/williamzujkowski/bosh-pgvector-release/issues/3) (operator runbook). Independent of the Phase 6+ work; can be tackled in parallel.
+1. **Phase 9 #31 — eval harness.** The repository now has stable retrieval + context-pack APIs to score against; this is the unlock for benchmarking + iterating on ranking quality. Most impactful next chunk.
+2. **Phase 7 #26 — smoke-test script + apps.internal docs.** Small; closes Phase 7 entirely.
+3. **Phase 8 #30 — Concourse pipeline.** Mirrors `.github/workflows/ci.yml` to keep CF-foundation-native pipelines green. Operator deliverable.
+4. **#81 — TOCTOU DNS-pinning for HTTP connector.** Reviewer-flagged on PR #80; needs a custom httpx transport.
+5. **#79 — rate limit /feedback + /search.** Reviewer-flagged on PR #78; defense in depth.
+6. **#54 — small test-coverage gaps bundle.** Bite-sized.
+7. **Phase 9 #32 — forking guide.** Phase 9 capstone. Needs Phase 8 done first.
+
+The CF deploy gate still depends on [bosh-pgvector-release#3](https://github.com/williamzujkowski/bosh-pgvector-release/issues/3) (operator runbook). Independent of all the above; happens on the operator track.
 
 ---
 
@@ -158,53 +164,58 @@ Pure-logic retrieval primitives. No DB, no HTTP, no embedding provider. All unde
 
 The 501 stubs are gone. `/v1/search` and `/v1/agent/context-pack` are live, cited, and persisted.
 
-- **`api/dependencies.py`** (new) — FastAPI `Depends`-able providers: `get_db` (503 if unbound), `get_embedding_provider`, `get_retrieval_config`, `get_hybrid_retriever`.
-- **`api/retrieval.py`** — `POST /v1/search` → `SearchResponse`, `POST /v1/agent/context-pack` → `ContextPackResponse`. Each handler appends a row to `rag_queries` / `context_packs` via the corresponding repository. **Telemetry writes wrapped in `try/except logger.exception`** so a transient DB failure during logging doesn't turn a successful retrieval into a 500 (reviewer-caught HIGH).
-- **`retrieval/types.py`** — added `SearchRequest`, `SearchResponse`, `ResultCard` Pydantic models. `ResultCard.source_url` optional; `ResultCard.score` no longer capped at 1 (post-boost RRF / FTS-only `ts_rank_cd` can exceed it).
-- **`retrieval/engine.SearchResult`** now also carries `document_refs` (UUID → DocumentRef) AND `chunk_text` (UUID → raw content). The handler uses these for ResultCard's title/repo/path/etc. and for the `excerpt` field (previously the excerpt was always empty because `chunk.chunk_metadata` only carries ingest-time prompt-injection flags — reviewer-caught MEDIUM).
-- **Hand-spec** — dropped the dummy `501` responses from `/v1/search` + `/v1/agent/context-pack`; relaxed `ResultCard.score.maximum`; updated descriptions.
-- **Drift test** — `PHASE_5_ONLY_SCHEMAS` is now empty (strict matching applies uniformly). `_enum_or_const` updated to resolve Pydantic's `Optional[Enum]` shape (`anyOf: [{$ref}, {type: null}]`) so optional enum fields don't false-negative against the hand-spec's flat enum form.
-- **Deleted** `tests/unit/test_retrieval_stubs.py` (501-stub assertions no longer match runtime).
-- **Tests** — +7 integration in `tests/integration/test_api_routes.py`. Smoke test asserts real title (not the `"(unknown)"` defensive fallback) and non-empty excerpt — these prove `document_refs` + `chunk_text` actually plumb data through.
+Reviewer-caught + addressed before merge: telemetry writes wrapped in `try/except logger.exception` so logging failures don't cascade to 500; excerpt now derived from real chunk content via `SearchResult.chunk_text` (was always empty before because `chunk.chunk_metadata` only carries ingest-time prompt-injection flags).
+
+### Phase 5 follow-up: 1 DB session per request (PR #75, closes #74)
+
+Each `/v1/*` request used to open two sessions (retrieval + telemetry). PR #75 collapsed to one via a new `Depends(get_session)` + a `session: AsyncSession | None` parameter on `HybridRetriever.search/.context_pack`. Telemetry uses `session.begin_nested()` (SAVEPOINT) so a failed write rolls back ONLY the telemetry insert; the retrieval result still commits. Worker (#47 follow-up) got the same treatment.
+
+### Phase 6 — Human search UX (PRs #76, #78; closes #5, #23, #25)
+
+- **PR #76 (closes #23)** — HTMX-on-FastAPI scaffold. Server-rendered Jinja2 + HTMX 2.0 from CDN. No build step. New `api/web.py` router with `GET /` (search shell) + `POST /search` (HTMX target → results-list HTML fragment). Templates under `api/templates/`: `base.html`, `search.html`, `_results.html`, `_error.html`. **Editorial-Reference aesthetic** in `static/kiln.css` — Fraunces serif + JetBrains Mono, warm-paper ivory palette, oxblood accent for deprecation/warnings, hairline rules instead of boxed cards. Skip link + `aria-busy` toggled via small HTMX event listeners + `prefers-reduced-motion` honored. AGENTS.md "Deprecated docs must be visibly flagged" enforced via CSS hatch pattern + gutter rule + status badge.
+- **PR #78 (closes #25)** — Per-card feedback widget. `<details>` disclosure with 6 signal radios (useful, not_useful, stale, wrong_source, missing_source, duplicate_or_conflicting) + optional comment (500-char cap). `POST /feedback` writes to `rag_feedback` keyed off the persisted `rag_queries.id`. HTMX swaps an ack chip in-place on success or a retry message on failure. Non-fatal via savepoint.
+
+### Phase 7 — HTTP source ingestion + SSRF guard (PR #80, closes #27)
+
+New `HttpSource` Pydantic model + `HttpConnector` in `ingestion/_http_connector.py` (split out to keep `connectors.py` under 400 lines). The `ssrf.py` module's guard is the load-bearing piece:
+
+- `assert_host_allowlisted` — cheap pre-DNS host + scheme check. Rejects `ftp/gopher/file/javascript/data`. `http` only with explicit per-host opt-in.
+- `assert_addresses_public` — resolves host and rejects if ANY IP is non-public. Covers RFC1918, loopback, link-local (including 169.254.169.254 called out by name), multicast, reserved, unspecified — both v4 and v6.
+- `_REFUSED_IPV6_RANGES` — explicit refusals for `2002::/16` (6to4, embeds IPv4 in low 32 bits — Python's `is_reserved` flipped between 3.12.3 and 3.12.13 for this range, so we check it ourselves) and `64:ff9b::/96` (NAT64). This was the HIGH bypass the slice-1 reviewer caught.
+- Redirects manually followed (max 5 hops) with the guard re-run on every hop. Protocol-relative redirects (`//evil.com/x`) refused outright.
+
+TOCTOU between our DNS lookup and httpx's connect lookup is filed as #81; mitigation requires a custom transport.
+
+### Phase 8 — auth + SBOM + CodeQL (PRs #77, #82, #83)
+
+- **PR #77 (closes #29)** — `api/auth.py` bearer-token middleware. `none`/`bearer`/`mtls` modes via `KILN_AUTH_MODE`. `none` in `production` or `staging` → fail-start. `bearer` without `KILN_BEARER_TOKEN` → fail-start. Tokens under 32 chars → fail-start. `mtls` declared but raises (real impl follows in a separate PR). Reviewer caught + fixed a HIGH path-traversal bypass (`/static/../v1/search`) via `posixpath.normpath` before the public-prefix check.
+- **PR #82 (closes #28)** — `sbom-scan` CI job runs `anchore/sbom-action` (syft) + `anchore/scan-action` (grype) with `severity-cutoff: high`. SBOM uploaded as a 90-day artifact named `cf-knowledge-kiln-sbom`.
+- **PR #83 (closes #55)** — `.github/CODEOWNERS` (catch-all + specific overrides for CI / auth / SSRF / OpenAPI / ADRs) and a CodeQL workflow with `security-extended` queries. Runs on push, PR, and weekly cron.
+
+### Other backlog cleanup (PRs #84, #85, #86)
+
+- **PR #84 (closes #49)** — Added `BaseRepository._persist` + `apply_eq_filters` helpers. ~120 lines of duplicate `add→flush→refresh→return` and optional-filter-ladder boilerplate gone across 10 repositories.
+- **PR #85 (closes #47)** — Worker uses one session per job (`run_source` + `mark_done` in the same session). `IngestionSummary.run_id` lets the recovery sweep recognize a crash-after-durable-write and `mark_done` instead of redoing the work (the issue's Option 2).
+- **PR #86 (closes #53)** — Split `_upsert_document` (53→under 50) and `_process_file` (87→32) into helpers. Lifted `_runs_update` late imports. Added `__all__` to `api/cli.py`.
 
 ---
 
 ## What's next (in order)
 
-### Immediate: issue [#74](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/74) — collapse to 1 DB session per request
+### Recommended order (per the late-night run wrap-up)
 
-Reviewer-flagged on slice 4. Each `/v1/search` and `/v1/agent/context-pack` request opens **two** sessions: one inside `HybridRetriever._fetch_candidates` for the hybrid CTE (transactional for `SET LOCAL hnsw.ef_search`) and a second inside `_log_rag_query` / `_log_context_pack` for telemetry. With `KILN_PG_POOL_SIZE=5` + `KILN_PG_POOL_MAX_OVERFLOW=10` (15 connections total), the API ceilings at ~8 concurrent requests.
+1. **Phase 9 #31 — eval harness.** Most impactful unlock; we now have stable retrieval + context-pack APIs to score against. Probably starts with `tests/eval/` + a small recall/MRR rig over a few known queries with golden chunks.
+2. **Phase 7 #26 — smoke-test script + `apps.internal` route docs.** Small; closes Phase 7 entirely.
+3. **Phase 8 #30 — Concourse pipeline.** Mirrors `.github/workflows/ci.yml` for CF-foundation-native CI/CD.
+4. **#81 — TOCTOU DNS-pinning** for the HTTP source connector. Reviewer-flagged on PR #80. Mitigation needs a custom `httpx.HTTPTransport` that pins the resolved IP for the lifetime of one fetch.
+5. **#79 — rate limit `/feedback` + `/search`.** Reviewer-flagged on PR #78. Per-IP token bucket in-process is the MVP shape; defer Redis until horizontal scale.
+6. **#54 — bundled small test-coverage gaps.** `/readyz` failing-branch test, lifespan error path, `QueriesRepository.list(since=)`, `_expand_globs` edge tests, `_walk` cap-order reorder, frontmatter size limit. Bite-sized.
+7. **Phase 9 #32 — forking guide.** Phase 9 capstone; needs Phase 8 done first (#30 + #79 ideally).
+8. **#34 — public/template readiness review** before flipping the repo public.
 
-**Recommended fix (option B in #74):** Have the API handler open one session, pass it as an optional parameter to `HybridRetriever.search` / `.context_pack`, and have the retriever use it when provided (falling back to `db.session()` only when called outside an HTTP context). Telemetry repos take the same session. The `SET LOCAL` still scopes correctly because both retrieval and logging live inside the same transaction.
+### Parallel (operator track — don't do these here)
 
-**File plan:**
-
-1. Extend `HybridRetriever.search` + `context_pack` signatures with `session: AsyncSession | None = None`. When None, open one as today.
-2. Refactor `_fetch_candidates` to use the provided session if any, else open one.
-3. API handlers in `api/retrieval.py` open one session via a new `Depends(get_session)` dep (or via `async with db.session() as session, session.begin():` at the top of each handler) and pass it through both engine + telemetry.
-4. Add an integration test that asserts the connection count under load (or at least verifies a single transaction by mocking `db.session()` and counting calls).
-
-This is a follow-up to just-merged work; small refactor (≤200 lines), one PR. User pre-authorized autonomous merging.
-
-### Then: Phase 6 — Human search UX (epic [#5](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/5))
-
-HTMX-on-FastAPI baseline. Child issues:
-
-- **[#23](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/23)** — Search box, filter panel, result list, document preview. Server-rendered Jinja templates + HTMX for partial updates. No build step. Acceptance: user can search a fixture corpus and see cited results; filters narrow without page reload; deprecated results visually flagged; browser smoke-tested.
-- **[#24](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/24)** — Result card component with status badge, freshness indicator, source link.
-- **[#25](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/25)** — Feedback buttons that write to `rag_feedback`.
-
-**Pivot worth flagging to the user before starting**: this is the first UI work in the repo. Choices that benefit from input: templating engine (Jinja2 is the obvious FastAPI default), styling approach (vanilla CSS vs Tailwind), HTMX version pin. Suggest a quick read of [docs/user-journeys.md](./docs/user-journeys.md) for the intended human flow.
-
-### Parallel (operator track)
-
-- **[bosh-pgvector-release#3](https://github.com/williamzujkowski/bosh-pgvector-release/issues/3)** — runbook for deploying the BOSH release on the homelab director, registering the broker as a CF app, and proving the end-to-end `cf create-service postgresql-local pgvector ...` path works. **Kiln's CF deploy gate** (epic [#1](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/1) acceptance) blocks on this.
-
-### Later phases (epics)
-
-- Phase 7 ([#6](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/6)) — CF packaging polish + HTTP source ingestion with SSRF guard.
-- Phase 8 ([#7](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/7)) — CI/CD + security hardening (auth middleware lands here — the `/v1/*` endpoints are currently unguarded by design until then; current `manifest.yml` deliberately leaves `KILN_AUTH_MODE` unset).
-- Phase 9 ([#8](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/8)) — QA harness + docs polish for forkability; includes [#68](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/68) (end-to-end evaluation harness for human + agent user journeys).
+- **[bosh-pgvector-release#3](https://github.com/williamzujkowski/bosh-pgvector-release/issues/3)** — runbook for deploying the BOSH release on the homelab director, registering the broker as a CF app, and proving the end-to-end `cf create-service postgresql-local pgvector ...` path works. **Kiln's CF deploy gate** (epic [#1](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/1) acceptance) blocks on this. Not for this repo's agent — file new issues on the other repo if you need anything from it.
 
 ---
 
@@ -266,18 +277,20 @@ export KILN_DATABASE_URL=postgresql+asyncpg://kiln:kiln@localhost:5432/kiln  # p
 
 ## Open follow-ups (filed as issues; do NOT inline-fix unless you happen to be in adjacent code)
 
-- **[#74](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/74)** — `/v1/search` and `/v1/agent/context-pack` open 2 DB sessions per request (retrieval + telemetry). Caps practical concurrency. Recommended fix in the issue body. **This is the recommended next chunk of work.**
-- **[#37 (kiln)](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/37)** — Layer-2 code-review follow-ups from the 2026-05-16 pass: production fail-fast on missing DB URL, worker exit-code instead of `sleep infinity`, per-worker connection-pool math docs, OpenAPI contract drift items, replacing the homegrown `lint_openapi.py` with `openapi-spec-validator`, a handful of smaller items.
-- **[#47](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/47)** — `Worker._process` opens two sessions; a mid-process crash leaves the job in `running` until the recovery sweep requeues it (which then redoes idempotent work). Owner-input design decision. (Related to #74 — both about 2-session-per-operation patterns.)
-- **[#49](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/49)** — DRY the create-and-refresh + filtered-list pattern across 9 repos. Mixin or generic base.
-- **[#53, #54](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/53)** — Low-priority code cleanup and test-coverage bundles. Bite-sized.
-- **[#55](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/55)** — Add CODEOWNERS + evaluate Semgrep/CodeQL alongside existing bandit.
-- **[#68](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/68)** — End-to-end evaluation harness for human + agent user journeys (Phase 9 scope).
-- **[#19 (kiln)](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/19)** — Body still references the reversed ADR-0007 ("FTS-only"). Comment posted; needs owner edit.
+- **[#26](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/26)** — Phase 7 smoke-test script + `apps.internal` route docs. Small; closes Phase 7 entirely.
+- **[#30](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/30)** — Phase 8 Concourse pipeline mirror of GH Actions. Operator deliverable.
+- **[#31](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/31)** — Phase 9 retrieval-evaluation harness (`tests/eval/`). Highest-value next chunk — unlocks ranking-quality iteration.
+- **[#32](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/32)** — Phase 9 forking guide. Capstone; do after #30 + #79.
 - **[#34 (kiln)](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/34)** — Public/template readiness review before flipping the repo public.
-- **[bosh-pgvector-release#2](https://github.com/williamzujkowski/bosh-pgvector-release/issues/2)** — Layer-2 follow-ups for the BOSH release.
+- **[#37 (kiln)](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/37)** — Layer-2 code-review follow-ups from the 2026-05-16 pass: production fail-fast on missing DB URL, worker exit-code instead of `sleep infinity`, per-worker connection-pool math docs, OpenAPI contract drift items, replacing the homegrown `lint_openapi.py` with `openapi-spec-validator`, a handful of smaller items.
+- **[#54](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/54)** — Bundled low-priority test-coverage gaps.
+- **[#68](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/68)** — End-to-end UX evaluation for human + agent journeys (Phase 9 scope; complements #31).
+- **[#79](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/79)** — rate limit /feedback + /search. Reviewer-flagged on slice 6 (#78). Phase 8/9 hardening.
+- **[#81](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/81)** — TOCTOU DNS-pinning for the HTTP source connector. Reviewer-flagged on PR #80. Needs a custom httpx transport.
+- **[#33](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/33)** — Stale/deprecated/conflicting-source detection across all responses. Partially done in slice 3 (HybridRetriever.context_pack); cross-cutting cleanup still possible.
+- **[bosh-pgvector-release#2](https://github.com/williamzujkowski/bosh-pgvector-release/issues/2)** — Layer-2 follow-ups for the BOSH release. Operator-track only.
 
-Closed during Phase 5: #70 (ruff pre-commit/CI version drift, fixed in slice 3 by pinning pre-commit to ruff v0.15.13).
+Closed during the late-night run: #25 (#78), #27 (#80), #28 (#82), #29 (#77), #47 (#85), #49 (#84), #53 (#86), #55 (#83), #70 (slice 3), #74 (#75) — plus an issue-tracker sweep that closed #11/#12/#14/#15/#17/#18/#19/#20/#21/#22/#40 as the relevant Phase 2/3/4/5 PRs had silently completed them.
 
 ---
 
@@ -298,6 +311,12 @@ Closed during Phase 5: #70 (ruff pre-commit/CI version drift, fixed in slice 3 b
 13. **Telemetry writes must NOT cascade to 500s.** Wrap any "log this query happened" code in `try/except logger.exception` — a transient DB failure during telemetry is not a user-visible error. Slice 4's `_log_rag_query` and `_log_context_pack` are the canonical examples.
 14. **Slice tests that exercise warning paths must assert the precondition.** Several slice 2/3/4 tests originally said `if X in result: assert warning` — which passes vacuously if `X` isn't returned. Use `assert X` first to prove the precondition fires, then assert the warning. Reviewer caught this on slice 2.
 15. **The score field is unbounded.** Hand-spec used to cap `ResultCard.score` at 1.0; that's not true — FTS-only fallback uses raw `ts_rank_cd` which can exceed it. Slice 4 dropped the cap. Clients that validated the old schema strictly may need updates.
+16. **`KILN_AUTH_MODE=none` is refused when `KILN_ENV` is `production` OR `staging`.** Operators who genuinely need an open instance (e.g., dev clusters) must set `KILN_ENV=development`. Bearer tokens must be ≥32 chars at startup. mTLS mode declared in the Literal but currently raises — implementation deferred.
+17. **`_is_public` in `api/auth.py` normalizes the path before the prefix check** (`posixpath.normpath` + `..`-segment refusal). Don't change it back to a raw-string match — a reviewer caught the `/static/../v1/search` bypass that the unnormalized version permitted, and the regression tests will fail loudly if it returns. Test names mention path-traversal-bypass.
+18. **HTTP source connector's `2002::/16` block.** `ipaddress.IPv6Address.is_reserved` changed between Python 3.12.3 and 3.12.13 to flag 6to4 — that's CI-vs-local skew waiting to happen. The `_REFUSED_IPV6_RANGES` explicit check runs BEFORE the `is_*` fence so the "transition range" message is stable across Python versions. Don't reorder. See `ingestion/ssrf.py:_assert_ip_public`.
+19. **HTTP connector TOCTOU between DNS guard and httpx connect** is a known limitation. Documented in `_http_connector.py` module docstring + filed as #81. Mitigation requires a custom transport — don't paper over it with retries.
+20. **Detect-secrets/gitleaks dual hooks.** detect-secrets accepts `# pragma: allowlist secret` on the same line. gitleaks scans by entropy and rejects high-entropy strings even WITH the pragma. For tests that need a fake "long enough to pass the validator" token, use a low-entropy repeating string (`"test-bearer-token-32-chars-or-longer"`), not a hex random one. See `tests/unit/test_auth_middleware.py` for the established pattern.
+21. **`session.begin_nested()` SAVEPOINT pattern** is the canonical way to make telemetry writes non-fatal. The outer transaction (`get_session` dependency) stays alive; the nested transaction rolls back on a `try/except` and the user still gets their 200. See `api/retrieval.py` + `api/web.py` `_log_*` helpers.
 
 ---
 
@@ -320,9 +339,20 @@ cd /home/william/git/cf-knowledge-kiln
 git checkout main && git pull
 docker start kiln-pg  # pgvector container; ignore "already running"
 export KILN_DATABASE_URL=postgresql+asyncpg://kiln:kiln@localhost:5432/kiln  # pragma: allowlist secret
-PY=.venv/bin/python make verify             # 298 unit baseline
-.venv/bin/pytest tests/integration -q       # 72 integration baseline
+PY=.venv/bin/python make verify             # 369 unit baseline
+.venv/bin/pytest tests/integration -q       # 96 integration baseline
 ```
+
+For the next chunk (Phase 9 #31 — retrieval-eval harness):
+
+```bash
+git checkout -b feat/phase-9-eval-harness
+gh issue view 31 -R williamzujkowski/cf-knowledge-kiln
+# Plan: tests/eval/ with a small golden-judgment set, MRR + recall@K
+# scorers wired to HybridRetriever.search, baseline numbers committed.
+```
+
+(Stale instructions for the no-longer-current next chunks left below as historical reference.)
 
 For the next chunk (#74 — collapse to one DB session per request):
 
