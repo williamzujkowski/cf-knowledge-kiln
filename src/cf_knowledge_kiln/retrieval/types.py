@@ -87,6 +87,47 @@ class Warning(BaseModel):
     source_id: UUID | None = None
 
 
+class SearchRequest(BaseModel):
+    """POST /v1/search request body."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    query: str = Field(min_length=1)
+    filters: RetrievalFilters | None = None
+    max_results: int = Field(default=10, ge=1, le=50)
+
+
+class ResultCard(BaseModel):
+    """Human-search result card returned by /v1/search."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    chunk_id: UUID
+    document_id: UUID
+    title: str
+    excerpt: str
+    heading_path: list[str] | None = None
+    repo: str | None = None
+    path: str | None = None
+    source_url: AnyUrl | None = None
+    commit_sha: str | None = None
+    status: Status
+    owner: str | None = None
+    last_reviewed: date | None = None
+    score: float = Field(ge=0)
+    warnings: list[Warning] | None = None
+
+
+class SearchResponse(BaseModel):
+    """POST /v1/search response body."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    query: str
+    results: list[ResultCard]
+    warnings: list[Warning] | None = None
+
+
 class Conflict(BaseModel):
     """≥2 active sources that touch the same heading_path.
 
@@ -204,7 +245,10 @@ __all__ = [
     "EvidenceChunk",
     "RelatedSource",
     "Relationship",
+    "ResultCard",
     "RetrievalFilters",
+    "SearchRequest",
+    "SearchResponse",
     "Status",
     "TokenBudget",
     "Warning",

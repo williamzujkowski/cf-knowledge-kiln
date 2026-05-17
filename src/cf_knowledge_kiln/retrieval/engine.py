@@ -75,10 +75,21 @@ class SearchResult:
     ``chunks`` are post-boost, sorted best-first, trimmed to
     ``max_results``. ``warnings`` are de-duplicated per document_id
     where applicable (see ranking warning emitters for the exact rules).
+    ``document_refs`` maps document_id → a minimal record with the
+    document-level fields (title, repo, path, …) that callers need to
+    render result cards — :class:`RankedChunk` itself is chunk-level
+    only and doesn't carry document metadata. The dict values are
+    :class:`cf_knowledge_kiln.agent.serializers.DocumentRef` but typed
+    as ``Any`` here to avoid a top-level cycle (the engine module
+    can't import from agent.serializers without triggering it).
+    ``chunk_text`` maps chunk_id → its raw content; the API layer uses
+    this to derive an excerpt without a second DB round-trip.
     """
 
     chunks: list[RankedChunk]
     warnings: list[Warning] = field(default_factory=list)
+    document_refs: dict[UUID, Any] = field(default_factory=dict)
+    chunk_text: dict[UUID, str] = field(default_factory=dict)
 
 
 class HybridRetriever:
@@ -126,7 +137,13 @@ class HybridRetriever:
         warnings = _collect_warnings(
             trimmed, today=date.today(), stale_after_days=self._config.stale_after_days
         )
-        return SearchResult(chunks=trimmed, warnings=warnings)
+        trimmed_ids = {c.chunk_id for c in trimmed}
+        return SearchResult(
+            chunks=trimmed,
+            warnings=warnings,
+            document_refs=_document_refs_from_rows(rows),
+            chunk_text={r.chunk_id: r.content for r in rows if r.chunk_id in trimmed_ids},
+        )
 
     async def context_pack(
         self,
