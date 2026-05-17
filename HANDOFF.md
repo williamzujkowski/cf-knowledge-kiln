@@ -140,11 +140,13 @@ Pure-logic retrieval primitives. No DB, no HTTP, no embedding provider. All unde
    - `hybrid_search(query_text, query_embedding, dimensions, filters, top_per_arm=100, final_limit=20, rrf_k=60) -> Sequence[Row]`. One SQL statement following the CTE in ADR-0009 §5. Each row carries `chunk_id`, `document_id`, `content`, `heading_path`, `status`, `authority`, `owner`, `last_reviewed`, `commit_sha`, `repo`, `path`, `title`, `rrf_score`, and `metadata` (the chunk's JSONB — needed for `has_prompt_injection` lookup). Use `cf_knowledge_kiln.retrieval.filters.build_predicates(filters)` to compose the WHERE clauses, AND'd into **both** the vector arm and the FTS arm before the union.
    - `search_by_fts(query_text, filters, limit=100) -> Sequence[Row]`. FTS-only fallback for when no embedding provider is configured (`/v1/search` should still work, just less semantic). Same row shape minus the vector signal.
 2. **New file `src/cf_knowledge_kiln/retrieval/engine.py`** — `HybridRetriever` class:
+
    ```python
    class HybridRetriever:
        def __init__(self, db: Database, embedding_provider: EmbeddingProvider | None, config: RetrievalConfig) -> None: ...
        async def search(self, query: str, *, filters: RetrievalFilters, max_results: int = 10) -> SearchResult: ...
    ```
+
    `SearchResult` is a small dataclass (chunks: list[RankedChunk], warnings: list[Warning]). Internal flow:
    - Empty/whitespace query → raise `ValueError` (API layer turns into 400).
    - If `embedding_provider` is None: call `search_by_fts`; build `RankedChunk` per row with score = ts_rank_cd.
@@ -171,13 +173,14 @@ Pure-logic retrieval primitives. No DB, no HTTP, no embedding provider. All unde
 - Set `SET LOCAL hnsw.ef_search = 200` at the start of the transaction (ADR-0009 §1). Expose via `KILN_HNSW_EF_SEARCH` env var in `Settings`.
 
 **Branch + PR pattern:**
+
 ```bash
 git checkout main && git pull
 git checkout -b feat/phase-5-engine
 # … write code + tests
 make verify            # local gate (258 unit minimum baseline)
-KILN_DATABASE_URL=postgresql+asyncpg://kiln:kiln@localhost:5432/kiln \
-  .venv/bin/pytest tests/integration -q   # 48 baseline; goal: more
+export KILN_DATABASE_URL=postgresql+asyncpg://kiln:kiln@localhost:5432/kiln  # pragma: allowlist secret
+.venv/bin/pytest tests/integration -q   # 48 baseline; goal: more
 # Before push, run `ruff format src tests` explicitly — local pre-commit
 # disagrees with CI ruff format on some edge cases (issue #70).
 git push -u origin feat/phase-5-engine
