@@ -22,6 +22,7 @@ from cf_knowledge_kiln.db.repositories import (
     DocumentsRepository,
     EmbeddingsRepository,
     FeedbackRepository,
+    IngestionJobsRepository,
     IngestionRunsRepository,
     ModelRegistryRepository,
     QueriesRepository,
@@ -311,3 +312,88 @@ async def test_context_packs_crud(session: AsyncSession) -> None:
 
     await repo.delete(a.id)
     assert await repo.get(a.id) is None
+
+
+# ─── ingestion_jobs mutations ───────────────────────────────────────
+
+
+async def test_jobs_mark_done_sets_terminal_state(session: AsyncSession) -> None:
+    """Issue #52: mark_done transitions a job to succeeded + sets finished_at."""
+    repo = IngestionJobsRepository(session)
+    job = await repo.create(payload={"source_name": "test"})
+    # Claim once so it's `running` — matches the worker's real-life path.
+    claimed = await repo.claim_one()
+    assert claimed is not None and claimed.id == job.id
+
+    await repo.mark_done(job.id, result_run_id=None)
+    await session.commit()
+    await session.refresh(claimed)
+
+    assert claimed.status == "succeeded"
+    assert claimed.finished_at is not None
+    assert claimed.last_error is None
+
+
+async def test_jobs_mark_failed_records_error_and_finished_at(
+    session: AsyncSession,
+) -> None:
+    """Issue #52: mark_failed transitions to failed + persists the error."""
+    repo = IngestionJobsRepository(session)
+    job = await repo.create(payload={"source_name": "test"})
+    claimed = await repo.claim_one()
+    assert claimed is not None
+
+    await repo.mark_failed(job.id, error="connector exploded mid-fetch")
+    await session.commit()
+    await session.refresh(claimed)
+
+    assert claimed.status == "failed"
+    assert claimed.last_error == "connector exploded mid-fetch"
+    assert claimed.finished_at is not None
+
+
+async def test_jobs_requeue_clears_timestamps_and_error(session: AsyncSession) -> None:
+    """Issue #52: requeue rewinds a job for re-processing without losing
+    the attempt count (which the recovery sweep relies on as a forensic
+    breadcrumb)."""
+    repo = IngestionJobsRepository(session)
+    job = await repo.create(payload={"source_name": "test"})
+    claimed = await repo.claim_one()  # status -> running, attempts++
+    assert claimed is not None
+    await repo.mark_failed(job.id, error="transient failure")
+    await session.commit()
+    await session.refresh(claimed)
+    assert claimed.attempts == 1
+    assert claimed.status == "failed"
+
+    await repo.requeue(job.id)
+    await session.commit()
+    await session.refresh(claimed)
+
+    assert claimed.status == "queued"
+    assert claimed.started_at is None
+    assert claimed.finished_at is None
+    assert claimed.last_error is None
+    # attempts intentionally NOT reset — the next claim bumps it.
+    assert claimed.attempts == 1
+
+
+async def test_jobs_mark_done_with_result_run_id_links_back(
+    session: AsyncSession,
+) -> None:
+    """When a Worker completes a job it points result_run_id at the
+    ingestion_runs row, so an operator can trace the work."""
+    runs = IngestionRunsRepository(session)
+    jobs = IngestionJobsRepository(session)
+
+    job = await jobs.create(payload={"source_name": "test"})
+    claimed = await jobs.claim_one()
+    assert claimed is not None
+    run = await runs.create(status="succeeded")
+    await session.flush()
+
+    await jobs.mark_done(job.id, result_run_id=run.id)
+    await session.commit()
+    await session.refresh(claimed)
+
+    assert claimed.result_run_id == run.id
