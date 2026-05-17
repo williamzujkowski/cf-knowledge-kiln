@@ -162,7 +162,7 @@ components:
       properties:
         status:
           type: string
-          enum: [ready, degraded, not_ready]
+          enum: [ready, degraded]
         checks:
           type: object
           additionalProperties:

@@ -26,7 +26,7 @@ ReadyStatus = Literal["ready", "degraded"]
 
 
 class HealthResponse(BaseModel):
-    status: str
+    status: Literal["ok"]
     service: str
 
 
@@ -43,6 +43,7 @@ class VersionResponse(BaseModel):
 
 @router.get(
     "/healthz",
+    operation_id="healthz",
     response_model=HealthResponse,
     status_code=status.HTTP_200_OK,
     summary="Liveness probe",
@@ -54,6 +55,7 @@ async def healthz() -> HealthResponse:
 
 @router.get(
     "/readyz",
+    operation_id="readyz",
     response_model=ReadyResponse,
     summary="Readiness probe",
     responses={
@@ -91,6 +93,7 @@ async def readyz(request: Request, response: Response) -> ReadyResponse:
 
 @router.get(
     "/version",
+    operation_id="version",
     response_model=VersionResponse,
     status_code=status.HTTP_200_OK,
     summary="Service version",
