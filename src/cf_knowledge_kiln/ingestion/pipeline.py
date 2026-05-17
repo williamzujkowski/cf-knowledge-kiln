@@ -124,6 +124,11 @@ def _resolve_doc_defaults(metadata: dict[str, Any], source_defaults: Source) -> 
         "owner": metadata.get("owner") or source_defaults.default_owner,
         "authority": metadata.get("authority") or source_defaults.authority,
         "sensitivity": metadata.get("sensitivity") or source_defaults.default_sensitivity,
+        # #24: source_url drives the clickable source link on result
+        # cards. Frontmatter-only for now (no source-level template);
+        # operators add `source_url: https://...` to a doc to make its
+        # card open the canonical URL in a new tab.
+        "source_url": metadata.get("source_url"),
     }
 
 

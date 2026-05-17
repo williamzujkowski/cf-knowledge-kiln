@@ -39,7 +39,17 @@
           <footer class="result-footer">
             <span class="source-line">
               {% if r.repo and r.path %}
-                <span class="source">{{ r.repo }}/{{ r.path }}</span>
+                {% if r.source_url %}
+                  <a class="source source-link"
+                     href="{{ r.source_url }}"
+                     target="_blank"
+                     rel="noopener noreferrer"
+                     title="Open canonical source in a new tab">
+                    {{ r.repo }}/{{ r.path }}<span class="source-link-icon" aria-hidden="true">&nbsp;↗</span>
+                  </a>
+                {% else %}
+                  <span class="source">{{ r.repo }}/{{ r.path }}</span>
+                {% endif %}
               {% endif %}
               {% if r.last_reviewed %}
                 <time datetime="{{ r.last_reviewed }}" class="freshness">

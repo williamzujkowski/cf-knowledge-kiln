@@ -323,3 +323,61 @@ def test_htmx_feedback_429_returns_error_fragment(rate_limited_client: TestClien
     assert second.status_code == 429
     assert "Too many feedback submissions" in second.text
     assert int(second.headers["retry-after"]) >= 1
+
+
+# ─── #24: source_url renders as a new-tab link ──────────────────────
+
+
+def test_search_result_card_renders_source_url_as_external_link(
+    client: TestClient, session: AsyncSession, tmp_path: Path
+) -> None:
+    """A doc with ``source_url:`` frontmatter gets a clickable card link.
+
+    #24: cards with a canonical URL render an <a target="_blank"
+    rel="noopener"> link instead of plain repo/path text. Verifies
+    source_url flows from frontmatter → documents.source_url → CTE
+    projection → SearchRow → DocumentRef → result-card view dict →
+    Jinja template.
+    """
+    (tmp_path / "linked.md").write_text(
+        textwrap.dedent(
+            """\
+            ---
+            title: Linked doc
+            status: active
+            source_url: https://docs.example.com/linked
+            ---
+            # Linked doc
+            unique-token-link-target widgets and gadgets.
+            """
+        )
+    )
+    asyncio.get_event_loop().run_until_complete(_seed(session, tmp_path))
+
+    response = client.post(
+        "/search",
+        data={"query": "unique-token-link-target", "status": ["active"]},
+    )
+    assert response.status_code == 200, response.text
+    body = response.text
+    assert "https://docs.example.com/linked" in body
+    assert 'target="_blank"' in body
+    assert 'rel="noopener noreferrer"' in body
+    assert 'class="source source-link"' in body
+
+
+def test_search_result_card_without_source_url_renders_plain_text(
+    client: TestClient, session: AsyncSession, small_corpus: Path
+) -> None:
+    """The existing corpus has no source_url frontmatter — cards stay plain.
+
+    Regression guard for the source-link plumbing: cards without a
+    canonical URL must NOT render a link (no target="_blank" anchor),
+    just the existing <span class="source"> text.
+    """
+    asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
+    response = client.post("/search", data={"query": "widgets", "status": ["active"]})
+    assert response.status_code == 200
+    # The plain-text span renders; the anchor variant does not.
+    assert 'class="source">' in response.text
+    assert 'class="source source-link"' not in response.text
