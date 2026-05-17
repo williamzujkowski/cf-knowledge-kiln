@@ -2,19 +2,26 @@
 
 :class:`HybridRetriever` glues the pure-logic primitives in
 :mod:`cf_knowledge_kiln.retrieval.ranking` together with the
-DB-touching CTE in :class:`ChunksRepository.hybrid_search`. One method
-for slice 2 — :meth:`HybridRetriever.search` — embeds the query, fans
-out vector + FTS arms, fuses with RRF, applies status/freshness
-boosts, sorts, trims to ``max_results``, and emits the standard
-warning set. No HTTP, no agent-shape serialization (those land in
-slices 3 and 4).
+DB-touching CTE in :class:`ChunksRepository.hybrid_search`.
+
+Public methods:
+
+* :meth:`HybridRetriever.search` (slice 2) — embed, fan out vector +
+  FTS arms, fuse via RRF, apply boosts, return top-N + warnings.
+* :meth:`HybridRetriever.context_pack` (slice 3) — same retrieval
+  pipeline plus conflict detection, token budgeting, and
+  agent-shape serialization (returns :class:`ContextPackResponse`).
+
+Slice 4 will replace the 501 stubs in ``api/retrieval.py`` with HTTP
+handlers calling these two methods.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Protocol
+from typing import Any, Protocol
+from uuid import UUID
 
 from cf_knowledge_kiln.db.connection import Database
 from cf_knowledge_kiln.db.repositories._hybrid import SearchRow
@@ -24,11 +31,25 @@ from cf_knowledge_kiln.retrieval.ranking import (
     RankedChunk,
     apply_boosts,
     deprecated_warnings,
+    detect_conflicts,
     prompt_injection_warnings,
     stale_warnings,
     weak_evidence_warning,
 )
-from cf_knowledge_kiln.retrieval.types import RetrievalFilters, Warning
+from cf_knowledge_kiln.retrieval.types import (
+    Conflict,
+    ContextPackResponse,
+    RetrievalFilters,
+    Warning,
+)
+
+# NOTE: ``cf_knowledge_kiln.agent.serializers`` is intentionally NOT
+# imported at module load. ``retrieval/__init__.py`` re-exports
+# ``HybridRetriever``, and the serializer depends on
+# ``retrieval.ranking`` — initializing the package forces a cycle.
+# The lazy import inside ``context_pack`` + ``_document_refs_from_rows``
+# breaks it. No TYPE_CHECKING import is needed because the engine
+# module never references the serializer types at module scope.
 
 
 class EmbeddingProvider(Protocol):
@@ -96,8 +117,7 @@ class HybridRetriever:
         Raises ``ValueError`` on empty/whitespace queries — the API
         layer (slice 4) translates this to a 400.
         """
-        if not query or not query.strip():
-            raise ValueError("query must be a non-empty string")
+        _require_nonempty(query)
         rows = await self._fetch_candidates(query, filters)
         chunks = [_row_to_ranked_chunk(r) for r in rows]
         boosted = apply_boosts(chunks, config=self._config, today=date.today())
@@ -107,6 +127,58 @@ class HybridRetriever:
             trimmed, today=date.today(), stale_after_days=self._config.stale_after_days
         )
         return SearchResult(chunks=trimmed, warnings=warnings)
+
+    async def context_pack(
+        self,
+        query: str,
+        *,
+        task: str,
+        filters: RetrievalFilters,
+        max_chunks: int = 8,
+        max_tokens: int = 3000,
+    ) -> ContextPackResponse:
+        """Build a bounded, cited :class:`ContextPackResponse` for an agent.
+
+        Same retrieval pipeline as :meth:`search` plus:
+
+        * :func:`detect_conflicts` — syntactic same-heading conflict
+          across distinct active documents
+        * agent serialization in
+          :func:`assemble_context_pack` — token budgeting + the
+          standard untrusted-content notice + canonical
+          ``requires_human_review`` decision
+        """
+        # Lazy import — see TYPE_CHECKING block at top for why.
+        from cf_knowledge_kiln.agent.serializers import (
+            SerializerInputs,
+            assemble_context_pack,
+        )
+
+        _require_nonempty(query)
+        if not task or not task.strip():
+            raise ValueError("task must be a non-empty string")
+        rows = await self._fetch_candidates(query, filters)
+        chunks = [_row_to_ranked_chunk(r) for r in rows]
+        boosted = apply_boosts(chunks, config=self._config, today=date.today())
+        boosted.sort(key=lambda c: c.score, reverse=True)
+        trimmed = boosted[:max_chunks]
+        trimmed_ids = {c.chunk_id for c in trimmed}
+        warnings = _collect_warnings(
+            trimmed, today=date.today(), stale_after_days=self._config.stale_after_days
+        )
+        conflicts = detect_conflicts(trimmed)
+        warnings.extend(_conflict_warnings(conflicts))
+        inputs = SerializerInputs(
+            chunks=trimmed,
+            warnings=warnings,
+            conflicts=conflicts,
+            chunk_text={r.chunk_id: r.content for r in rows if r.chunk_id in trimmed_ids},
+            document_refs=_document_refs_from_rows(rows),
+            related_sources=[],
+        )
+        return assemble_context_pack(
+            inputs, task=task, query=query, max_chunks=max_chunks, max_tokens=max_tokens
+        )
 
     async def _fetch_candidates(self, query: str, filters: RetrievalFilters) -> list[SearchRow]:
         """Fan out to hybrid CTE or FTS-only fallback, depending on provider.
@@ -154,6 +226,64 @@ def _collect_warnings(
     warnings.extend(prompt_injection_warnings(chunks))
     warnings.extend(weak_evidence_warning(chunks))
     return warnings
+
+
+def _conflict_warnings(conflicts: list[Conflict]) -> list[Warning]:
+    """One ``conflicting_sources`` warning per detected conflict.
+
+    Conflicts are dual-surfaced: as structured :class:`Conflict`
+    entries on the response AND as warning entries. The structured
+    list is canonical for the ``requires_human_review`` decision
+    (see :func:`ranking.requires_human_review` — it inspects the
+    ``conflicts`` argument, not the warnings argument); the warning
+    is purely for agents that only consume the warnings channel and
+    would otherwise miss conflict surfacing.
+    """
+    return [
+        Warning(
+            type="conflicting_sources",
+            message=f"{len(c.source_ids)} active sources address {c.topic!r}.",
+        )
+        for c in conflicts
+    ]
+
+
+def _document_refs_from_rows(rows: list[SearchRow]) -> dict[UUID, Any]:
+    """Build ``{document_id: DocumentRef}`` from search rows.
+
+    SearchRow carries the document-level fields the EvidenceChunk
+    shape needs; collapse to one ref per document_id (later rows
+    don't overwrite — same document, same metadata). ``DocumentRef``
+    is lazy-imported here to avoid the retrieval ↔ agent cycle.
+
+    ``source_url`` is hard-coded to ``None`` because :class:`SearchRow`
+    doesn't carry the document's ``source_url`` column today (it's not
+    in the slice-2 CTE projection). The openapi.yaml hand-spec was
+    updated in this slice to make ``source_url`` optional. A later
+    improvement can plumb it through the CTE for HTTP-source docs.
+    """
+    from cf_knowledge_kiln.agent.serializers import DocumentRef
+
+    refs: dict[UUID, Any] = {}
+    for row in rows:
+        if row.document_id in refs:
+            continue
+        refs[row.document_id] = DocumentRef(
+            document_id=row.document_id,
+            title=row.title,
+            repo=row.repo,
+            path=row.path,
+            source_url=None,
+            commit_sha=row.commit_sha,
+            authority=row.authority,
+            owner=row.owner,
+        )
+    return refs
+
+
+def _require_nonempty(query: str) -> None:
+    if not query or not query.strip():
+        raise ValueError("query must be a non-empty string")
 
 
 __all__ = [
