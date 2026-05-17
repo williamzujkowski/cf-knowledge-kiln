@@ -21,6 +21,8 @@ import os
 from typing import Any, Final
 
 from sqlalchemy import text
+from sqlalchemy.engine import make_url
+from sqlalchemy.exc import ArgumentError
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -113,6 +115,40 @@ def parse_vcap_services(vcap_json: str | None, service_name: str) -> str | None:
     return _dsn_from_credentials(creds, service_name)
 
 
+_REDACTED = "***"
+
+
+def redact_dsn(url: str | None) -> str:
+    """Return ``url`` with the password component replaced by ``***``.
+
+    Phase 4 attaches the embedding API key at httpx-client level so it
+    never reaches log messages; this is the peer for the database URL.
+    Used by the worker + API startup log lines so an operator can see
+    *which* DB the process is bound to without leaking the password to
+    log aggregation.
+
+    Handles:
+    * URL-encoded passwords (no leak through encoding round-trip).
+    * No-password DSNs (returned unchanged).
+    * IPv6 hosts (``[::1]`` is preserved).
+    * Strings the SQLAlchemy URL parser refuses (returned unchanged —
+      callers should still avoid logging the original, but we don't
+      have a safer answer when we can't parse).
+    * ``None`` (returned as ``"<none>"`` so log lines stay readable).
+    """
+    if url is None:
+        return "<none>"
+    try:
+        parsed = make_url(url)
+    except (ArgumentError, ValueError):
+        # Not a URL we recognize; the caller will still need to decide
+        # whether logging the raw value is safe.
+        return url
+    if parsed.password is None:
+        return url
+    return str(parsed.set(password=_REDACTED))
+
+
 def resolve_database_url(settings: Settings) -> str | None:
     """Return the async DSN to use, or ``None`` if no source is configured.
 
@@ -134,6 +170,12 @@ class Database:
         pool_size: int = 5,
         max_overflow: int = 10,
     ) -> None:
+        logger.info(
+            "starting Postgres engine: %s (pool_size=%d, max_overflow=%d)",
+            redact_dsn(url),
+            pool_size,
+            max_overflow,
+        )
         self._engine: AsyncEngine = create_async_engine(
             url,
             pool_size=pool_size,

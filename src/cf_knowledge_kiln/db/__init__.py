@@ -10,11 +10,13 @@ Public surface:
 from cf_knowledge_kiln.db.connection import (
     Database,
     parse_vcap_services,
+    redact_dsn,
     resolve_database_url,
 )
 
 __all__ = [
     "Database",
     "parse_vcap_services",
+    "redact_dsn",
     "resolve_database_url",
 ]
