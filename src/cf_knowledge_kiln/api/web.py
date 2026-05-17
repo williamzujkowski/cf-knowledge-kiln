@@ -154,6 +154,18 @@ async def submit_feedback(
     replaces the form so the user sees a "Thanks!" chip without a
     page reload. Validation errors return a small inline error so
     the user can correct + resubmit.
+
+    NOTE — no CSRF token here. Defensible for slice-1:
+
+    * /feedback writes operator telemetry, not user account state.
+    * A cross-origin POST can pollute the signal stream with noise
+      but cannot corrupt records, trigger XSS, or escalate privileges
+      (autoescape + FK ON DELETE SET NULL + savepoint isolation).
+    * Phase 8 bearer auth (#77) protects the JSON API; the web UI is
+      explicitly behind the same auth in production
+      (`KILN_AUTH_MODE=bearer`). Dev mode is the only window where
+      drive-by POSTs work, and dev instances aren't internet-facing.
+    * No rate limit yet — filed for follow-up (see issue tracker).
     """
     if signal not in _FEEDBACK_TYPES:
         return _feedback_error(request, "Unknown feedback type.")
