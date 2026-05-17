@@ -1,7 +1,7 @@
 # Handoff notes
 
-**As of:** 2026-05-17 (Phase 9 close-out)
-**Status:** Phases 0–9 complete. Every phase epic (#1–#8) is closed; the cross-cutting warnings surface (#33) is closed. CI green on `main` (517 unit + 106 integration + 13 eval tests; PRs #88–#103 across the autonomous run).
+**As of:** 2026-05-17 (Phase 9 close-out + #100 backlog burn-down)
+**Status:** Phases 0–9 complete. Every phase epic (#1–#8), the cross-cutting warnings surface (#33), and the #100 journey-eval extension backlog are closed. CI green on `main` (539 unit + 107 integration + 19 eval tests; PRs #88–#107 across the autonomous run).
 
 This file is the "where we are, what's next, what's been decided" briefing. For *how* to work in the repo, read [AGENTS.md](./AGENTS.md). For *what* the project is, read [README.md](./README.md). For *the plan*, read [plans/cf-rag-plan.md](./plans/cf-rag-plan.md).
 
@@ -13,7 +13,7 @@ cf-knowledge-kiln is a Cloud Foundry RAG knowledge app — a `cf push`'d Python/
 
 **Phase 5 shipped 2026-05-17** in four slices (PRs #69, #71, #72, #73). After-the-slice-4 follow-up #75 collapsed handlers to one DB session per request. Editorial-design UI scaffold (PR #76) and the feedback widget (PR #78) shipped Phase 6 entirely. Phase 7 HTTP source + SSRF guard landed (PR #80) with 6to4-bypass fix included after independent review. Phase 8 hardening landed: bearer-token auth (PR #77, with path-traversal fix), SBOM + grype CI (PR #82), CODEOWNERS + CodeQL (PR #83). Worker session lifecycle + smart crash recovery (PR #85) and DRY refactor of the repo layer (PR #84) closed two carry-over backlog items. Final cleanup of over-cap functions in pipeline.py (PR #86) closed #53.
 
-**Net effect of the full autonomous run:** 16 PRs merged (#88–#103) closing Phase 7, Phase 8, and Phase 9 plus the standing follow-up backlog. Every phase epic (#1–#8) and the cross-cutting warnings issue (#33) are closed. Issues filed for genuine work-not-done: #91 (fixed in #94), #93 (admin-only: enable repo Code Scanning), #98 (fixed in #101), #100 (deferred journey-eval scope: staleness/conflict precision, sensitive-content fixture, confidence calibration).
+**Net effect of the full autonomous run:** 20 PRs merged (#88–#107) closing Phases 7/8/9 and burning down every follow-up filed mid-run. Every phase epic (#1–#8), the cross-cutting warnings issue (#33), and the journey-eval extension backlog (#100) are closed. Issues filed for genuine work-not-done: #91 (fixed in #94), #93 (admin-only: enable repo Code Scanning), #98 (fixed in #101), #108 (the last two #100 items — confidence calibration + hand-labeled `requires_human_review` precision — which both genuinely need a labeled multi-relevance gold corpus before they can be tested).
 
 **All phases complete.** Status by phase:
 
@@ -22,12 +22,12 @@ cf-knowledge-kiln is a Cloud Foundry RAG knowledge app — a `cf push`'d Python/
 | 0–6 | ✅ Complete | — |
 | 7 | ✅ Complete | smoke-test script + apps.internal docs (#88); HTTP source with SSRF + DNS pinning (#80, #89); rolling deploy (#101) |
 | 8 | ✅ Complete | bearer auth (#77); rate limit (#90); SBOM + grype (#82); Concourse pipeline (#97) |
-| 9 | ✅ Complete | retrieval eval harness (#92); end-to-end UX eval (#99); public/template readiness (#95); forking guide (#96); coverage-gaps bundle (#102) |
+| 9 | ✅ Complete | retrieval eval harness (#92); end-to-end UX eval (#99); public/template readiness (#95); forking guide (#96); coverage-gaps + frontmatter size cap (#102); journey eval extensions (#105); sensitive-content scanner (#106); query-side prompt-injection normalization (#107) |
 
-**What's left in the open-issue list** (none of it blocks "Phase 9 done"):
+**What's left in the open-issue list** (none of it blocks the in-repo agent):
 
 1. **[#93](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/93)** — enable GitHub Code Scanning at repo settings (admin-only click). Drops the spurious CodeQL failure that's been red on every PR for the whole run.
-2. **[#100](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/100)** — deferred journey-eval scope: staleness/conflict precision, sensitive-content fixture, confidence calibration, query-side prompt-injection normalization, deprecation warning under default filter. Each is its own small PR; bundle if you want.
+2. **[#108](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/108)** — `requires_human_review` precision + confidence calibration. Both need a hand-labeled multi-relevance gold corpus that doesn't exist today; mechanically the harness shape from #99 + #105 + #106 + #107 supports them when the corpus lands.
 3. **[#35](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/35)** — operator-side BOSH-deployed Postgres prereq. Not for this repo's agent; tracked because the CF deploy gate still depends on [bosh-pgvector-release#3](https://github.com/williamzujkowski/bosh-pgvector-release/issues/3) (operator runbook).
 
 The CF deploy gate continues to wait on the operator track. Independent of all in-repo work.
