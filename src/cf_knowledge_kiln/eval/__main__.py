@@ -23,7 +23,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from cf_knowledge_kiln.config import Settings, get_settings
@@ -95,7 +95,7 @@ async def _run(
         await db.dispose()
 
     args.reports.mkdir(parents=True, exist_ok=True)
-    ts = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     write_json(report, args.reports / f"{ts}.json")
     write_markdown(report, args.reports / f"{ts}.md")
     # "latest" is the operator's entry point; CI also reads from here.

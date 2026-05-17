@@ -7,8 +7,6 @@ for how the engine is exercised.
 
 from __future__ import annotations
 
-from typing import Any
-
 from cf_knowledge_kiln.eval.dataset import GoldenCase
 from cf_knowledge_kiln.eval.scoring import (
     AggregateMetrics,
@@ -33,15 +31,18 @@ async def run_eval(
     The retriever uses ``max(k_values)`` as ``max_results`` so the
     largest-K recall measurement is well-defined. Filter values from
     each case are passed through :class:`RetrievalFilters` validation —
-    bad filters fail loudly rather than silently degrading the score.
+    bad filters surface as a Pydantic error attributed to the case_id.
     """
+    if not k_values:
+        raise ValueError("k_values must be non-empty")
+    if any(k <= 0 for k in k_values):
+        raise ValueError(f"k_values must all be positive, got {k_values}")
     per_case: list[CaseResult] = []
     top_k = max(k_values)
     for case in cases:
-        filters = _build_filters(case.filters)
         result = await retriever.search(
             case.query,
-            filters=filters,
+            filters=RetrievalFilters(**case.filters),
             max_results=top_k,
         )
         per_case.append(score_one(case, result.chunks, result.document_refs, k_values))
@@ -50,17 +51,6 @@ async def run_eval(
         aggregate=aggregate(per_case, k_values),
         k_values=k_values,
     )
-
-
-def _build_filters(raw: dict[str, Any]) -> RetrievalFilters:
-    """Best-effort coercion of golden-set filter dicts to :class:`RetrievalFilters`.
-
-    Authors write ``status: [active]`` in YAML; the model field is
-    ``status: list[str] | None``. Pydantic v2 handles the conversion
-    when we hand the raw dict in, so this is mostly a passthrough — we
-    keep it as a seam in case the filter shape grows.
-    """
-    return RetrievalFilters(**raw)
 
 
 __all__ = ["DEFAULT_K_VALUES", "AggregateMetrics", "EvalReport", "run_eval"]

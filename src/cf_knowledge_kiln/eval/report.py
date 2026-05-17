@@ -74,7 +74,10 @@ def to_markdown(report: EvalReport, *, generated_at: datetime | None = None) -> 
         miss = "-"
         if c.first_miss is not None:
             miss_heading = "/".join(c.first_miss.heading_path) or "(doc)"
-            miss = f"`{c.first_miss.path}` § {miss_heading}"
+            # Escape backticks defensively so a pathological path
+            # can't break the surrounding code-span.
+            safe_path = c.first_miss.path.replace("`", "\\`")
+            miss = f"`{safe_path}` § {miss_heading}"
         lines.append(f"| {c.case_id} | {c.mrr:.2f} | {recalls} | {miss} |")
     return "\n".join(lines) + "\n"
 

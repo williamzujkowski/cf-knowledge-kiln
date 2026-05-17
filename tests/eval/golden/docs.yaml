@@ -3,14 +3,25 @@ version: 1
 #
 # corpus: docs/  (ingested via LocalSource named "cf-knowledge-kiln")
 #
-# Each case names a query, optional filters, and the (repo, path,
-# heading_path) tuples we expect to surface. Heading_path comes from
-# the parser's H1/H2/H3 chain; an empty heading_path matches any
-# chunk in the document ("doc-anywhere" mode).
+# Schema (see src/cf_knowledge_kiln/eval/dataset.py for the dataclass):
+#
+#   cases:
+#     - case_id: <unique slug>           # required
+#       query: <free text>               # required
+#       filters: {<RetrievalFilters>}    # optional, default {}
+#       expected:                        # required, non-empty
+#         - repo: <stable repo label>
+#           path: <relative POSIX path>
+#           heading_path: [H1, H2, ...]  # optional; [] = "any chunk
+#                                        #   in this document"
+#                                        #   (doc-anywhere wildcard)
+#           must_appear_within_k: <int>  # optional, default 10
 #
 # Thresholds are deliberately loose at bootstrap. The harness runs
 # under MockEmbeddingProvider in pytest, so the vector arm is noise;
-# what we measure here is FTS + RRF stability over time.
+# what we measure here is FTS + RRF stability over time. Raise the
+# per-case must_appear_within_k caps and the BOOTSTRAP_*_FLOOR
+# constants in tests/eval/test_golden.py as the set grows.
 cases:
   - case_id: arch-four-layer
     query: "four-layer architecture experience retrieval index ingestion"

@@ -120,6 +120,35 @@ class TestLoadGoldenSet:
         with pytest.raises(GoldenSetError, match="must_appear_within_k"):
             load_golden_set(path)
 
+    def test_rejects_unsupported_version(self, tmp_path: Path) -> None:
+        path = _write(
+            tmp_path,
+            """\
+            version: 99
+            cases:
+              - case_id: c1
+                query: q
+                expected: [{repo: r, path: p}]
+            """,
+        )
+        with pytest.raises(GoldenSetError, match="unsupported schema version"):
+            load_golden_set(path)
+
+    def test_rejects_invalid_filters_with_case_attribution(self, tmp_path: Path) -> None:
+        """Pydantic errors in filters surface with the case_id, not a raw trace."""
+        path = _write(
+            tmp_path,
+            """\
+            cases:
+              - case_id: c1
+                query: q
+                filters: {status: "not-a-list"}
+                expected: [{repo: r, path: p}]
+            """,
+        )
+        with pytest.raises(GoldenSetError, match="case 'c1' has invalid filters"):
+            load_golden_set(path)
+
     def test_rejects_bad_heading_path_type(self, tmp_path: Path) -> None:
         path = _write(
             tmp_path,

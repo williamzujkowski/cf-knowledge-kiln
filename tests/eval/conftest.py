@@ -73,7 +73,8 @@ def seeded_db(database_url: str) -> Iterator[None]:
                     # Top-level docs only — ADR frontmatter currently
                     # contains YAML date objects that fail JSON
                     # serialization on the documents.metadata JSONB
-                    # column. Tracked as a follow-up issue.
+                    # column. Tracked as #91; expand to ``**/*.md``
+                    # once that fix lands.
                     include=["*.md"],
                 )
                 await run_source(
@@ -91,14 +92,23 @@ def seeded_db(database_url: str) -> Iterator[None]:
 
 
 @pytest.fixture
-def seeded_retriever(seeded_db: None, database_url: str) -> HybridRetriever:
-    """Wire a :class:`HybridRetriever` against the seeded DB."""
+def seeded_retriever(seeded_db: None, database_url: str) -> Iterator[HybridRetriever]:
+    """Wire a :class:`HybridRetriever` against the seeded DB.
+
+    Yields so the engine pool is disposed on teardown; a return-form
+    fixture would leak one pool per test (the process tears down at
+    suite end, but ``pytest -W error`` flags the open resource).
+    """
     settings = _eval_settings()
     db = Database(database_url, pool_size=settings.pg_pool_size)
     config = load_retrieval_config(settings.security_config_path)
-    return HybridRetriever(
+    retriever = HybridRetriever(
         db=db,
         embedding_provider=MockEmbeddingProvider(),
         config=config,
         ef_search=settings.hnsw_ef_search,
     )
+    try:
+        yield retriever
+    finally:
+        asyncio.run(db.dispose())

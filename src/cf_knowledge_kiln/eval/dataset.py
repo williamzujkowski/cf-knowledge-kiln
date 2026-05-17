@@ -22,6 +22,10 @@ from typing import Any
 
 import yaml
 
+from cf_knowledge_kiln.retrieval import RetrievalFilters
+
+SUPPORTED_VERSIONS = {1}
+
 
 @dataclass(frozen=True)
 class ExpectedHit:
@@ -53,6 +57,12 @@ def load_golden_set(path: Path) -> list[GoldenCase]:
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict) or "cases" not in raw:
         raise GoldenSetError(f"{path}: top-level 'cases' key missing")
+    version = raw.get("version", 1)
+    if version not in SUPPORTED_VERSIONS:
+        raise GoldenSetError(
+            f"{path}: unsupported schema version {version!r}; "
+            f"this loader handles {sorted(SUPPORTED_VERSIONS)}"
+        )
     cases_raw = raw["cases"]
     if not isinstance(cases_raw, list) or not cases_raw:
         raise GoldenSetError(f"{path}: 'cases' must be a non-empty list")
@@ -83,6 +93,14 @@ def _parse_case(entry: dict[str, Any], path: Path, idx: int) -> GoldenCase:
     filters_raw = entry.get("filters") or {}
     if not isinstance(filters_raw, dict):
         raise GoldenSetError(f"{path}: case '{entry['case_id']}' filters must be a mapping")
+    # Fail fast at load-time so authors get a case-attributed message
+    # rather than a Pydantic trace deep inside the runner.
+    try:
+        RetrievalFilters(**filters_raw)
+    except Exception as exc:
+        raise GoldenSetError(
+            f"{path}: case '{entry['case_id']}' has invalid filters: {exc}"
+        ) from exc
     return GoldenCase(
         case_id=str(entry["case_id"]),
         query=str(entry["query"]),
