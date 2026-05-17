@@ -147,6 +147,27 @@ class TestSsrfBlocks:
         assert len(result.skipped) == 1
         assert "non-public" in (result.skipped[0].detail or "")
 
+    def test_refuses_protocol_relative_redirect(self) -> None:
+        """MEDIUM (PR #80 review): //evil.com redirect must be refused outright.
+
+        A protocol-relative Location header (e.g. `//evil.example.com/x`)
+        tries to switch host without re-running scheme parsing. The
+        connector now explicitly refuses these — even if the SSRF guard
+        would catch the new host, "refuse over coincidence" is the
+        right posture for security-critical code.
+        """
+        source = _src()
+        redirect = httpx.Response(
+            status_code=302,
+            content=b"",
+            headers={"location": "//evil.attacker.com/x"},
+            request=httpx.Request("GET", "https://docs.example.com/a.md"),
+        )
+        with _public_dns(), patch.object(httpx.Client, "get", return_value=redirect):
+            result = HttpConnector(_caps()).fetch(source)
+        assert len(result.skipped) == 1
+        assert "protocol-relative" in (result.skipped[0].detail or "")
+
     def test_refuses_redirect_to_internal_host(self) -> None:
         """A 302 → internal host must not bypass the guard.
 

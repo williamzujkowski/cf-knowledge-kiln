@@ -153,6 +153,68 @@ class TestAddressGuard:
         ):
             assert_addresses_public("metadata.example.com")
 
+    @pytest.mark.parametrize(
+        "ip",
+        [
+            "2002::1",  # 6to4 prefix; embedded IPv4 in low 32 bits
+            "2002:7f00:0001::",  # 6to4 of 127.0.0.1 — direct loopback proxy
+            "2002:0a00:0001::",  # 6to4 of 10.0.0.1 — RFC1918 proxy
+            "64:ff9b::a00:1",  # NAT64 well-known prefix
+        ],
+    )
+    def test_refuses_ipv6_transition_ranges_6to4_and_nat64(self, ip: str) -> None:
+        """HIGH (PR #80 review): Python's stock checks don't cover 2002::/16.
+
+        6to4 addresses embed an IPv4 in the low 32 bits. An attacker
+        who can craft a DNS record pointing to 2002:7f00:1:: routes
+        to 127.0.0.1 via a 6to4 relay — a real SSRF bypass.
+        2002::/16 passes is_private + is_reserved + is_global=True,
+        so we explicitly reject the range in _REFUSED_IPV6_RANGES.
+        (NAT64 64:ff9b::/96 happens to also be is_reserved=True, so
+        it's caught by the general public-IP check; we include it
+        in the test for documentation regardless.)
+        """
+        with _fake_resolve([ip]), pytest.raises(SsrfRefused):
+            assert_addresses_public("attacker.example.com")
+
+    @pytest.mark.parametrize(
+        "ip",
+        [
+            "2002::1",  # 6to4 prefix
+            "2002:7f00:0001::",  # 6to4 of 127.0.0.1
+        ],
+    )
+    def test_refuses_6to4_with_transition_range_message(self, ip: str) -> None:
+        """The 6to4 message MUST cite "transition range" so an audit log makes intent clear."""
+        with _fake_resolve([ip]), pytest.raises(SsrfRefused, match="transition range"):
+            assert_addresses_public("attacker.example.com")
+
+    @pytest.mark.parametrize(
+        "literal_ip_in_allowlist_match",
+        [
+            "127.1",  # shorthand
+            "0x7f.0x0.0x0.0x1",  # hex octets
+            "2130706433",  # decimal IPv4
+        ],
+    )
+    def test_encoding_bypasses_blocked_by_allowlist_string_match(
+        self, literal_ip_in_allowlist_match: str
+    ) -> None:
+        """LOW (PR #80 review): non-standard IP encodings are blocked.
+
+        Even if getaddrinfo resolves "127.1" → 127.0.0.1, the literal
+        string never matches an allowlist of real hostnames. Document
+        + lock down by test so a future refactor can't drop the
+        pre-DNS string compare.
+        """
+        with pytest.raises(SsrfRefused, match="not in source host_allowlist"):
+            assert_host_allowlisted(
+                literal_ip_in_allowlist_match,
+                allowlist=["docs.example.com"],
+                allow_http_hosts=[],
+                scheme="https",
+            )
+
     def test_dns_failure_is_refused(self) -> None:
         import socket as socket_mod
 

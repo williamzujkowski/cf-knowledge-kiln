@@ -74,6 +74,24 @@ def assert_addresses_public(host: str) -> list[str]:
     return addrs
 
 
+# IPv6 transition ranges that Python's ipaddress library does NOT
+# mark via is_private / is_reserved / is_loopback / is_link_local,
+# but which we still refuse:
+#
+#   2002::/16 — 6to4. The low 32 bits are an embedded IPv4 address,
+#     so 2002:7f00:1::/48 routes to (the 6to4 anycast relay for) IPv4
+#     127.0.0.1 — a real SSRF bypass. Python returns is_global=True
+#     for the whole /16, so we MUST list it explicitly here.
+#   64:ff9b::/96 — NAT64. Embedded IPv4 in low 32 bits. Similar story.
+#
+# Anything else we want to deny defensively goes on this list. Reviewed
+# on each Phase 7+ change.
+_REFUSED_IPV6_RANGES: tuple[ipaddress.IPv6Network, ...] = (
+    ipaddress.IPv6Network("2002::/16"),  # 6to4
+    ipaddress.IPv6Network("64:ff9b::/96"),  # NAT64 well-known prefix
+)
+
+
 def _assert_ip_public(ip: ipaddress.IPv4Address | ipaddress.IPv6Address, *, host: str) -> None:
     """Defense-in-depth IP checks. Includes the cloud metadata IP by name."""
     # Cloud metadata service. Already covered by is_link_local but
@@ -92,6 +110,14 @@ def _assert_ip_public(ip: ipaddress.IPv4Address | ipaddress.IPv6Address, *, host
             f"host {host!r} resolves to non-public IP {ip} "
             f"(private/loopback/link-local/multicast/reserved/unspecified)"
         )
+    # IPv6 transition ranges that route to IPv4 via embedded addresses.
+    if isinstance(ip, ipaddress.IPv6Address):
+        for net in _REFUSED_IPV6_RANGES:
+            if ip in net:
+                raise SsrfRefused(
+                    f"host {host!r} resolves to IPv6 transition range {net} "
+                    f"(IP {ip}); refuse — it can tunnel to private IPv4."
+                )
 
 
 def _resolve(host: str) -> list[str]:
