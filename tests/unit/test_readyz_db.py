@@ -24,19 +24,20 @@ def _isolated_db_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     yield
 
 
-def test_readyz_reports_postgres_failing_when_no_db_configured() -> None:
-    """No URL, no VCAP binding → postgres unavailable, status degraded."""
+def test_readyz_returns_503_when_no_db_configured() -> None:
+    """No URL, no VCAP binding → postgres unavailable → 503 (#51)."""
     with TestClient(create_app()) as client:
         response = client.get("/readyz")
-    assert response.status_code == 200
+    assert response.status_code == 503
     body = response.json()
     assert body["checks"]["postgres"] == "failing"
     assert body["status"] == "degraded"
 
 
-def test_readyz_reports_postgres_ok_when_ping_succeeds(
+def test_readyz_returns_200_when_ping_succeeds(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Healthy postgres → 200 with status: ready."""
     monkeypatch.setenv(
         "KILN_DATABASE_URL", "postgresql+asyncpg://u:p@h:5432/d"
     )  # pragma: allowlist secret
@@ -50,9 +51,10 @@ def test_readyz_reports_postgres_ok_when_ping_succeeds(
     assert body["status"] == "ready"
 
 
-def test_readyz_reports_postgres_failing_when_ping_returns_false(
+def test_readyz_returns_503_when_ping_returns_false(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Reachable URL but ping fails → 503 (#51)."""
     monkeypatch.setenv(
         "KILN_DATABASE_URL", "postgresql+asyncpg://u:p@h:5432/d"
     )  # pragma: allowlist secret
@@ -60,6 +62,15 @@ def test_readyz_reports_postgres_failing_when_ping_returns_false(
     monkeypatch.setattr(db_mod.Database, "dispose", AsyncMock())
     with TestClient(create_app()) as client:
         response = client.get("/readyz")
+    assert response.status_code == 503
     body = response.json()
     assert body["checks"]["postgres"] == "failing"
     assert body["status"] == "degraded"
+
+
+def test_healthz_stays_200_regardless_of_db_state() -> None:
+    """Liveness is process liveness, not dependency health."""
+    with TestClient(create_app()) as client:
+        response = client.get("/healthz")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "service": "cf-knowledge-kiln"}

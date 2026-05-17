@@ -57,11 +57,20 @@ paths:
       summary: Readiness probe
       description: |
         Readiness check. From Phase 2 the `checks` map includes
-        `postgres: ok | failing`.
+        `postgres: ok | failing`. Returns HTTP 503 when any check is
+        failing so CF/gorouter and upstream load balancers route
+        traffic away from the instance; the body always carries the
+        per-check details.
       operationId: readyz
       responses:
         "200":
-          description: Service is ready (or reports per-dependency status).
+          description: All dependency checks pass.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadyResponse"
+        "503":
+          description: At least one dependency check is failing.
           content:
             application/json:
               schema:
