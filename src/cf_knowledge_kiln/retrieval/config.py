@@ -76,9 +76,7 @@ class RetrievalConfig(BaseModel):
         """
         for status, weight in value.items():
             if not (0.0 < weight <= 1.0):
-                raise ValueError(
-                    f"status_weights[{status!r}] = {weight} is outside (0, 1]"
-                )
+                raise ValueError(f"status_weights[{status!r}] = {weight} is outside (0, 1]")
         return value
 
     def weight_for_status(self, status: str) -> float:
