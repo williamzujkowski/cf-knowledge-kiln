@@ -54,12 +54,12 @@ Now scrub every place the upstream's GitHub URL is hard-coded. Pick a single can
 OLD=williamzujkowski/cf-knowledge-kiln
 NEW=team-beta/knowledge-kiln
 
-# Files that hard-code the upstream URL or owner handle:
+# Every tracked file that hard-codes the upstream URL — let grep find
+# them rather than maintaining the list by hand.
 grep -rl "$OLD" \
-  AGENTS.md pyproject.toml manifest.yml \
-  SECURITY.md CODE_OF_CONDUCT.md \
-  openapi/openapi.yaml .github/CODEOWNERS \
-  | xargs sed -i "s|$OLD|$NEW|g"
+  --include='*.md' --include='*.yaml' --include='*.yml' \
+  --include='*.toml' --include='CODEOWNERS' \
+  . | xargs sed -i "s|$OLD|$NEW|g"
 
 # Owner handle (your CODEOWNERS team or user):
 sed -i 's|@williamzujkowski|@team-beta/platform|g' .github/CODEOWNERS
@@ -67,6 +67,8 @@ sed -i 's|@williamzujkowski|@team-beta/platform|g' .github/CODEOWNERS
 # AGENTS.md "Owner:" field — replace with whoever maintains the fork.
 sed -i 's|^\*\*Owner:\*\* .*|**Owner:** @team-beta/platform|' AGENTS.md
 ```
+
+Some files (`CHANGELOG.md` and anything under `docs/adr/`) intentionally reference the upstream URL as historical record — let the `sed` rewrite them too, but be aware those edits are renaming attribution rather than updating fact. Audit those two paths separately if attribution matters to your fork.
 
 Update the package name in `pyproject.toml` if you want imports to come in as `team_beta_kiln` instead of `cf_knowledge_kiln`. This is a heavier change — most forks skip it and keep the upstream module name as a recognition aid.
 
@@ -80,7 +82,7 @@ git commit -m "fork: rename to team-beta/knowledge-kiln"
 git push -u origin main
 ```
 
-**Validation:** `grep -r williamzujkowski .` should return only matches inside `CHANGELOG.md` and `docs/adr/` (immutable historical records — leave them alone).
+**Validation:** `grep -rl williamzujkowski . --include='*.md' --include='*.yaml' --include='*.yml' --include='*.toml'` should return either nothing or only files under `docs/adr/` and `CHANGELOG.md` if you chose to preserve historical attribution.
 
 ---
 
@@ -90,11 +92,14 @@ The upstream was built and tested on a homelab BOSH foundation. The guide below 
 
 ### 2a. SAP BTP / Anynines / TAS / commercial foundations
 
-You already have a marketplace. Find a Postgres service that exposes `pgvector`:
+You already have a marketplace. Discover the service offerings available to your org, then inspect any candidate Postgres entry for `pgvector`:
 
 ```bash
-cf marketplace -e postgresql
+cf marketplace                                  # list every offering
+cf marketplace -e <service-offering-name>       # inspect plans on one
 ```
+
+Service offering names vary by foundation: `postgres`, `postgresql`, `postgresql-local`, `aws-rds-postgresql`, etc. Pick the one your broker actually publishes.
 
 If the marketplace plan does not include `pgvector` by default, your operator will need to enable it on the broker side. `pgvector` requires the database to run `CREATE EXTENSION vector` at provision time; some commercial plans gate this behind a flag (look for "extensions" in the plan metadata).
 
@@ -132,7 +137,7 @@ cf service cf-knowledge-kiln-db
 # Watch for: "status: create succeeded"
 ```
 
-**Validation:** push a tiny test app that binds and runs `SELECT extname FROM pg_extension WHERE extname = 'vector';` (one line; not worth scripting). If it returns a row, the bind is wired and pgvector is live.
+**Validation:** the easiest path is to push the app itself (Step 7) and watch `/readyz` — the readiness probe runs a real query against the bound DB. If you want to verify pgvector before pushing the full app, `cf bind-service` a one-off psql tools app (e.g., `cloudfoundry/cf-psql`) and run `SELECT extname FROM pg_extension WHERE extname = 'vector';`. The credentials come from `VCAP_SERVICES`; the local `cf` CLI does not have ambient access to the bound DB.
 
 For local dev / CI, the integration tests assume a `pgvector/pgvector:pg16` container on `localhost:5432`:
 
@@ -186,16 +191,21 @@ sources:
 **Validation:** `make ingest` should pick up the new source on the next worker run.
 
 ```bash
+# Locally:
 make ingest
-# Then check the ingestion_runs table:
-psql "$DATABASE_URL" -c "SELECT source_id, status, stats FROM ingestion_runs ORDER BY started_at DESC LIMIT 5;"
+
+# In CF, run the ingest from a shell on the worker so it inherits the
+# VCAP_SERVICES binding:
+cf ssh cf-knowledge-kiln-worker -c "cd /home/vcap/app && make ingest"
 ```
+
+After ingestion completes, the most direct check is to query the API itself rather than connecting to the DB directly — `POST /v1/search` against any keyword you know is in the corpus should return results.
 
 ---
 
 ## Step 5 — Choose your embedding + generator models
 
-`config/models.yaml` declares which embedding model and (optionally) which generator model the app uses. The default is a local sentence-transformers model that ships zero external dependencies:
+`config/models.yaml` declares which embedding model and (optionally) which generator model the app uses. The default is a local sentence-transformers model that makes no external API calls at inference time (the weights are downloaded from Hugging Face on first use and cached on disk):
 
 ```bash
 cp config/models.example.yaml config/models.yaml
@@ -248,34 +258,55 @@ mTLS-mode auth is a follow-up; see issue #29 follow-ups in the upstream.
 
 ## Step 7 — Deploy
 
+Before pushing, decide on app names and route. The upstream `manifest.yml` has two `name:` entries (`cf-knowledge-kiln-api`, `cf-knowledge-kiln-worker`) and no explicit `routes:` block — CF assigns a route from `<app-name>.<default-domain>` at push time. Customize as needed:
+
+```bash
+# Rename the apps in manifest.yml if you want a different brand.
+sed -i 's|name: cf-knowledge-kiln-api|name: kiln-api|g'    manifest.yml
+sed -i 's|name: cf-knowledge-kiln-worker|name: kiln-worker|g' manifest.yml
+
+# Pin a specific route on a non-default domain by adding a routes: block
+# under the api app in manifest.yml:
+#
+#     routes:
+#       - route: knowledge.team-beta.example.com
+#
+# Or pin at push time without editing the manifest:
+cf push -f manifest.yml --hostname knowledge --domain team-beta.example.com
+```
+
+Standard push when you're happy with the defaults:
+
 ```bash
 make cf-push
 ```
 
-This invokes `cf push -f manifest.yml`, which creates two apps:
+This creates two apps:
 
-- `cf-knowledge-kiln-api` — request-serving FastAPI app, bound to your Postgres service.
-- `cf-knowledge-kiln-worker` — ingestion worker. No route; pulls work from the `ingestion_jobs` queue.
+- `<api-app>` — request-serving FastAPI app, bound to your Postgres service.
+- `<worker-app>` — ingestion worker. No route; pulls work from the `ingestion_jobs` queue.
 
 Watch the start logs:
 
 ```bash
-cf logs cf-knowledge-kiln-api --recent
+cf logs <api-app> --recent
 ```
 
-The first request that hits an unmigrated DB will trigger Alembic; if you prefer to run migrations explicitly:
+The first request that hits an unmigrated DB will fail readiness; run Alembic explicitly via `cf ssh` (the dyno picks up the DB binding from `VCAP_SERVICES`, which `alembic/env.py` reads through `resolve_database_url`):
 
 ```bash
-cf ssh cf-knowledge-kiln-api -c "cd /home/vcap/app && make migrate"
+cf ssh <api-app> -c "cd /home/vcap/app && make migrate"
 ```
 
 **Smoke test:**
 
 ```bash
-./scripts/smoke-test.sh https://cf-knowledge-kiln-api.<your-domain>
+KILN_URL=https://<api-app>.<your-domain> \
+KILN_BEARER_TOKEN="$TOKEN" \
+./scripts/smoke-test.sh
 ```
 
-The script honors `KILN_AUTH_MODE=bearer` — set the same `KILN_BEARER_TOKEN` you used on the API for the test to pass.
+The script reads `KILN_URL` from the environment (not from a positional argument). With no `KILN_BEARER_TOKEN` set, it omits the `Authorization` header — useful when probing a dev (`KILN_AUTH_MODE=none`) deployment, refused by a production deployment.
 
 ---
 
