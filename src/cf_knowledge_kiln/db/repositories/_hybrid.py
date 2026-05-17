@@ -66,6 +66,7 @@ class SearchRow:
     source_url: str | None
     score: float
     has_prompt_injection: bool
+    has_sensitive_content: bool
 
 
 async def set_local_ef_search(session: AsyncSession, ef_search: int) -> None:
@@ -213,6 +214,7 @@ def row_to_search_row(row: Any) -> SearchRow:
         source_url=row["source_url"],
         score=float(row["rrf_score"]),
         has_prompt_injection=bool(metadata.get("has_prompt_injection")),
+        has_sensitive_content=bool(metadata.get("has_sensitive_content")),
     )
 
 

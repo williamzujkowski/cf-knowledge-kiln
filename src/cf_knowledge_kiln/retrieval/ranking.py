@@ -46,6 +46,7 @@ class RankedChunk:
     authority: str | None = None
     last_reviewed: date | None = None
     has_prompt_injection: bool = False
+    has_sensitive_content: bool = False
     chunk_metadata: dict[str, object] = field(default_factory=dict)
 
 
@@ -109,6 +110,7 @@ def _apply_boost_to_chunk(
         authority=chunk.authority,
         last_reviewed=chunk.last_reviewed,
         has_prompt_injection=chunk.has_prompt_injection,
+        has_sensitive_content=chunk.has_sensitive_content,
         chunk_metadata=chunk.chunk_metadata,
     )
 
@@ -208,6 +210,26 @@ def prompt_injection_warnings(chunks: list[RankedChunk]) -> list[Warning]:
     ]
 
 
+def sensitive_content_warnings(chunks: list[RankedChunk]) -> list[Warning]:
+    """One ``sensitive_content`` per distinct chunk flagged at ingest (#100).
+
+    The flag is set in :mod:`cf_knowledge_kiln.ingestion.sensitive_content`
+    when a chunk matched a regex from
+    ``config.content_filters.sensitive_patterns``. The agent serializer
+    drops these chunks from the context-pack body entirely; humans see
+    them with the warning attached.
+    """
+    return [
+        Warning(
+            type="sensitive_content",
+            message="Chunk matches a configured sensitive-content pattern.",
+            source_id=c.document_id,
+        )
+        for c in chunks
+        if c.has_sensitive_content
+    ]
+
+
 def weak_evidence_warning(chunks: list[RankedChunk]) -> list[Warning]:
     """One ``weak_evidence`` warning if no chunk meets the score threshold."""
     if not chunks:
@@ -304,6 +326,7 @@ __all__ = [
     "prompt_injection_warnings",
     "requires_human_review",
     "rrf_fuse",
+    "sensitive_content_warnings",
     "stale_warnings",
     "weak_evidence_warning",
 ]

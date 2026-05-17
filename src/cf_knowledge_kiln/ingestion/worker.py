@@ -36,6 +36,7 @@ from cf_knowledge_kiln.ingestion.embedding import EmbeddingProvider
 from cf_knowledge_kiln.ingestion.embedding.factory import build_provider_from_settings
 from cf_knowledge_kiln.ingestion.pipeline import run_source
 from cf_knowledge_kiln.ingestion.prompt_injection import load_phrases
+from cf_knowledge_kiln.ingestion.sensitive_content import load_patterns
 from cf_knowledge_kiln.ingestion.sources import (
     SourceAllowlist,
     SourceAllowlistError,
@@ -61,6 +62,7 @@ class Worker:
         settings: Settings,
         embedding_provider: EmbeddingProvider | None = None,
         prompt_injection_phrases: list[str] | None = None,
+        sensitive_patterns: list[Any] | None = None,
         poll_interval_seconds: float | None = None,
     ) -> None:
         self._db = db
@@ -68,6 +70,7 @@ class Worker:
         self._settings = settings
         self._embedding_provider = embedding_provider
         self._prompt_injection_phrases = prompt_injection_phrases
+        self._sensitive_patterns = sensitive_patterns
         self._poll = (
             poll_interval_seconds
             if poll_interval_seconds is not None
@@ -189,6 +192,7 @@ class Worker:
                 settings=self._settings,
                 embedding_provider=self._embedding_provider,
                 prompt_injection_phrases=self._prompt_injection_phrases,
+                sensitive_patterns=self._sensitive_patterns,
             )
             await IngestionJobsRepository(session).mark_done(job_id, result_run_id=summary.run_id)
             await session.commit()
@@ -231,12 +235,14 @@ async def serve(
     db = Database(url, pool_size=settings.pg_pool_size, max_overflow=settings.pg_pool_max_overflow)
     provider = build_provider_from_settings(settings)
     phrases = load_phrases(settings.security_config_path)
+    sensitive = load_patterns(settings.security_config_path)
     worker = Worker(
         db=db,
         allowlist=allowlist,
         settings=settings,
         embedding_provider=provider,
         prompt_injection_phrases=phrases,
+        sensitive_patterns=sensitive,
     )
     _install_signal_handlers(worker)
     try:

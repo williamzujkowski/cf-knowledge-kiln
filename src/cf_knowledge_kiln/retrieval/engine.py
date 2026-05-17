@@ -36,6 +36,7 @@ from cf_knowledge_kiln.retrieval.ranking import (
     deprecated_warnings,
     detect_conflicts,
     prompt_injection_warnings,
+    sensitive_content_warnings,
     stale_warnings,
     weak_evidence_warning,
 )
@@ -277,6 +278,7 @@ def _row_to_ranked_chunk(row: SearchRow) -> RankedChunk:
         authority=row.authority,
         last_reviewed=row.last_reviewed,
         has_prompt_injection=row.has_prompt_injection,
+        has_sensitive_content=row.has_sensitive_content,
         chunk_metadata=row.chunk_metadata,
     )
 
@@ -289,6 +291,7 @@ def _collect_warnings(
     warnings.extend(stale_warnings(chunks, today=today, stale_after_days=stale_after_days))
     warnings.extend(deprecated_warnings(chunks))
     warnings.extend(prompt_injection_warnings(chunks))
+    warnings.extend(sensitive_content_warnings(chunks))
     warnings.extend(weak_evidence_warning(chunks))
     return warnings
 
