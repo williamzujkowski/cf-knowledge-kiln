@@ -19,7 +19,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from cf_knowledge_kiln.db.models import ChunkEmbedding, Document, DocumentChunk
-from cf_knowledge_kiln.db.repositories._base import BaseRepository
+from cf_knowledge_kiln.db.repositories._base import BaseRepository, apply_eq_filters
 from cf_knowledge_kiln.db.repositories._hybrid import (
     SearchRow,
     build_fts_only_select,
@@ -53,24 +53,22 @@ class DocumentsRepository(BaseRepository):
         commit_sha: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> Document:
-        row = Document(
-            repo=repo,
-            path=path,
-            title=title,
-            doc_type=doc_type,
-            status=status,
-            owner=owner,
-            system=system,
-            authority=authority,
-            sensitivity=sensitivity,
-            source_url=source_url,
-            commit_sha=commit_sha,
-            extra=metadata or {},
+        return await self._persist(
+            Document(
+                repo=repo,
+                path=path,
+                title=title,
+                doc_type=doc_type,
+                status=status,
+                owner=owner,
+                system=system,
+                authority=authority,
+                sensitivity=sensitivity,
+                source_url=source_url,
+                commit_sha=commit_sha,
+                extra=metadata or {},
+            )
         )
-        self._session.add(row)
-        await self._session.flush()
-        await self._session.refresh(row)
-        return row
 
     async def get(self, id: UUID) -> Document | None:
         return await self._session.get(Document, id)
@@ -83,14 +81,10 @@ class DocumentsRepository(BaseRepository):
         doc_type: str | None = None,
         limit: int | None = None,
     ) -> Sequence[Document]:
-        stmt = select(Document)
-        if status is not None:
-            stmt = stmt.where(Document.status == status)
-        if repo is not None:
-            stmt = stmt.where(Document.repo == repo)
-        if doc_type is not None:
-            stmt = stmt.where(Document.doc_type == doc_type)
-        stmt = stmt.order_by(Document.created_at.desc())
+        stmt = apply_eq_filters(
+            select(Document),
+            {Document.status: status, Document.repo: repo, Document.doc_type: doc_type},
+        ).order_by(Document.created_at.desc())
         if limit is not None:
             stmt = stmt.limit(limit)
         return (await self._session.execute(stmt)).scalars().all()
@@ -111,19 +105,17 @@ class ChunksRepository(BaseRepository):
         content_tokens: int | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> DocumentChunk:
-        row = DocumentChunk(
-            document_id=document_id,
-            chunk_index=chunk_index,
-            content=content,
-            content_hash=content_hash,
-            heading_path=heading_path or [],
-            content_tokens=content_tokens,
-            extra=metadata or {},
+        return await self._persist(
+            DocumentChunk(
+                document_id=document_id,
+                chunk_index=chunk_index,
+                content=content,
+                content_hash=content_hash,
+                heading_path=heading_path or [],
+                content_tokens=content_tokens,
+                extra=metadata or {},
+            )
         )
-        self._session.add(row)
-        await self._session.flush()
-        await self._session.refresh(row)
-        return row
 
     async def get(self, id: UUID) -> DocumentChunk | None:
         return await self._session.get(DocumentChunk, id)
@@ -135,12 +127,13 @@ class ChunksRepository(BaseRepository):
         content_hash: str | None = None,
         limit: int | None = None,
     ) -> Sequence[DocumentChunk]:
-        stmt = select(DocumentChunk)
-        if document_id is not None:
-            stmt = stmt.where(DocumentChunk.document_id == document_id)
-        if content_hash is not None:
-            stmt = stmt.where(DocumentChunk.content_hash == content_hash)
-        stmt = stmt.order_by(DocumentChunk.document_id, DocumentChunk.chunk_index)
+        stmt = apply_eq_filters(
+            select(DocumentChunk),
+            {
+                DocumentChunk.document_id: document_id,
+                DocumentChunk.content_hash: content_hash,
+            },
+        ).order_by(DocumentChunk.document_id, DocumentChunk.chunk_index)
         if limit is not None:
             stmt = stmt.limit(limit)
         return (await self._session.execute(stmt)).scalars().all()
@@ -218,18 +211,16 @@ class EmbeddingsRepository(BaseRepository):
         dimensions: int,
         content_hash: str,
     ) -> ChunkEmbedding:
-        row = ChunkEmbedding(
-            chunk_id=chunk_id,
-            embedding=list(embedding),
-            model=model,
-            provider=provider,
-            dimensions=dimensions,
-            content_hash=content_hash,
+        return await self._persist(
+            ChunkEmbedding(
+                chunk_id=chunk_id,
+                embedding=list(embedding),
+                model=model,
+                provider=provider,
+                dimensions=dimensions,
+                content_hash=content_hash,
+            )
         )
-        self._session.add(row)
-        await self._session.flush()
-        await self._session.refresh(row)
-        return row
 
     async def get(self, id: UUID) -> ChunkEmbedding | None:
         """Get by chunk_id (the table's primary key)."""
@@ -243,14 +234,14 @@ class EmbeddingsRepository(BaseRepository):
         dimensions: int | None = None,
         limit: int | None = None,
     ) -> Sequence[ChunkEmbedding]:
-        stmt = select(ChunkEmbedding)
-        if model is not None:
-            stmt = stmt.where(ChunkEmbedding.model == model)
-        if provider is not None:
-            stmt = stmt.where(ChunkEmbedding.provider == provider)
-        if dimensions is not None:
-            stmt = stmt.where(ChunkEmbedding.dimensions == dimensions)
-        stmt = stmt.order_by(ChunkEmbedding.created_at.desc())
+        stmt = apply_eq_filters(
+            select(ChunkEmbedding),
+            {
+                ChunkEmbedding.model: model,
+                ChunkEmbedding.provider: provider,
+                ChunkEmbedding.dimensions: dimensions,
+            },
+        ).order_by(ChunkEmbedding.created_at.desc())
         if limit is not None:
             stmt = stmt.limit(limit)
         return (await self._session.execute(stmt)).scalars().all()
