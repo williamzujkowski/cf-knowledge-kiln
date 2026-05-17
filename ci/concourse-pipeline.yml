@@ -310,4 +310,9 @@ jobs:
                 cf api "$CF_API"
                 cf auth "$CF_USERNAME" "$CF_PASSWORD"
                 cf target -o "$CF_ORG" -s "$CF_SPACE"
-                cf push -f manifest.yml
+                # --strategy rolling keeps the previous instance running
+                # until the new one passes healthchecks (#98). Built into
+                # the CF CLI; no plugin needed. Blue-green is a stricter
+                # rollback path — promote when zero-downtime matters more
+                # than the simpler ops surface here.
+                cf push -f manifest.yml --strategy rolling
