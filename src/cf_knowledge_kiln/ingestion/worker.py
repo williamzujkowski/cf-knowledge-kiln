@@ -35,6 +35,7 @@ from cf_knowledge_kiln.db.repositories import IngestionJobsRepository
 from cf_knowledge_kiln.ingestion.embedding import EmbeddingProvider
 from cf_knowledge_kiln.ingestion.embedding.factory import build_provider_from_settings
 from cf_knowledge_kiln.ingestion.pipeline import run_source
+from cf_knowledge_kiln.ingestion.prompt_injection import load_phrases
 from cf_knowledge_kiln.ingestion.sources import (
     SourceAllowlist,
     SourceAllowlistError,
@@ -59,12 +60,14 @@ class Worker:
         allowlist: SourceAllowlist,
         settings: Settings,
         embedding_provider: EmbeddingProvider | None = None,
+        prompt_injection_phrases: list[str] | None = None,
         poll_interval_seconds: float | None = None,
     ) -> None:
         self._db = db
         self._allowlist = allowlist
         self._settings = settings
         self._embedding_provider = embedding_provider
+        self._prompt_injection_phrases = prompt_injection_phrases
         self._poll = (
             poll_interval_seconds
             if poll_interval_seconds is not None
@@ -153,6 +156,7 @@ class Worker:
                 source=source,
                 settings=self._settings,
                 embedding_provider=self._embedding_provider,
+                prompt_injection_phrases=self._prompt_injection_phrases,
             )
             await session.commit()
         async with self._db.session() as session:
@@ -196,7 +200,14 @@ async def serve(
 
     db = Database(url, pool_size=settings.pg_pool_size, max_overflow=settings.pg_pool_max_overflow)
     provider = build_provider_from_settings(settings)
-    worker = Worker(db=db, allowlist=allowlist, settings=settings, embedding_provider=provider)
+    phrases = load_phrases(settings.security_config_path)
+    worker = Worker(
+        db=db,
+        allowlist=allowlist,
+        settings=settings,
+        embedding_provider=provider,
+        prompt_injection_phrases=phrases,
+    )
     _install_signal_handlers(worker)
     try:
         await worker.run_forever()

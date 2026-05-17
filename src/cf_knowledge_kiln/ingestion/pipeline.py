@@ -44,6 +44,7 @@ from cf_knowledge_kiln.ingestion.connectors import (
 )
 from cf_knowledge_kiln.ingestion.embedding import EmbeddingProvider
 from cf_knowledge_kiln.ingestion.embedding.pipeline import embed_touched_documents
+from cf_knowledge_kiln.ingestion.prompt_injection import scan as scan_prompt_injection
 from cf_knowledge_kiln.ingestion.sources import Source
 
 logger = logging.getLogger(__name__)
@@ -58,6 +59,7 @@ class IngestionSummary:
     files_skipped: int = 0
     chunks_created: int = 0
     chunks_unchanged: int = 0
+    chunks_with_prompt_injection: int = 0
     embeddings_created: int = 0
     embeddings_unchanged: int = 0
     embeddings_failed: int = 0
@@ -72,6 +74,7 @@ class IngestionSummary:
             "files_skipped": self.files_skipped,
             "chunks_created": self.chunks_created,
             "chunks_unchanged": self.chunks_unchanged,
+            "chunks_with_prompt_injection": self.chunks_with_prompt_injection,
             "embeddings_created": self.embeddings_created,
             "embeddings_unchanged": self.embeddings_unchanged,
             "embeddings_failed": self.embeddings_failed,
@@ -158,6 +161,7 @@ async def _process_file(
     source: Source,
     summary: IngestionSummary,
     touched_doc_ids: set[UUID],
+    prompt_injection_phrases: list[str] | None = None,
 ) -> None:
     """Parse one fetched file and write its chunks. Dedup on content_hash."""
     try:
@@ -192,6 +196,18 @@ async def _process_file(
         if prev is not None and prev[1] == chunk.content_hash:
             summary.chunks_unchanged += 1
             continue
+        # Stamp ingest-time security markers on chunk metadata so the
+        # retrieval path can emit prompt_injection_pattern warnings in
+        # O(1) per chunk (#57). The matcher returns the first match;
+        # we record it as evidence for the warning. Empty phrase list
+        # (no security config) → no metadata change.
+        chunk_extra: dict[str, Any] = {}
+        if prompt_injection_phrases:
+            match = scan_prompt_injection(chunk.content, prompt_injection_phrases)
+            if match is not None:
+                chunk_extra["has_prompt_injection"] = True
+                chunk_extra["matched_pattern"] = match["matched_pattern"]
+                summary.chunks_with_prompt_injection += 1
         # Upsert on (document_id, chunk_index): a content edit replaces
         # the row in place so the chunk's UUID is stable. That stable ID
         # is what chunk_embeddings references; the embedding pass will
@@ -204,6 +220,7 @@ async def _process_file(
                 chunks_table.c.content_tokens: chunk.content_tokens,
                 chunks_table.c.content_hash: chunk.content_hash,
                 chunks_table.c.heading_path: chunk.heading_path,
+                chunks_table.c.metadata: chunk_extra,
             }
         )
         upsert_stmt = insert_stmt.on_conflict_do_update(
@@ -213,6 +230,7 @@ async def _process_file(
                 "content_tokens": insert_stmt.excluded.content_tokens,
                 "content_hash": insert_stmt.excluded.content_hash,
                 "heading_path": insert_stmt.excluded.heading_path,
+                "metadata": insert_stmt.excluded.metadata,
             },
         )
         await session.execute(upsert_stmt)
@@ -247,6 +265,7 @@ async def run_source(
     source: Source,
     settings: Settings,
     embedding_provider: EmbeddingProvider | None = None,
+    prompt_injection_phrases: list[str] | None = None,
 ) -> IngestionSummary:
     """Run the full pipeline for a single source. Writes an ingestion_runs row.
 
@@ -292,6 +311,7 @@ async def run_source(
             source=source,
             summary=summary,
             touched_doc_ids=touched_doc_ids,
+            prompt_injection_phrases=prompt_injection_phrases,
         )
 
     if embedding_provider is not None:

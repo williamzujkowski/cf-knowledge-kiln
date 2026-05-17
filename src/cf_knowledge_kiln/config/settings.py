@@ -68,6 +68,7 @@ class Settings(BaseSettings):
 
     # Security.
     source_allowlist_path: str = "config/sources.yaml"
+    security_config_path: str = "config/security.yaml"
     auth_mode: AuthMode = "none"
     bearer_token: str | None = None
 
