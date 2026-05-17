@@ -93,11 +93,29 @@ _REFUSED_IPV6_RANGES: tuple[ipaddress.IPv6Network, ...] = (
 
 
 def _assert_ip_public(ip: ipaddress.IPv4Address | ipaddress.IPv6Address, *, host: str) -> None:
-    """Defense-in-depth IP checks. Includes the cloud metadata IP by name."""
+    """Defense-in-depth IP checks. Includes the cloud metadata IP by name.
+
+    Check order matters: cloud-metadata literal first (most specific
+    message), IPv6 transition ranges second (so 6to4 gets the
+    "transition range" message regardless of whether the running
+    Python flags them via is_reserved), then the generic is_* fence.
+    """
     # Cloud metadata service. Already covered by is_link_local but
     # called out so an auditor reading this can see we mean it.
     if str(ip) == "169.254.169.254":
         raise SsrfRefused(f"host {host!r} resolves to the cloud-metadata IP 169.254.169.254")
+    # IPv6 transition ranges that route to IPv4 via embedded addresses.
+    # Checked BEFORE is_* so the specific "transition range" message
+    # always wins — Python's ipaddress flags for 2002::/16 changed
+    # between 3.12.3 (False) and 3.12.13 (True for is_reserved); we
+    # don't want the test to depend on Python's patch version.
+    if isinstance(ip, ipaddress.IPv6Address):
+        for net in _REFUSED_IPV6_RANGES:
+            if ip in net:
+                raise SsrfRefused(
+                    f"host {host!r} resolves to IPv6 transition range {net} "
+                    f"(IP {ip}); refuse — it can tunnel to private IPv4."
+                )
     if (
         ip.is_private
         or ip.is_loopback
@@ -110,14 +128,6 @@ def _assert_ip_public(ip: ipaddress.IPv4Address | ipaddress.IPv6Address, *, host
             f"host {host!r} resolves to non-public IP {ip} "
             f"(private/loopback/link-local/multicast/reserved/unspecified)"
         )
-    # IPv6 transition ranges that route to IPv4 via embedded addresses.
-    if isinstance(ip, ipaddress.IPv6Address):
-        for net in _REFUSED_IPV6_RANGES:
-            if ip in net:
-                raise SsrfRefused(
-                    f"host {host!r} resolves to IPv6 transition range {net} "
-                    f"(IP {ip}); refuse — it can tunnel to private IPv4."
-                )
 
 
 def _resolve(host: str) -> list[str]:
