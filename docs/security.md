@@ -52,7 +52,13 @@ Full anti-injection rules live in
 - Secret-bearing config fields never appear in YAML files.
 - `bandit` flags insecure-by-default Python patterns.
 - `pip-audit` flags known-vulnerable deps.
-- SBOM (`syft`) and vulnerability scan (`grype`) run in CI.
+- **SBOM + vulnerability scan**: every push runs `anchore/sbom-action`
+  (syft) to emit an SPDX JSON SBOM and `anchore/scan-action` (grype)
+  to scan it against the CVE feed. Build fails on **HIGH / CRITICAL**
+  findings (cutoff is `severity-cutoff: high` in the workflow); the
+  SBOM is uploaded as a 90-day-retention artifact (`cf-knowledge-kiln-sbom`)
+  so an operator can audit the dep tree of any merged commit. Locally:
+  `make sbom && make scan` (requires `syft` + `grype` on $PATH).
 
 ## Source ingestion safety
 
