@@ -79,7 +79,7 @@ async def _enqueue(allowlist_path: Path) -> int:
     url = resolve_database_url(settings)
     if url is None:
         logger.error(
-            "cannot enqueue: no database URL " "(set KILN_DATABASE_URL or bind a Postgres service)"
+            "cannot enqueue: no database URL (set KILN_DATABASE_URL or bind a Postgres service)"
         )
         return 2
     db = Database(url, pool_size=settings.pg_pool_size, max_overflow=settings.pg_pool_max_overflow)
