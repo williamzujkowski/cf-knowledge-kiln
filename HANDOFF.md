@@ -1,7 +1,7 @@
 # Handoff notes
 
-**As of:** 2026-05-16
-**Status:** Phase 0–4 complete; Phase 5 (hybrid retrieval) ready to start. CI green on `main`.
+**As of:** 2026-05-17
+**Status:** Phase 0–4 complete + all Phase 5 prep merged; Phase 5 (hybrid retrieval) implementation ready to start. CI green on `main` (186 unit + 48 integration tests).
 
 This file is the "where we are, what's next, what's been decided" briefing. For *how* to work in the repo, read [AGENTS.md](./AGENTS.md). For *what* the project is, read [README.md](./README.md). For *the plan*, read [plans/cf-rag-plan.md](./plans/cf-rag-plan.md).
 
@@ -9,11 +9,11 @@ This file is the "where we are, what's next, what's been decided" briefing. For 
 
 ## TL;DR
 
-cf-knowledge-kiln is a Cloud Foundry RAG knowledge app — a `cf push`'d Python/FastAPI app that binds to a Postgres + pgvector service and serves cited retrieval to humans (search UI) and AI agents (bounded context packs). Architecture is hybrid retrieval (pgvector similarity + Postgres FTS + metadata ranking) per [ADR-0002](./docs/adr/0002-postgres-pgvector.md) (reaffirmed by [ADR-0008](./docs/adr/0008-pgvector-mvp-critical.md)).
+cf-knowledge-kiln is a Cloud Foundry RAG knowledge app — a `cf push`'d Python/FastAPI app that binds to a Postgres + pgvector service and serves cited retrieval to humans (search UI) and AI agents (bounded context packs). Architecture is hybrid retrieval (pgvector similarity + Postgres FTS + metadata ranking) per [ADR-0002](./docs/adr/0002-postgres-pgvector.md) (reaffirmed by [ADR-0008](./docs/adr/0008-pgvector-mvp-critical.md)), with ranking + index decisions captured in [ADR-0009](./docs/adr/0009-hybrid-retrieval.md).
 
-Phase 4 (embeddings) landed: `EmbeddingProvider` Protocol + deterministic `MockEmbeddingProvider`, `OpenAICompatibleEmbeddingProvider` (asyncio semaphore + exponential backoff + secrets stay out of logs), `LocalEmbeddingProvider` (sentence-transformers, lazy-load, runs in a worker thread), config-driven factory with the China-origin exclusion list enforced at load time, `EmbeddingsRepository.upsert` + `existing_hashes_for_document` for content-hash-gated re-embedding, pipeline wired so re-ingestion of unchanged content makes zero provider calls. Also fixed a pre-existing pipeline bug: chunk content edits now upsert on `(document_id, chunk_index)` and orphan chunks are deleted. 128 unit + 33 integration tests green.
+Phase 4 (embeddings) landed (#43) and was followed by eight prep PRs that merged on 2026-05-17 (#67, #60, #61, #62, #63, #64, #65, #66): symlink-traversal guard + Makefile/README fixes + Worker tests (#67), Phase 5 design doc + ADR-0009 (#60), shared embedding-provider factory used by both worker and API lifespan (#61), ingest-time prompt-injection scanner stamping `chunk.metadata.has_prompt_injection` (#62), `/readyz` 503-on-degraded for CF LB compatibility (#63), Phase 5 contract surface as 501 stubs + OpenAPI drift test (#64), `redact_dsn` helper for safe DB-URL logging (#65), and integration coverage for the `IngestionJobsRepository` mutation methods (#66).
 
-Next concrete chunk of work: Phase 5 (hybrid retrieval). Epic [#4](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/4). With chunks + embeddings + FTS in place, Phase 5 wires `/v1/search`, `/v1/answer`, and `/v1/agent/*` over the existing schema. Design is locked: [ADR-0009](./docs/adr/0009-hybrid-retrieval.md) captures the ranking/index decisions (RRF k=60, ts_rank_cd, `hnsw.ef_search = 200`, CTE single-round-trip pattern); [docs/phase-5-design.md](./docs/phase-5-design.md) captures the module layout, route table, lifecycle, and warning surface. Two preparatory issues block clean implementation: [#57](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/57) (ingest-time prompt-injection markers) and [#58](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/58) (share embedding-provider factory between Worker and API). The CF deploy gate still depends on [bosh-pgvector-release#3](https://github.com/williamzujkowski/bosh-pgvector-release/issues/3) (operator runbook).
+Next concrete chunk of work: **Phase 5 implementation itself** — epic [#4](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/4). The route surface is already registered as 501 stubs in `src/cf_knowledge_kiln/api/retrieval.py`; the implementation replaces those with real `HybridRetriever` calls per [docs/phase-5-design.md](./docs/phase-5-design.md). The OpenAPI drift test (`tests/unit/test_openapi_drift.py`) will keep the contract honest; the ingest-time injection markers will be O(1) at retrieval time. The CF deploy gate still depends on [bosh-pgvector-release#3](https://github.com/williamzujkowski/bosh-pgvector-release/issues/3) (operator runbook).
 
 ---
 
