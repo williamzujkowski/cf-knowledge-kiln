@@ -89,15 +89,15 @@ paths:
               schema:
                 $ref: "#/components/schemas/VersionResponse"
 
-  # ─── Planned (Phase 5+) — contract surface for future work ─────────
+  # ─── Phase 5 — hybrid retrieval ─────────────────────────────────────
   /v1/search:
     post:
       tags: [search]
-      summary: Human search (Phase 5+)
+      summary: Human search
       description: |
         Hybrid retrieval (pgvector + Postgres FTS) with filter support.
         Response is UI-friendly: result cards with previews, freshness,
-        and source links. NOT YET IMPLEMENTED.
+        and source links.
       operationId: humanSearch
       requestBody:
         required: true
@@ -112,18 +112,15 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SearchResponse"
-        "501":
-          description: Not implemented yet (Phase 5).
 
   /v1/agent/context-pack:
     post:
       tags: [agent]
-      summary: Build an agent context pack (Phase 5+)
+      summary: Build an agent context pack
       description: |
         Returns a bounded, cited evidence set for a task. Enforces
         token budgets. Always includes `warnings` and
         `requires_human_review`. Retrieved text is labeled untrusted.
-        NOT YET IMPLEMENTED.
       operationId: agentContextPack
       requestBody:
         required: true
@@ -138,8 +135,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ContextPackResponse"
-        "501":
-          description: Not implemented yet (Phase 5).
 
 components:
   schemas:
@@ -265,7 +260,8 @@ components:
 
     ResultCard:
       type: object
-      required: [chunk_id, document_id, title, excerpt, source_url, status, score]
+      # source_url is optional — see EvidenceChunk note above.
+      required: [chunk_id, document_id, title, excerpt, status, score]
       properties:
         chunk_id:
           type: string
@@ -300,8 +296,8 @@ components:
           format: date
         score:
           type: number
+          # Post-boost fused RRF score; no fixed upper bound.
           minimum: 0
-          maximum: 1
         warnings:
           type: array
           items:

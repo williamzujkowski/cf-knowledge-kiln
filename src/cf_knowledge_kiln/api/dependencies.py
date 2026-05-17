@@ -1,0 +1,90 @@
+"""FastAPI dependency providers for Phase 5 routes.
+
+The lifespan in :mod:`cf_knowledge_kiln.api.app` attaches the shared
+:class:`Database`, :class:`EmbeddingProvider`, and (later) other
+services to ``app.state``. These ``Depends``-able functions hand them
+to route handlers without each handler reaching into ``request.app``
+manually.
+
+The handlers raise HTTP 503 when a required dependency is missing
+(e.g., no DB binding) so operators see "service degraded" rather
+than a 500.
+"""
+
+from __future__ import annotations
+
+from typing import Annotated
+
+from fastapi import Depends, HTTPException, Request, status
+
+from cf_knowledge_kiln.config import Settings, get_settings
+from cf_knowledge_kiln.db.connection import Database
+from cf_knowledge_kiln.ingestion.embedding import EmbeddingProvider
+from cf_knowledge_kiln.retrieval import (
+    HybridRetriever,
+    RetrievalConfig,
+    load_retrieval_config,
+)
+
+
+def get_db(request: Request) -> Database:
+    """Return the live :class:`Database` from app.state or 503."""
+    db = getattr(request.app.state, "db", None)
+    if db is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database not configured; bind a Postgres service or set KILN_DATABASE_URL.",
+        )
+    assert isinstance(db, Database)
+    return db
+
+
+def get_embedding_provider(request: Request) -> EmbeddingProvider | None:
+    """Return the optional :class:`EmbeddingProvider` from app.state.
+
+    ``None`` is a valid state: FTS-only retrieval still works without
+    embeddings. Handlers don't need to 503 on this.
+    """
+    provider = getattr(request.app.state, "embedding_provider", None)
+    if provider is None:
+        return None
+    return provider  # type: ignore[no-any-return]
+
+
+def get_retrieval_config(
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> RetrievalConfig:
+    """Load :class:`RetrievalConfig` from ``config/security.yaml``.
+
+    The loader returns defaults + a warning when the file is missing —
+    so this dep never raises for a missing config.
+    """
+    return load_retrieval_config(settings.security_config_path)
+
+
+def get_hybrid_retriever(
+    db: Annotated[Database, Depends(get_db)],
+    provider: Annotated[EmbeddingProvider | None, Depends(get_embedding_provider)],
+    config: Annotated[RetrievalConfig, Depends(get_retrieval_config)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> HybridRetriever:
+    """Compose a per-request :class:`HybridRetriever`.
+
+    The retriever is cheap to construct (no I/O); building per-request
+    keeps it stateless and avoids accidentally sharing transaction
+    state across concurrent calls.
+    """
+    return HybridRetriever(
+        db=db,
+        embedding_provider=provider,
+        config=config,
+        ef_search=settings.hnsw_ef_search,
+    )
+
+
+__all__ = [
+    "get_db",
+    "get_embedding_provider",
+    "get_hybrid_retriever",
+    "get_retrieval_config",
+]

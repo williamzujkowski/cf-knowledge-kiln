@@ -14,14 +14,11 @@ What's intentionally tolerated:
 * ``info.version`` (auto-bumped by pyproject + ``__version__``).
 * ``servers`` (env-specific).
 * ``x-*`` vendor extensions auto-added by FastAPI.
-* Schemas declared **only** in the hand-spec (Phase 5+ types like
-  ``SearchResponse``, ``ContextPackResponse``, ``EvidenceChunk``).
-  Phase 5 implementation lands the Pydantic models; until then the
-  hand-spec is allowed to be ahead.
 
-This test is the gate the design doc (docs/phase-5-design.md)
-describes; it can land before Phase 5 implementation so the
-contract is enforceable incrementally.
+Phase 5 slice 4 wired all the Phase-5 schemas into FastAPI routes
+(via Pydantic ``response_model=`` annotations), so they now appear
+in ``/openapi.json`` and the strict cross-checks apply to all of
+them. ``PHASE_5_ONLY_SCHEMAS`` is empty.
 """
 
 from __future__ import annotations
@@ -48,23 +45,9 @@ from cf_knowledge_kiln.retrieval.types import (
 REPO_ROOT = Path(__file__).resolve().parents[2]
 HAND_SPEC_PATH = REPO_ROOT / "openapi" / "openapi.yaml"
 
-# Schemas that the hand-spec declares but Phase 5 will introduce as
-# Pydantic models. Until that lands, the drift test ignores them.
-PHASE_5_ONLY_SCHEMAS: frozenset[str] = frozenset(
-    {
-        "SearchRequest",
-        "SearchResponse",
-        "RetrievalFilters",
-        "ResultCard",
-        "Warning",
-        "ContextPackRequest",
-        "ContextPackResponse",
-        "EvidenceChunk",
-        "Conflict",
-        "RelatedSource",
-        "TokenBudget",
-    }
-)
+# Slice 4 wired every Phase-5 schema into a route. The tolerance set
+# is now empty; the strict cross-checks below apply uniformly.
+PHASE_5_ONLY_SCHEMAS: frozenset[str] = frozenset()
 
 
 @pytest.fixture(scope="module")
@@ -216,8 +199,8 @@ class TestSchemasAgree:
             hand_props = hand_schemas[name].get("properties", {})
             app_props = app_schemas[name].get("properties", {})
             for prop in sorted(set(hand_props) & set(app_props)):
-                hand_enum = _enum_or_const(hand_props[prop])
-                app_enum = _enum_or_const(app_props[prop])
+                hand_enum = _enum_or_const(hand_props[prop], hand_schemas)
+                app_enum = _enum_or_const(app_props[prop], app_schemas)
                 if hand_enum is None and app_enum is None:
                     continue
                 assert hand_enum is not None and app_enum is not None, (
@@ -231,19 +214,44 @@ class TestSchemasAgree:
                 )
 
 
-def _enum_or_const(schema: dict[str, Any]) -> list[Any] | None:
+def _enum_or_const(
+    schema: dict[str, Any], app_schemas: dict[str, Any] | None = None
+) -> list[Any] | None:
     """Return the value set a property is constrained to, or None.
 
     Treats JSON Schema ``const: X`` as equivalent to ``enum: [X]``; both
     say "this property must be exactly X". Pydantic emits ``const`` for
-    single-value Literals and ``enum`` for multi-value ones.
+    single-value Literals and ``enum`` for multi-value ones, and emits
+    ``Optional[X]`` as ``anyOf: [{$ref}, {type: null}]`` — this
+    function resolves the $ref so optional-enum fields don't look like
+    "unconstrained" to a naive comparison.
     """
     if "enum" in schema:
         result = schema["enum"]
         return list(result) if isinstance(result, list) else [result]
     if "const" in schema:
         return [schema["const"]]
+    if "anyOf" in schema:
+        # Pydantic Optional[Enum] shape: [{$ref or enum}, {type: null}].
+        for branch in schema["anyOf"]:
+            if not isinstance(branch, dict):
+                continue
+            if branch.get("type") == "null":
+                continue
+            inner = _resolve_ref(branch, app_schemas) if app_schemas else branch
+            values = _enum_or_const(inner, app_schemas)
+            if values is not None:
+                return values
     return None
+
+
+def _resolve_ref(schema: dict[str, Any], app_schemas: dict[str, Any]) -> dict[str, Any]:
+    """Follow one level of ``$ref: #/components/schemas/X``."""
+    ref = schema.get("$ref")
+    if not isinstance(ref, str) or not ref.startswith("#/components/schemas/"):
+        return schema
+    name = ref.removeprefix("#/components/schemas/")
+    return app_schemas.get(name, schema)
 
 
 # ─── Direct Pydantic-vs-hand-spec checks (slice 3+) ──────────────────
