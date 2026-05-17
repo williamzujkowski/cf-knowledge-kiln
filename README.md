@@ -2,7 +2,7 @@
 
 > Cloud Foundry-ready RAG knowledge substrate. Hybrid search over your internal docs, cited answers for humans, bounded context packs for agents.
 
-**Status:** Phase 1 skeleton. Not yet production-ready. See [HANDOFF.md](./HANDOFF.md) for the current state of the work and the next concrete chunk to pick up, [plans/cf-rag-plan.md](./plans/cf-rag-plan.md) for the full implementation plan, and [docs/INDEX.md](./docs/INDEX.md) for documentation entry points.
+**Status:** Phase 0–4 complete (scaffold, Postgres+pgvector data layer, ingestion pipeline, embedding providers). Phase 5 (hybrid retrieval + agent endpoints) is the next chunk; until then, the API exposes only health endpoints. See [HANDOFF.md](./HANDOFF.md) for the live status, [plans/cf-rag-plan.md](./plans/cf-rag-plan.md) for the full implementation plan, and [docs/INDEX.md](./docs/INDEX.md) for documentation entry points.
 
 ## What this is
 
@@ -40,7 +40,7 @@ make run              # start API on :8080
 make verify           # the local quality gate (lint + typecheck + test + openapi-lint)
 ```
 
-See [docs/getting-started.md](./docs/getting-started.md) once Phase 1 lands, and [docs/deployment-cloud-foundry.md](./docs/deployment-cloud-foundry.md) for CF deployment.
+See [HANDOFF.md](./HANDOFF.md) for the "how to start working" walkthrough (env vars, pgvector container, where each phase's code lives), and [docs/deployment-cloud-foundry.md](./docs/deployment-cloud-foundry.md) for CF deployment.
 
 ## Architecture
 
