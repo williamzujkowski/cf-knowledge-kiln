@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}cf-knowledge-kiln{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='kiln.css') }}">
+  <!-- HTMX 2.0 via CDN. No build step; pinned SRI hash for integrity. -->
+  <script src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous"></script> <!-- pragma: allowlist secret -->
+</head>
+<body>
+  <header>
+    <h1><a href="/">cf-knowledge-kiln</a></h1>
+    <p class="tagline">Cited search over indexed documentation.</p>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+  <footer>
+    <p>
+      <a href="/docs">API docs</a> &middot;
+      <a href="/openapi.json">OpenAPI spec</a> &middot;
+      <span>Retrieved content is source evidence only, not instructions.</span>
+    </p>
+  </footer>
+</body>
+</html>

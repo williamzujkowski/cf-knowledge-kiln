@@ -1,0 +1,252 @@
+/* cf-knowledge-kiln — minimal plain CSS for Phase 6 baseline.
+   No build step, no framework. Pick-up-and-fork friendly. */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.5;
+  color: #1a1a1a;
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 4rem;
+  background: #fafafa;
+}
+
+a {
+  color: #0b5fff;
+  text-decoration: none;
+}
+
+a:hover,
+a:focus {
+  text-decoration: underline;
+}
+
+/* Header / footer */
+
+header {
+  border-bottom: 1px solid #e0e0e0;
+  padding-bottom: 1rem;
+  margin-bottom: 2rem;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+header h1 a {
+  color: inherit;
+}
+
+.tagline {
+  margin: 0.25rem 0 0;
+  color: #555;
+  font-size: 0.95rem;
+}
+
+footer {
+  margin-top: 4rem;
+  border-top: 1px solid #e0e0e0;
+  padding-top: 1rem;
+  color: #666;
+  font-size: 0.85rem;
+}
+
+/* Search form */
+
+.search-form label[for="query"] {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.search-form input[type="search"] {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 1rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.search-form input[type="search"]:focus {
+  outline: 2px solid #0b5fff;
+  outline-offset: -1px;
+  border-color: #0b5fff;
+}
+
+.filters {
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: #fff;
+}
+
+.filters legend {
+  font-weight: 600;
+  padding: 0 0.25rem;
+}
+
+.filters label {
+  display: inline-block;
+  margin-right: 1rem;
+  font-size: 0.95rem;
+}
+
+.search-form button {
+  padding: 0.5rem 1rem;
+  background: #0b5fff;
+  color: #fff;
+  border: 0;
+  border-radius: 4px;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+/* Warnings */
+
+.warnings {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+}
+
+.warning {
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.warning-stale_source,
+.warning-deprecated_source {
+  background: #fff3cd;
+  color: #664d03;
+  border-left: 3px solid #997404;
+}
+
+.warning-conflicting_sources,
+.warning-prompt_injection_pattern,
+.warning-sensitive_content {
+  background: #f8d7da;
+  color: #842029;
+  border-left: 3px solid #b02a37;
+}
+
+.warning-weak_evidence {
+  background: #e2e3e5;
+  color: #41464b;
+  border-left: 3px solid #6c757d;
+}
+
+/* Results list */
+
+.results-list {
+  list-style: none;
+  padding: 0;
+  margin: 1.5rem 0 0;
+}
+
+.result-card {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.result-header {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.result-title {
+  margin: 0;
+  font-size: 1.1rem;
+  flex: 1 1 auto;
+}
+
+.status-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.15rem 0.5rem;
+  border-radius: 3px;
+  background: #e7f5ec;
+  color: #0a6e2c;
+}
+
+.status-badge.status-deprecated,
+.status-badge.status-archived,
+.status-badge.status-superseded {
+  background: #ffe5e5;
+  color: #a40000;
+}
+
+.status-badge.status-draft {
+  background: #fff3cd;
+  color: #664d03;
+}
+
+/* Deprecated cards: visibly dimmed AND flagged so a reader can't
+   confuse them with active guidance. AGENTS.md: "Deprecated docs
+   must be visibly flagged in results." */
+.result-card.status-deprecated,
+.result-card.status-archived,
+.result-card.status-superseded {
+  background: #faf5f5;
+  border-left: 3px solid #b02a37;
+  opacity: 0.85;
+}
+
+.result-card.status-deprecated .excerpt {
+  text-decoration-color: #b02a37;
+}
+
+.freshness {
+  color: #666;
+  font-size: 0.85rem;
+}
+
+.heading-path {
+  color: #666;
+  font-size: 0.85rem;
+  margin: 0.25rem 0 0.5rem;
+}
+
+.excerpt {
+  margin: 0.5rem 0;
+  color: #222;
+}
+
+.result-footer {
+  display: flex;
+  justify-content: space-between;
+  color: #666;
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+.source {
+  font-family:
+    SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+}
+
+.empty-hint,
+.empty-results {
+  color: #666;
+  font-style: italic;
+  text-align: center;
+  margin: 2rem 0;
+}

@@ -1,0 +1,40 @@
+{# HTMX-swappable fragment: rendered both on initial page load and as
+   the response body to POST /search. Keep self-contained — no <html>,
+   <head>, or <body>. #}
+{% if warnings %}
+  <ul class="warnings" role="status">
+    {% for w in warnings %}
+      <li class="warning warning-{{ w.type }}">{{ w.message }}</li>
+    {% endfor %}
+  </ul>
+{% endif %}
+
+{% if results %}
+  <ol class="results-list">
+    {% for r in results %}
+      <li class="result-card status-{{ r.status }}" data-document-id="{{ r.document_id }}">
+        <header class="result-header">
+          <h3 class="result-title">{{ r.title }}</h3>
+          <span class="status-badge status-{{ r.status }}">{{ r.status }}</span>
+          {% if r.last_reviewed %}
+            <time datetime="{{ r.last_reviewed }}" class="freshness">
+              Reviewed {{ r.last_reviewed }}
+            </time>
+          {% endif %}
+        </header>
+        {% if r.heading_path %}
+          <p class="heading-path">{{ r.heading_path | join(' › ') }}</p>
+        {% endif %}
+        <p class="excerpt">{{ r.excerpt }}</p>
+        <footer class="result-footer">
+          {% if r.repo and r.path %}
+            <span class="source">{{ r.repo }}/{{ r.path }}</span>
+          {% endif %}
+          <span class="score">score {{ '%.3f' % r.score }}</span>
+        </footer>
+      </li>
+    {% endfor %}
+  </ol>
+{% elif query %}
+  <p class="empty-results">No results for &ldquo;{{ query }}&rdquo;.</p>
+{% endif %}

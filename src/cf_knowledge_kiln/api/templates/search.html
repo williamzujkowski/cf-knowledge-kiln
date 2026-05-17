@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}Search · cf-knowledge-kiln{% endblock %}
+
+{% block content %}
+<section class="search">
+  <form
+    class="search-form"
+    hx-post="/search"
+    hx-target="#results"
+    hx-swap="innerHTML"
+    hx-trigger="submit, keyup changed delay:300ms from:input[name=query]">
+    <label for="query">Search</label>
+    <input
+      type="search"
+      id="query"
+      name="query"
+      placeholder="What are you looking for?"
+      autocomplete="off"
+      autofocus
+      value="{{ query or '' }}">
+
+    <fieldset class="filters">
+      <legend>Filters</legend>
+      <label>
+        <input type="checkbox" name="status" value="active" checked> Active
+      </label>
+      <label>
+        <input type="checkbox" name="status" value="approved" checked> Approved
+      </label>
+      <label>
+        <input type="checkbox" name="status" value="draft"> Draft
+      </label>
+      <label>
+        <input type="checkbox" name="status" value="deprecated"> Deprecated
+      </label>
+    </fieldset>
+
+    <button type="submit">Search</button>
+  </form>
+
+  <section id="results" aria-live="polite">
+    {% if initial_results is not none %}
+      {% include "_results.html" %}
+    {% else %}
+      <p class="empty-hint">Type a query above to search.</p>
+    {% endif %}
+  </section>
+</section>
+{% endblock %}

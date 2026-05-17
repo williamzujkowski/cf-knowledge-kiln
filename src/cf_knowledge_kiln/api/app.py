@@ -21,16 +21,21 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from cf_knowledge_kiln import __version__
 from cf_knowledge_kiln.api.health import router as health_router
 from cf_knowledge_kiln.api.retrieval import router as retrieval_router
+from cf_knowledge_kiln.api.web import router as web_router
 from cf_knowledge_kiln.config import get_settings
 from cf_knowledge_kiln.db import Database, resolve_database_url
 from cf_knowledge_kiln.ingestion.embedding import EmbeddingProvider
 from cf_knowledge_kiln.ingestion.embedding.factory import build_provider_from_settings
+
+_STATIC_DIR = Path(__file__).parent / "static"
 
 
 @asynccontextmanager
@@ -75,6 +80,8 @@ def create_app() -> FastAPI:
     )
     app.include_router(health_router)
     app.include_router(retrieval_router)
+    app.include_router(web_router)
+    app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
     return app
 
 
