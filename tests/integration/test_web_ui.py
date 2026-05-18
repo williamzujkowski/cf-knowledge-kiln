@@ -981,6 +981,111 @@ def test_search_page_renders_toast_region(client: TestClient) -> None:
     assert 'aria-live="polite"' in body
 
 
+# ─── #122: typographic depth ────────────────────────────────────────
+
+
+def test_feedback_widget_renders_inline_italic_phrase(
+    client: TestClient, session: AsyncSession, small_corpus: Path
+) -> None:
+    """The new feedback widget is a one-line italic phrase, not a disclosure.
+
+    #122 dropped the <details>/<summary> chrome plus the free-text
+    note in favor of an editorial-voice prompt + hairline-separated
+    text buttons. The 6 signal POST surface is unchanged.
+    """
+    asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
+    response = client.post("/search", data={"query": "widgets", "status": ["active"]})
+    body = response.text
+    # New inline-phrase markup is present, old disclosure is gone.
+    assert "feedback-inline" in body
+    assert "Was this useful?" in body
+    assert '<details class="feedback"' not in body
+    assert "fb-pill" not in body
+    # All 6 signals still POST through buttons.
+    for value in (
+        "useful",
+        "not_useful",
+        "stale",
+        "wrong_source",
+        "missing_source",
+        "duplicate_or_conflicting",
+    ):
+        assert f'value="{value}"' in body, f"missing signal {value}"
+
+
+def test_feedback_widget_post_still_persists_through_inline_phrase(
+    client: TestClient, session: AsyncSession, small_corpus: Path
+) -> None:
+    """Clicking a feedback button still writes a rag_feedback row.
+
+    The form posts the clicked button's name/value pair (signal),
+    so the server contract is preserved across the markup rewrite.
+    """
+    asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
+    # Need a real query_id + chunk_id to satisfy the FK.
+    search = client.post("/search", data={"query": "widgets", "status": ["active"]})
+    body = search.text
+    # Extract IDs from the rendered hidden inputs.
+    import re as _re
+
+    qid_match = _re.search(r'name="query_id" value="([0-9a-f-]+)"', body)
+    cid_match = _re.search(r'name="chunk_id" value="([0-9a-f-]+)"', body)
+    assert qid_match and cid_match
+    response = client.post(
+        "/feedback",
+        data={
+            "query_id": qid_match.group(1),
+            "chunk_id": cid_match.group(1),
+            "signal": "useful",
+        },
+    )
+    assert response.status_code == 200
+    assert "feedback-ack" in response.text
+
+
+def test_error_fragment_uses_notice_margin_note_voice(
+    client: TestClient, session: AsyncSession, small_corpus: Path
+) -> None:
+    """The error fragment reuses the .notice style (oxblood rule + italic).
+
+    #122 replaced the colored chat-app box with the same editorial
+    annotation chrome used by the untrusted-content notice.
+    """
+    from unittest.mock import patch
+
+    asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
+    with patch(
+        "cf_knowledge_kiln.retrieval.engine.HybridRetriever.search",
+        side_effect=RuntimeError("simulated outage"),
+    ):
+        response = client.post("/search", data={"query": "widgets", "status": ["active"]})
+    assert response.status_code == 503
+    body = response.text
+    # role=alert preserved + the new shared chrome wired up.
+    assert 'role="alert"' in body
+    assert "notice" in body  # shared .notice class
+    assert "notice-alert" in body
+    assert "<em" in body  # italic editorial voice for the message
+    # Confirm we kept the css hook the JS status logic needs.
+    assert "error-fragment" in body
+
+
+def test_result_card_has_data_chunk_id_for_status_badge(
+    client: TestClient, session: AsyncSession, small_corpus: Path
+) -> None:
+    """Status badge structure (no border, leading hairline) renders.
+
+    The visual treatment is CSS, but we sanity-check that the badge
+    still emits the .status-badge class and the matching .status-X
+    modifier so the editorial styling can attach.
+    """
+    asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
+    response = client.post("/search", data={"query": "widgets", "status": ["active"]})
+    body = response.text
+    assert "status-badge" in body
+    assert "status-active" in body
+
+
 async def _neighbors(session: AsyncSession, chunk_id: str) -> tuple[int, int, int]:
     """Helper: returns (prev_count, target_present, next_count)."""
     import uuid as _uuid

@@ -1,32 +1,34 @@
-{# Per-result feedback widget. Only rendered when query_id is set
-   (i.e., telemetry persisted the rag_queries row). The form posts
-   to /feedback and the response swaps the form itself, keeping the
-   rest of the card stable. #}
-<details class="feedback" id="fb-{{ chunk_id }}">
-  <summary>Feedback</summary>
-  <form
-    class="feedback-form"
-    hx-post="/feedback"
-    hx-target="closest .feedback"
-    hx-swap="outerHTML">
-    <input type="hidden" name="query_id" value="{{ query_id }}">
-    <input type="hidden" name="chunk_id" value="{{ chunk_id }}">
+{# #122: feedback widget as inline italic phrase. No bolted-on
+   "+ Feedback" disclosure — the prompt sits at the foot of the
+   card and the affordances are hairline-separated text buttons.
+   Same POST surface (signal → /feedback). The free-text "comment"
+   path was dropped: the radio buttons carry every actionable signal,
+   and inline text input cluttered the card silhouette. Only rendered
+   when query_id is set (rag_queries row persisted). #}
+<form
+  class="feedback feedback-inline"
+  id="fb-{{ chunk_id }}"
+  hx-post="/feedback"
+  hx-target="closest .feedback"
+  hx-swap="outerHTML">
+  <input type="hidden" name="query_id" value="{{ query_id }}">
+  <input type="hidden" name="chunk_id" value="{{ chunk_id }}">
 
-    <fieldset>
-      <legend>What's the issue?</legend>
-      <label class="fb-pill"><input type="radio" name="signal" value="useful" required><span>Useful</span></label>
-      <label class="fb-pill"><input type="radio" name="signal" value="not_useful"><span>Not useful</span></label>
-      <label class="fb-pill"><input type="radio" name="signal" value="stale"><span>Stale</span></label>
-      <label class="fb-pill"><input type="radio" name="signal" value="wrong_source"><span>Wrong source</span></label>
-      <label class="fb-pill"><input type="radio" name="signal" value="missing_source"><span>Missing source</span></label>
-      <label class="fb-pill"><input type="radio" name="signal" value="duplicate_or_conflicting"><span>Duplicate / conflicting</span></label>
-    </fieldset>
-
-    <label class="fb-note">
-      Note <span class="fb-hint">(optional, no PII)</span>
-      <textarea name="comment" rows="2" maxlength="500" placeholder="Anything else worth knowing?"></textarea>
-    </label>
-
-    <button type="submit" class="fb-submit">Send feedback</button>
-  </form>
-</details>
+  <em class="feedback-prompt">Was this useful?</em>
+  <span class="feedback-row" role="group" aria-label="Quick feedback">
+    {% for value, label in [
+      ('useful',                   'yes'),
+      ('not_useful',               'no'),
+      ('stale',                    'stale'),
+      ('wrong_source',             'wrong source'),
+      ('missing_source',           'missing source'),
+      ('duplicate_or_conflicting', 'duplicate'),
+    ] %}
+      <button
+        type="submit"
+        name="signal"
+        value="{{ value }}"
+        class="feedback-link">{{ label }}</button>{% if not loop.last %}<span class="feedback-sep" aria-hidden="true"> · </span>{% endif %}
+    {% endfor %}
+  </span>
+</form>
