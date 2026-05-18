@@ -201,6 +201,10 @@ async def search_partial(
                 "last_reviewed_after": last_reviewed_after,
                 "tags": tags,
             },
+            # #123: surface the actually-applied statuses so the
+            # no-results fragment can offer one-click widen buttons
+            # for statuses not currently selected.
+            "selected_statuses": list(filters.status or []),
         },
     )
 

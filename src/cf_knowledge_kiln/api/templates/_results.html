@@ -108,10 +108,47 @@
     {% endfor %}
   </ol>
 {% elif query %}
-  <p class="empty-results">
-    No results for &ldquo;<span class="empty-query">{{ query }}</span>&rdquo;.
-    <span class="empty-suggestion">Try fewer or different keywords, or widen the status filters above.</span>
-  </p>
+  <div class="empty-results">
+    <p class="empty-results-line">
+      No results for &ldquo;<span class="empty-query">{{ query }}</span>&rdquo;.
+    </p>
+    {# #123 quick-widen actions: each button POSTs a new search
+       with the current query plus widened status filters. HTMX
+       swaps #results so the user sees the new fragment without
+       leaving the page. Only render statuses that aren't already
+       in selected_statuses. #}
+    {% set selected = selected_statuses or [] %}
+    {% set widen_options = [
+        ('drafts',      ['active', 'approved', 'draft']),
+        ('deprecated',  ['active', 'approved', 'deprecated']),
+        ('archived',    ['active', 'approved', 'archived']),
+        ('all',         ['active', 'approved', 'draft', 'deprecated', 'archived', 'superseded']),
+    ] %}
+    <ul class="empty-actions">
+      {% for label, statuses in widen_options %}
+        {# Hide a widen option that wouldn't actually add anything new
+           (the relevant status is already selected). #}
+        {% set adds = statuses | reject('in', selected) | list %}
+        {% if adds %}
+          <li>
+            <form
+              class="widen-form"
+              hx-post="/search"
+              hx-target="#results"
+              hx-swap="innerHTML">
+              <input type="hidden" name="query" value="{{ query }}">
+              <input type="hidden" name="_filters_set" value="1">
+              {% for s in statuses %}
+                <input type="hidden" name="status" value="{{ s }}">
+              {% endfor %}
+              <button type="submit" class="widen-button">include&nbsp;{{ label }}</button>
+            </form>
+          </li>
+        {% endif %}
+      {% endfor %}
+    </ul>
+    <p class="empty-suggestion">Or try fewer / different keywords.</p>
+  </div>
 {% endif %}
 
 </div>
