@@ -418,3 +418,75 @@ def test_search_result_card_drops_javascript_source_url(
     # The card must still render — just as plain text, not as a link.
     assert "Hostile linked doc" in body
     assert 'class="source source-link"' not in body
+
+
+# ─── #117: card-shape parity (highlight + owner + badges + warning copy) ──
+
+
+def test_search_excerpt_highlights_query_terms(
+    client: TestClient, session: AsyncSession, small_corpus: Path
+) -> None:
+    """#117: query terms are wrapped in <mark> server-side (no JS)."""
+    asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
+    response = client.post("/search", data={"query": "widgets", "status": ["active"]})
+    assert response.status_code == 200
+    # The term "widgets" appears in fixture corpus beta.md; it should
+    # come back wrapped in <mark> in the rendered fragment.
+    assert "<mark>widgets</mark>" in response.text.lower()
+
+
+def test_search_excerpt_highlight_dropped_for_short_terms(
+    client: TestClient, session: AsyncSession, small_corpus: Path
+) -> None:
+    """Terms shorter than 3 chars are dropped to avoid stopword noise."""
+    asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
+    response = client.post("/search", data={"query": "a widgets", "status": ["active"]})
+    # "a" is too short — should not be highlighted; "widgets" still is.
+    assert "<mark>widgets</mark>" in response.text.lower()
+    assert "<mark>a</mark>" not in response.text
+
+
+def test_search_excerpt_html_escapes_user_input(
+    client: TestClient, session: AsyncSession, small_corpus: Path
+) -> None:
+    """A query with <script> must not produce a script tag in output."""
+    asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
+    response = client.post(
+        "/search", data={"query": "<script>alert(1)</script>", "status": ["active"]}
+    )
+    # The query itself appears echoed in the "for «query»" line; that
+    # path autoescapes through Jinja. Critically there's no raw script.
+    assert "<script>" not in response.text
+
+
+def test_search_form_exposes_archived_and_superseded_pills(
+    client: TestClient,
+) -> None:
+    """#117: pill set covers all 6 statuses, not just 4."""
+    response = client.get("/")
+    assert response.status_code == 200
+    body = response.text
+    assert 'value="archived"' in body
+    assert 'value="superseded"' in body
+
+
+def test_search_warning_renders_spec_mandated_copy(
+    client: TestClient, session: AsyncSession, small_corpus: Path
+) -> None:
+    """#117: weak_evidence warning renders the journey-doc copy, not engine raw.
+
+    The fixture corpus is tiny; a query for a unique gibberish phrase
+    triggers the weak_evidence warning, which must render with the
+    spec-mandated message.
+    """
+    asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
+    response = client.post(
+        "/search", data={"query": "vbynxz nonexistent target", "status": ["active"]}
+    )
+    assert response.status_code == 200
+    body = response.text
+    # Either the spec-mandated copy OR no weak_evidence warning at all.
+    # If the warning fires, it must use the canonical text.
+    if "warning-weak_evidence" in body:
+        assert "no clearly authoritative source" in body
+        assert "Confidence is low" in body

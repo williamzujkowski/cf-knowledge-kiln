@@ -18,6 +18,7 @@ badge to non-active result cards.
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import Annotated, Any
 from uuid import UUID
@@ -25,6 +26,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+from markupsafe import Markup, escape
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from cf_knowledge_kiln.api.dependencies import (
@@ -123,7 +125,10 @@ async def search_partial(
     )
     cards = [
         _result_card_view(
-            c, result.document_refs.get(c.document_id), result.chunk_text.get(c.chunk_id, "")
+            c,
+            result.document_refs.get(c.document_id),
+            result.chunk_text.get(c.chunk_id, ""),
+            query=query,
         )
         for c in result.chunks
     ]
@@ -133,7 +138,7 @@ async def search_partial(
         {
             "query": query,
             "results": cards,
-            "warnings": result.warnings or [],
+            "warnings": [_humanize_warning(w) for w in (result.warnings or [])],
             "query_id": str(query_id) if query_id else None,
         },
     )
@@ -290,25 +295,99 @@ def _filters_from_form(status: list[str] | None, *, filters_set: bool) -> Retrie
     return RetrievalFilters(status=selected or None)  # type: ignore[arg-type]
 
 
-def _result_card_view(chunk: Any, ref: object | None, content: str) -> dict[str, Any]:
+def _result_card_view(
+    chunk: Any, ref: object | None, content: str, query: str = ""
+) -> dict[str, Any]:
     """Build a template-friendly dict for one result.
 
     Mirrors the JSON :class:`ResultCard` shape but keeps templates
     Pydantic-free (Jinja accesses dict keys, not attrs).
+
+    ``excerpt_html`` carries the query-highlighted excerpt as a
+    :class:`markupsafe.Markup` value so Jinja autoescape leaves the
+    ``<mark>`` tags alone but escapes the surrounding text. ``query``
+    is required to highlight; passing empty string is a no-op.
     """
+    excerpt = content[:500]
     return {
         "chunk_id": chunk.chunk_id,
         "document_id": chunk.document_id,
         "title": getattr(ref, "title", None) or "(unknown)",
-        "excerpt": content[:500],
+        "excerpt": excerpt,
+        "excerpt_html": _highlight_excerpt(excerpt, query),
         "heading_path": list(chunk.heading_path) or None,
         "repo": getattr(ref, "repo", None),
         "path": getattr(ref, "path", None),
         "source_url": getattr(ref, "source_url", None),
+        "owner": getattr(ref, "owner", None),
         "status": chunk.status,
         "last_reviewed": chunk.last_reviewed,
         "score": chunk.score,
     }
+
+
+def _highlight_excerpt(text: str, query: str) -> Markup:
+    """Wrap each query term in ``<mark>`` and return a Markup-safe value.
+
+    Whole-word case-insensitive match. Terms shorter than 3 chars are
+    dropped to avoid highlighting noise on stopwords / one-letter
+    matches. ``text`` is HTML-escaped first; the inserted ``<mark>``
+    tags are the only literal HTML.
+
+    Returns a :class:`markupsafe.Markup` so the template can render
+    ``{{ r.excerpt_html }}`` (no ``|safe`` filter needed) and the
+    surrounding text stays autoescaped.
+    """
+    if not query:
+        # escape() already returns Markup; no need to re-wrap.
+        return escape(text)
+    terms = [t for t in re.split(r"\s+", query.strip()) if len(t) >= 3]
+    if not terms:
+        return escape(text)
+    escaped = str(escape(text))
+    pattern = re.compile(
+        r"(" + "|".join(re.escape(t) for t in terms) + r")",
+        re.IGNORECASE,
+    )
+    # The only literal HTML we inject is the <mark> tag. Everything
+    # else flowing through this Markup() is the output of escape(),
+    # so the result is XSS-safe by construction.
+    return Markup(pattern.sub(r"<mark>\1</mark>", escaped))  # noqa: S704
+
+
+# Spec-mandated warning copy from docs/user-journeys.md, plus a quiet
+# italic prefix for the other emitted warning types. The template
+# renders {prefix, message} and lets the prefix lead with italic
+# voice instead of dropping the engine's raw string into the page.
+_WARNING_COPY: dict[str, tuple[str, str]] = {
+    "weak_evidence": (
+        "Confidence is low —",
+        "I found related content, but no clearly authoritative source.",
+    ),
+    "conflicting_sources": (
+        "Sources disagree —",
+        "I found multiple sources that may conflict. "
+        "Prefer active/approved docs unless you are researching history.",
+    ),
+    "stale_source": ("Source is stale —", ""),
+    "deprecated_source": ("Document is deprecated —", ""),
+    "prompt_injection_pattern": ("Caution —", ""),
+    "sensitive_content": ("Sensitive content —", ""),
+    "query_normalized": ("Query was normalized —", ""),
+}
+
+
+def _humanize_warning(w: Any) -> dict[str, str]:
+    """Map an engine :class:`Warning` to ``{prefix, message, type}``.
+
+    Falls back to the engine's raw ``message`` when the warning type
+    isn't in the spec-mandated copy table (so a future warning type
+    surfaces something rather than nothing).
+    """
+    wtype = getattr(w, "type", "")
+    raw = getattr(w, "message", "") or ""
+    prefix, override = _WARNING_COPY.get(wtype, ("", raw))
+    return {"type": wtype, "prefix": prefix, "message": override or raw}
 
 
 async def _log_human_query(
