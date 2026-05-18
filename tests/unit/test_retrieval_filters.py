@@ -94,3 +94,12 @@ class TestBuildPredicates:
         # Both the chunk-side and doc-side metadata columns participate.
         assert "document_chunks.metadata" in sql
         assert "documents.metadata" in sql
+        # #126: must use the -> accessor (extracts JSONB array) and cast
+        # the RHS to text[] so ?| has a valid operator pairing.
+        assert "->" in sql
+        assert "VARCHAR[]" in sql  # SQLAlchemy renders String[] as VARCHAR[]
+        # Must NOT use the broken subscript+jsonb form (#126 regression).
+        assert "?| %(param" in sql or "?| CAST" in sql
+        # The chunk-side metadata access uses the arrow accessor, not
+        # subscript-and-JSONB-cast.
+        assert "document_chunks.metadata ->" in sql

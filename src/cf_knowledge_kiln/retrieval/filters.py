@@ -16,7 +16,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any, cast
 
-from sqlalchemy import or_
+from sqlalchemy import ARRAY, String, literal, or_
+from sqlalchemy import cast as sa_cast
 from sqlalchemy.sql import ColumnElement
 
 from cf_knowledge_kiln.db.models import Document, DocumentChunk
@@ -80,26 +81,31 @@ def _control_id_predicate(controls: Sequence[str]) -> ColumnElement[bool]:
     typed column for it; matching against the JSONB array is the
     contract we expose to callers.
     """
-    overlap = _jsonb_array_overlap(Document.extra["controls"], controls)
+    overlap = _jsonb_array_overlap(Document.extra, "controls", controls)
     direct = Document.extra["controls"].astext.in_(list(controls))
     return cast(ColumnElement[bool], direct | overlap)
 
 
 def _tags_predicate(tags: Sequence[str]) -> ColumnElement[bool]:
     """Match chunks (or documents) whose JSONB metadata['tags'] overlaps."""
-    chunk_match = _jsonb_array_overlap(DocumentChunk.extra["tags"], tags)
-    doc_match = _jsonb_array_overlap(Document.extra["tags"], tags)
+    chunk_match = _jsonb_array_overlap(DocumentChunk.extra, "tags", tags)
+    doc_match = _jsonb_array_overlap(Document.extra, "tags", tags)
     return cast(ColumnElement[bool], chunk_match | doc_match)
 
 
-def _jsonb_array_overlap(column: Any, values: Sequence[str]) -> ColumnElement[bool]:
-    """``column ?| ARRAY[values]`` — true if any element of values is in the JSONB array.
+def _jsonb_array_overlap(column: Any, key: str, values: Sequence[str]) -> ColumnElement[bool]:
+    """``column->'key' ?| ARRAY[values]::text[]`` — Postgres JSONB "exists any".
 
-    Postgres-specific. The ``?|`` operator is the JSONB "exists any"
-    operator. We render it via :func:`sqlalchemy.sql.operators.custom_op`
-    so SQLAlchemy doesn't try to translate it to standard SQL.
+    The ``?|`` operator's right-hand side must be ``text[]``, not
+    ``jsonb``. Likewise, the left-hand side must be the extracted
+    JSONB *value* (a JSONB array), produced via the ``->`` accessor
+    on the metadata column — not JSONB subscript on the column, which
+    is the syntactically valid but operator-mismatched form that
+    caused #126.
     """
-    return cast(ColumnElement[bool], column.op("?|")(list(values)))
+    extracted = column.op("->")(literal(key))
+    rhs = sa_cast(literal(list(values)), ARRAY(String))
+    return cast(ColumnElement[bool], extracted.op("?|")(rhs))
 
 
 __all__ = ["build_predicates"]
