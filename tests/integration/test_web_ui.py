@@ -777,6 +777,117 @@ def test_preview_endpoint_includes_neighbors_when_present(
     assert "preview-neighbor-next" in body
 
 
+# ─── #120: a11y + telemetry polish ──────────────────────────────────
+
+
+def test_search_page_has_status_region_with_aria_live(client: TestClient) -> None:
+    """The status region carries aria-live; #results does NOT (#120)."""
+    response = client.get("/")
+    body = response.text
+    # Status region exists, has the live attribute + atomic announcement.
+    assert 'id="search-status"' in body
+    assert 'aria-live="polite"' in body
+    assert 'aria-atomic="true"' in body
+    # aria-live was MOVED off #results — only aria-busy remains.
+    results_open = body.split('id="results"', 1)[1].split(">", 1)[0]
+    assert "aria-live" not in results_open
+    assert "aria-busy" in results_open
+
+
+def test_search_page_preloads_fraunces_font(client: TestClient) -> None:
+    """The display font is preloaded so first-paint is not blocked on it."""
+    response = client.get("/")
+    body = response.text
+    assert 'rel="preload"' in body
+    assert 'as="font"' in body
+    assert "fraunces" in body.lower()
+
+
+def test_search_page_htmx_script_is_deferred(client: TestClient) -> None:
+    """HTMX loads with `defer` so it doesn't block parsing."""
+    response = client.get("/")
+    body = response.text
+    # The HTMX script tag includes defer.
+    htmx_tag = [
+        line for line in body.splitlines() if "unpkg.com/htmx.org" in line and "<script" in line
+    ]
+    assert htmx_tag, "HTMX script tag not found in base.html"
+    assert "defer" in htmx_tag[0]
+
+
+def test_search_post_with_keyup_source_header_skips_telemetry(
+    client: TestClient, session: AsyncSession, small_corpus: Path, engine: AsyncEngine
+) -> None:
+    """X-Kiln-Source: keyup-debounce → no rag_queries row written."""
+    asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
+    response = client.post(
+        "/search",
+        data={"query": "widgets", "status": ["active"]},
+        headers={"X-Kiln-Source": "keyup-debounce"},
+    )
+    assert response.status_code == 200
+    # Results still render — the skip is telemetry-only.
+    assert "result-card" in response.text
+
+    async def _rows() -> list[RagQuery]:
+        maker = async_sessionmaker(engine, expire_on_commit=False)
+        async with maker() as s:
+            return list((await s.execute(select(RagQuery))).scalars().all())
+
+    rows = asyncio.get_event_loop().run_until_complete(_rows())
+    assert rows == [], "expected zero rag_queries rows for keyup-debounced searches"
+
+
+def test_search_post_without_source_header_persists_telemetry(
+    client: TestClient, session: AsyncSession, small_corpus: Path, engine: AsyncEngine
+) -> None:
+    """Counterpart: explicit submit (no header) still writes a rag_queries row."""
+    asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
+    response = client.post("/search", data={"query": "widgets", "status": ["active"]})
+    assert response.status_code == 200
+
+    async def _rows() -> list[RagQuery]:
+        maker = async_sessionmaker(engine, expire_on_commit=False)
+        async with maker() as s:
+            return list((await s.execute(select(RagQuery))).scalars().all())
+
+    rows = asyncio.get_event_loop().run_until_complete(_rows())
+    assert len(rows) == 1
+    assert rows[0].query == "widgets"
+
+
+def test_search_post_with_unknown_source_header_persists_telemetry(
+    client: TestClient, session: AsyncSession, small_corpus: Path, engine: AsyncEngine
+) -> None:
+    """Defense in depth: an unknown X-Kiln-Source value does NOT skip telemetry.
+
+    Only the exact ``keyup-debounce`` literal opts out, so a misbehaving
+    client can't quietly suppress operator metrics by sending arbitrary
+    header values.
+    """
+    asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
+    response = client.post(
+        "/search",
+        data={"query": "widgets", "status": ["active"]},
+        headers={"X-Kiln-Source": "something-else"},
+    )
+    assert response.status_code == 200
+
+    async def _rows() -> list[RagQuery]:
+        maker = async_sessionmaker(engine, expire_on_commit=False)
+        async with maker() as s:
+            return list((await s.execute(select(RagQuery))).scalars().all())
+
+    rows = asyncio.get_event_loop().run_until_complete(_rows())
+    assert len(rows) == 1
+
+
+def test_search_page_renders_backdrop_for_mobile_drawer(client: TestClient) -> None:
+    """The mobile-drawer backdrop element is in the DOM (CSS gates visibility)."""
+    response = client.get("/")
+    assert 'id="preview-backdrop"' in response.text
+
+
 async def _neighbors(session: AsyncSession, chunk_id: str) -> tuple[int, int, int]:
     """Helper: returns (prev_count, target_present, next_count)."""
     import uuid as _uuid
