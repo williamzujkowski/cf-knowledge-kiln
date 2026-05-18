@@ -1,0 +1,80 @@
+---
+# Dependabot version updates.
+#
+# Vulnerability alerts run regardless of this file — this config drives
+# the weekly *version-bump* PR cadence so dependencies don't drift.
+# Public repo gives us this for free; for CF-deployed apps that means
+# a fresh buildpack-compatible set of pins every week without the
+# operator having to remember.
+#
+# We bound the surface to two ecosystems:
+#
+# 1. ``pip`` — the Python deps in pyproject.toml. Weekly cadence.
+# 2. ``github-actions`` — pin updates for the workflows under
+#    .github/workflows/.
+#
+# No npm / docker / etc. — we don't ship those layers.
+
+version: 2
+
+updates:
+  # ─── Python (pip) ───────────────────────────────────────────────
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 5
+    # Group related PRs so a routine refresh isn't 20 noisy commits.
+    groups:
+      # Type-check + lint + format tooling moves together.
+      dev-tools:
+        patterns:
+          - "ruff*"
+          - "mypy*"
+          - "pytest*"
+          - "pytest-*"
+          - "pre-commit*"
+      # SQLAlchemy + asyncpg + alembic share migration semantics.
+      db-stack:
+        patterns:
+          - "sqlalchemy"
+          - "asyncpg"
+          - "alembic"
+          - "pgvector"
+      # FastAPI + Starlette + Pydantic move in lockstep on majors.
+      web-stack:
+        patterns:
+          - "fastapi"
+          - "starlette"
+          - "pydantic*"
+          - "uvicorn*"
+      # HTTP + retry libs.
+      http-stack:
+        patterns:
+          - "httpx"
+          - "tenacity"
+    commit-message:
+      prefix: "deps(pip)"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "python"
+
+  # ─── GitHub Actions ─────────────────────────────────────────────
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "deps(actions)"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "github-actions"
