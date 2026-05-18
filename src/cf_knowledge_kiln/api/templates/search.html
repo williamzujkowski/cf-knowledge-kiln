@@ -132,8 +132,21 @@
     </details>
   </form>
 
+  {# #120: aria-live lives on the sibling #search-status, NOT on the
+     swapped #results region. Otherwise a screen reader re-announces
+     the entire results list on every 300ms debounced keystroke. The
+     status region only ever holds a one-line summary ("Searching…",
+     "12 results", "No results"). aria-atomic ensures the full text
+     is re-read on every update. #}
+  <div
+    id="search-status"
+    class="search-status"
+    role="status"
+    aria-live="polite"
+    aria-atomic="true"></div>
+
   <div class="search-grid">
-    <section id="results" class="results" aria-live="polite" aria-busy="false">
+    <section id="results" class="results" aria-busy="false">
       {% if initial_results is not none %}
         {% include "_results.html" %}
       {% else %}
@@ -148,10 +161,14 @@
       id="preview"
       class="preview-panel"
       aria-label="Document preview"
-      aria-live="polite"
       tabindex="-1">
       <p class="preview-empty"><em>Open a result to preview the chunk and its neighbors here.</em></p>
     </aside>
   </div>
+
+  {# Mobile-drawer backdrop (#120). CSS uses `:has(#preview[data-open])`
+     on the parent to fade in. Clicking it clears the drawer; on
+     desktop ≥960px the backdrop never renders. #}
+  <div id="preview-backdrop" aria-hidden="true"></div>
 </section>
 {% endblock %}

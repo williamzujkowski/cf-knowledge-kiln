@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, Header, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from markupsafe import Markup, escape
@@ -100,6 +100,12 @@ async def search_partial(
     owner: Annotated[str, Form()] = "",
     last_reviewed_after: Annotated[str, Form()] = "",
     tags: Annotated[str, Form()] = "",
+    # #120: HTMX attaches X-Kiln-Source: keyup-debounce when the
+    # search fires from a debounced keystroke. We skip the
+    # rag_queries telemetry write for those so a 10-character query
+    # doesn't produce 10 stored rows. Explicit submits (button click
+    # + Enter) arrive without the header and persist normally.
+    kiln_source: Annotated[str | None, Header(alias="X-Kiln-Source")] = None,
 ) -> HTMLResponse:
     """HTMX target — return the results-list fragment.
 
@@ -156,9 +162,18 @@ async def search_partial(
             {"message": "Search is temporarily unavailable. Please try again."},
             status_code=503,
         )
-    query_id = await _log_human_query(
-        session, query=query, filters=filters, chunk_ids=[c.chunk_id for c in result.chunks]
-    )
+    if kiln_source == "keyup-debounce":
+        # Skip telemetry for incremental keystrokes — only persist
+        # explicit submissions. The feedback widget needs a query_id
+        # to bind to, so it won't render on these debounced fragments,
+        # which is acceptable: a user clicking thumbs-up has stopped
+        # typing and will see a fresh fragment with telemetry on the
+        # next submit.
+        query_id: object | None = None
+    else:
+        query_id = await _log_human_query(
+            session, query=query, filters=filters, chunk_ids=[c.chunk_id for c in result.chunks]
+        )
     cards = [
         _result_card_view(
             c,

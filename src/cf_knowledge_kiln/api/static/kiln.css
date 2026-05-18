@@ -1181,6 +1181,28 @@ a.source-link:focus-visible {
   color: var(--rule-strong);
 }
 
+/* ─── #120 Status region ───────────────────────────────────────── */
+
+/* Sibling status region for screen-reader announcements. Visually
+   subtle; the text mirrors what the user sees in #results but is
+   the only thing AT reads on each search. visually-hidden by default
+   when empty, but rendered as a quiet eyebrow when populated so
+   sighted users get the same feedback. */
+.search-status {
+  min-block-size: 1.2rem;
+  margin-block: 0.4rem 0.6rem;
+  font-family: var(--serif);
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  font-style: italic;
+  font-variation-settings: "opsz" 14;
+}
+.search-status:empty {
+  /* Collapse silently when there's nothing to say. */
+  margin-block: 0;
+  min-block-size: 0;
+}
+
 /* ─── #119 Preview panel ───────────────────────────────────────── */
 
 /* The .search-grid wraps the results list + the preview panel. Above
@@ -1373,6 +1395,21 @@ a.source-link:focus-visible {
   }
 }
 
+/* Backdrop: hidden by default; on mobile, becomes visible+clickable
+   whenever the drawer is open. Uses :has() so the markup stays decl-
+   arative (no JS toggling a class). Browsers without :has() (older
+   Safari) keep the legacy behavior of "no backdrop" — Esc + the
+   close button still work. */
+#preview-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 18, 14, 0.4);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 25;
+  transition: opacity 200ms ease;
+}
+
 /* Mobile / tablet: preview is a slide-in drawer pinned to the right.
    Stays out of the way until data-open is set by the click handler,
    then translates into view with a backdrop hint. */
@@ -1392,11 +1429,26 @@ a.source-link:focus-visible {
   .preview-panel[data-open] {
     transform: translateX(0);
   }
+  /* Backdrop fades in when the sibling drawer is data-open. */
+  .search-with-preview:has(#preview[data-open]) #preview-backdrop {
+    opacity: 1;
+    pointer-events: auto;
+  }
   /* Hide the empty placeholder on small screens — there's no rail
      to fill, and the drawer should only appear when opened. */
   .preview-panel .preview-empty {
     display: none;
   }
+  /* Focus ring on the panel itself when keyboard-focused after open. */
+  .preview-panel:focus-visible {
+    outline: 2px solid var(--teal);
+    outline-offset: -2px;
+  }
+}
+
+/* Desktop: backdrop never shows. */
+@media (min-width: 960px) {
+  #preview-backdrop { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
