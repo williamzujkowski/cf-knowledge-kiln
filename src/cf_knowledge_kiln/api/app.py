@@ -29,6 +29,7 @@ from fastapi.staticfiles import StaticFiles
 from cf_knowledge_kiln import __version__
 from cf_knowledge_kiln.api.auth import configure_auth
 from cf_knowledge_kiln.api.health import router as health_router
+from cf_knowledge_kiln.api.preview import router as preview_router
 from cf_knowledge_kiln.api.rate_limit import TokenBucketLimiter
 from cf_knowledge_kiln.api.retrieval import router as retrieval_router
 from cf_knowledge_kiln.api.web import router as web_router
@@ -96,6 +97,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(retrieval_router)
     app.include_router(web_router)
+    app.include_router(preview_router)
     app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
     return app
 
