@@ -3,7 +3,7 @@
 {% block title %}Search · cf-knowledge-kiln{% endblock %}
 
 {% block content %}
-<section class="search">
+<section class="search search-with-preview">
   <form
     class="search-form"
     hx-post="/search"
@@ -132,12 +132,26 @@
     </details>
   </form>
 
-  <section id="results" class="results" aria-live="polite" aria-busy="false">
-    {% if initial_results is not none %}
-      {% include "_results.html" %}
-    {% else %}
-      <p class="empty-hint">Type a query above to search.</p>
-    {% endif %}
-  </section>
+  <div class="search-grid">
+    <section id="results" class="results" aria-live="polite" aria-busy="false">
+      {% if initial_results is not none %}
+        {% include "_results.html" %}
+      {% else %}
+        <p class="empty-hint">Type a query above to search.</p>
+      {% endif %}
+    </section>
+
+    {# Preview panel — empty by default. Result-card titles
+       hx-get="/preview/<chunk_id>" into here. data-open is added by
+       the click handler to drive the mobile drawer animation. #}
+    <aside
+      id="preview"
+      class="preview-panel"
+      aria-label="Document preview"
+      aria-live="polite"
+      tabindex="-1">
+      <p class="preview-empty"><em>Open a result to preview the chunk and its neighbors here.</em></p>
+    </aside>
+  </div>
 </section>
 {% endblock %}

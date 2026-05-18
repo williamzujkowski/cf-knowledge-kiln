@@ -37,7 +37,12 @@ from cf_knowledge_kiln.api.dependencies import (
     get_trust_xff,
 )
 from cf_knowledge_kiln.api.rate_limit import TokenBucketLimiter, client_ip
-from cf_knowledge_kiln.db.repositories import FeedbackRepository, QueriesRepository
+from cf_knowledge_kiln.db.repositories import (
+    ChunksRepository,
+    DocumentsRepository,
+    FeedbackRepository,
+    QueriesRepository,
+)
 from cf_knowledge_kiln.retrieval import HybridRetriever, RetrievalFilters, Status
 
 logger = logging.getLogger(__name__)
@@ -181,6 +186,73 @@ async def search_partial(
                 "last_reviewed_after": last_reviewed_after,
                 "tags": tags,
             },
+        },
+    )
+
+
+# ─── /preview/{chunk_id} ────────────────────────────────────────────
+
+
+_PREVIEW_NEIGHBOR_CHARS: int = 500
+"""Hard char cap on each neighbor preview body — keeps the side panel
+short enough to read at a glance, per #119 acceptance criteria."""
+
+
+@router.get("/preview/{chunk_id}", response_class=HTMLResponse)
+async def preview_chunk(
+    request: Request,
+    chunk_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> HTMLResponse:
+    """HTMX target — render a chunk + its neighbors in the preview panel.
+
+    Returns the ``_preview.html`` fragment ready to be swapped into
+    ``#preview`` by HTMX. Unknown / malformed chunk ids render a small
+    italic message rather than a JSON 404 so the swap stays inline.
+    The neighbor bodies are trimmed to :data:`_PREVIEW_NEIGHBOR_CHARS`
+    characters; the target chunk renders in full.
+    """
+    cid = _parse_uuid(chunk_id)
+    if cid is None:
+        return templates.TemplateResponse(
+            request, "_preview.html", {"missing": True}, status_code=404
+        )
+    prev, target, nxt = await ChunksRepository(session).neighbors(cid, n=1)
+    if target is None:
+        return templates.TemplateResponse(
+            request, "_preview.html", {"missing": True}, status_code=404
+        )
+    doc = await DocumentsRepository(session).get(target.document_id)
+    return templates.TemplateResponse(
+        request,
+        "_preview.html",
+        {
+            "missing": False,
+            "doc": doc,
+            "target": {
+                "chunk_id": target.id,
+                "chunk_index": target.chunk_index,
+                "heading_path": list(target.heading_path or []),
+                "content": target.content,
+            },
+            "prev": [
+                {
+                    "chunk_id": c.id,
+                    "chunk_index": c.chunk_index,
+                    "content": c.content[:_PREVIEW_NEIGHBOR_CHARS],
+                    "truncated": len(c.content) > _PREVIEW_NEIGHBOR_CHARS,
+                }
+                for c in prev
+            ],
+            "next": [
+                {
+                    "chunk_id": c.id,
+                    "chunk_index": c.chunk_index,
+                    "content": c.content[:_PREVIEW_NEIGHBOR_CHARS],
+                    "truncated": len(c.content) > _PREVIEW_NEIGHBOR_CHARS,
+                }
+                for c in nxt
+            ],
         },
     )
 

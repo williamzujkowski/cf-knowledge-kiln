@@ -141,6 +141,41 @@ class ChunksRepository(BaseRepository):
     async def delete(self, id: UUID) -> None:
         await self._session.execute(delete(DocumentChunk).where(DocumentChunk.id == id))
 
+    async def neighbors(
+        self, chunk_id: UUID, *, n: int = 1
+    ) -> tuple[Sequence[DocumentChunk], DocumentChunk | None, Sequence[DocumentChunk]]:
+        """Return ``(prev, target, next)`` chunks for the document-preview panel.
+
+        ``prev`` and ``next`` are ordered ascending by ``chunk_index`` and
+        may contain fewer than ``n`` entries near document boundaries.
+        Returns ``([], None, [])`` when the target chunk does not exist.
+        """
+        target = await self._session.get(DocumentChunk, chunk_id)
+        if target is None:
+            return ([], None, [])
+        prev_stmt = (
+            select(DocumentChunk)
+            .where(
+                DocumentChunk.document_id == target.document_id,
+                DocumentChunk.chunk_index < target.chunk_index,
+            )
+            .order_by(DocumentChunk.chunk_index.desc())
+            .limit(n)
+        )
+        next_stmt = (
+            select(DocumentChunk)
+            .where(
+                DocumentChunk.document_id == target.document_id,
+                DocumentChunk.chunk_index > target.chunk_index,
+            )
+            .order_by(DocumentChunk.chunk_index.asc())
+            .limit(n)
+        )
+        prev_rows = [*((await self._session.execute(prev_stmt)).scalars().all())]
+        prev_rows.reverse()
+        next_rows = [*((await self._session.execute(next_stmt)).scalars().all())]
+        return (prev_rows, target, next_rows)
+
     async def hybrid_search(
         self,
         *,

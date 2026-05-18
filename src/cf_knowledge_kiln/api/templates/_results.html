@@ -27,7 +27,20 @@
         <span class="result-index" aria-hidden="true">{{ '%02d' % loop.index }}</span>
         <div class="result-body">
           <header class="result-header">
-            <h3 class="result-title">{{ r.title }}</h3>
+            {# Title is a button so click + Enter both load the preview;
+               HTMX swaps the response into #preview. The onclick adds
+               data-open so the mobile drawer slides in. #}
+            <h3 class="result-title">
+              <button
+                type="button"
+                class="result-title-button"
+                hx-get="/preview/{{ r.chunk_id }}"
+                hx-target="#preview"
+                hx-swap="innerHTML"
+                onclick="document.getElementById('preview').setAttribute('data-open', 'true')">
+                {{ r.title }}
+              </button>
+            </h3>
             <span class="status-badge status-{{ r.status }}">{{ r.status }}</span>
           </header>
           {% if r.heading_path %}
