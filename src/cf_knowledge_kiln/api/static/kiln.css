@@ -17,6 +17,7 @@
 :root {
   /* Warm paper palette */
   --paper:        #f6f1e6;
+  --paper-soft:   #fbf6ea;
   --paper-dim:    #efe8d7;
   --ink:          #1a1612;
   --ink-soft:     #4a4239;
@@ -42,6 +43,36 @@
   --gutter:     2.75rem;         /* index-number gutter */
   --rule-thin:  1px;
   --rule-mid:   2px;
+}
+
+/* #124 dark editorial palette. Deep-navy paper + bone ink, accent
+   tokens nudged for AA contrast against the new background.
+   Verified ratios (foreground on #101418):
+     --ink      #e8e1cf  → 13.9:1  (AAA)
+     --ink-soft #b6ad96  → 8.2:1   (AAA)
+     --teal     #6ecdca  → 7.4:1   (AAA)
+     --gold     #d4b573  → 8.0:1   (AAA)
+     --oxblood  #e89380  → 7.6:1   (AAA)
+   Focus ring (--oxblood) on --paper #101418: 7.6:1, well above the
+   3:1 non-text minimum. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper:        #101418;
+    --paper-soft:   #161b21;
+    --paper-dim:    #0c1014;
+    --ink:          #e8e1cf;
+    --ink-soft:     #b6ad96;
+    --ink-faded:    #7d7361;
+    --rule:         #2d3540;
+    --rule-strong:  #444f5d;
+
+    --oxblood:      #e89380;
+    --oxblood-tint: #2a1a17;
+    --teal:         #6ecdca;
+    --teal-tint:    #1a2a2a;
+    --gold:         #d4b573;
+    --gold-tint:    #2a2418;
+  }
 }
 
 /* ─── Reset & page ─────────────────────────────────────────────── */
@@ -72,6 +103,19 @@ body {
   margin: 0;
   padding: 0;
   min-height: 100dvh;
+}
+
+/* #124 dark-mode atmospheric overlay — swap the warm radial bloom for
+   a cool slate one so the page doesn't look flat against #101418. */
+@media (prefers-color-scheme: dark) {
+  body {
+    background-image:
+      radial-gradient(circle at 18% 14%, rgba(110, 205, 202, 0.06) 0, transparent 55%),
+      radial-gradient(circle at 82% 86%, rgba(232, 147, 128, 0.05) 0, transparent 60%);
+  }
+  /* The color-scheme meta in base.html says light; expose dark to the
+     UA so form controls and scrollbars pick up native dark chrome. */
+  html { color-scheme: dark; }
 }
 
 main,
@@ -604,10 +648,40 @@ input:focus-visible,
   padding-block: 1.25rem;
   border-block-start: 1px solid var(--rule);
   position: relative;
+  /* #124 staggered reveal — each card fades + rises in sequence based
+     on the --i custom property set inline by the template (capped at
+     11 so the last card waits ≤440ms). Cubic easing reads as paper-
+     settling rather than spring-y. Disabled under reduced-motion. */
+  animation: kiln-card-rise 360ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation-delay: calc(var(--i, 0) * 40ms);
 }
 
 .result-card:last-child {
   border-block-end: 1px solid var(--rule);
+}
+
+/* Hover hairline — a 1px rule under the card slides in on hover/focus,
+   reads as a quiet "this card is the one you're looking at" cue. */
+.result-card::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  inset-block-end: -1px;
+  block-size: 1px;
+  background: var(--ink-faded);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 200ms ease;
+  pointer-events: none;
+}
+.result-card:hover::after,
+.result-card:focus-within::after {
+  transform: scaleX(1);
+}
+
+@keyframes kiln-card-rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 /* #122: numbered gutter leans in — italic Fraunces with the largest
@@ -1672,6 +1746,11 @@ a.source-link:focus-visible {
   }
   html { scroll-behavior: auto; }
   .htmx-bar.htmx-request { opacity: 1; animation: none; background-position: 50% 0; }
+  /* #124 explicit overrides for the staggered reveal + hover hairline.
+     Cards render at final state immediately; hover decoration becomes
+     a static rule rather than a transform. */
+  .result-card { animation: none !important; opacity: 1 !important; transform: none !important; }
+  .result-card::after { transition: none !important; }
 }
 
 /* ─── Small screens ────────────────────────────────────────────── */

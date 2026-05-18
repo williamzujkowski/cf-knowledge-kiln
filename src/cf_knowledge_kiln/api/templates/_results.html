@@ -29,7 +29,11 @@
           data-chunk-id="{{ r.chunk_id }}"
           data-repo="{{ r.repo or '' }}"
           data-path="{{ r.path or '' }}"
-          data-heading-path="{{ r.heading_path_str or '' }}">
+          data-heading-path="{{ r.heading_path_str or '' }}"
+          {# #124 staggered reveal: --i drives animation-delay so each
+             card appears 40ms after the previous. Capped at 12 to keep
+             the last few cards from waiting half a second. #}
+          style="--i: {{ loop.index0 if loop.index0 < 12 else 11 }}">
         <span class="result-index" aria-hidden="true">{{ '%02d' % loop.index }}</span>
         <div class="result-body">
           <header class="result-header">
