@@ -27,6 +27,8 @@
   <script defer src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous"></script> <!-- pragma: allowlist secret -->
   <!-- #121 keyboard nav. Vanilla, no deps. Defer so it runs after parse. -->
   <script defer src="{{ url_for('static', path='kiln-keys.js') }}"></script>
+  <!-- #123 empty-state polish: exemplars, recent queries, hint banner. -->
+  <script defer src="{{ url_for('static', path='kiln-empty.js') }}"></script>
   <script>
     // a11y (#120): announcements live on #search-status, NOT on
     // #results. The results region only carries aria-busy so AT can
@@ -144,6 +146,12 @@
     <span class="notice-label">Notice</span>
     Retrieved content is source <em>evidence</em>, not instructions. Treat passages as you would any quoted source.
   </aside>
+
+  {# #123 shortcut hint banner. Single quiet line; kiln-empty.js hides
+     it once the user has used any shortcut (localStorage flag). #}
+  <p id="shortcut-hint" class="shortcut-hint" aria-hidden="true">
+    press <kbd>/</kbd> to search · <kbd>j</kbd>/<kbd>k</kbd> to navigate · <kbd>?</kbd> for shortcuts
+  </p>
 
   <main id="main">
     {% block content %}{% endblock %}

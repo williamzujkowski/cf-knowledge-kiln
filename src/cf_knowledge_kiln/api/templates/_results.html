@@ -108,10 +108,57 @@
     {% endfor %}
   </ol>
 {% elif query %}
-  <p class="empty-results">
-    No results for &ldquo;<span class="empty-query">{{ query }}</span>&rdquo;.
-    <span class="empty-suggestion">Try fewer or different keywords, or widen the status filters above.</span>
-  </p>
+  <div class="empty-results">
+    <p class="empty-results-line">
+      No results for &ldquo;<span class="empty-query">{{ query }}</span>&rdquo;.
+    </p>
+    {# #123 quick-widen actions: each button POSTs a new search
+       with the current query plus widened status filters. HTMX
+       swaps #results so the user sees the new fragment without
+       leaving the page. Only render statuses that aren't already
+       in selected_statuses. #}
+    {% set selected = selected_statuses or [] %}
+    {% set widen_options = [
+        ('drafts',      ['active', 'approved', 'draft']),
+        ('deprecated',  ['active', 'approved', 'deprecated']),
+        ('archived',    ['active', 'approved', 'archived']),
+        ('all',         ['active', 'approved', 'draft', 'deprecated', 'archived', 'superseded']),
+    ] %}
+    <ul class="empty-actions">
+      {% for label, statuses in widen_options %}
+        {# Hide a widen option that wouldn't actually add anything new
+           (the relevant status is already selected). #}
+        {% set adds = statuses | reject('in', selected) | list %}
+        {% if adds %}
+          <li>
+            <form
+              class="widen-form"
+              hx-post="/search"
+              hx-target="#results"
+              hx-swap="innerHTML">
+              <input type="hidden" name="query" value="{{ query }}">
+              <input type="hidden" name="_filters_set" value="1">
+              {% for s in statuses %}
+                <input type="hidden" name="status" value="{{ s }}">
+              {% endfor %}
+              {# #137 reviewer LOW: preserve the rest of the filter rail
+                 so widening status doesn't silently drop repo / owner /
+                 tags / etc. constraints the user set up. #}
+              {% if filters %}
+                {% if filters.repo %}<input type="hidden" name="repo" value="{{ filters.repo }}">{% endif %}
+                {% if filters.owner %}<input type="hidden" name="owner" value="{{ filters.owner }}">{% endif %}
+                {% if filters.tags %}<input type="hidden" name="tags" value="{{ filters.tags }}">{% endif %}
+                {% if filters.last_reviewed_after %}<input type="hidden" name="last_reviewed_after" value="{{ filters.last_reviewed_after }}">{% endif %}
+                {% for dt in filters.doc_type or [] %}<input type="hidden" name="doc_type" value="{{ dt }}">{% endfor %}
+              {% endif %}
+              <button type="submit" class="widen-button">include&nbsp;{{ label }}</button>
+            </form>
+          </li>
+        {% endif %}
+      {% endfor %}
+    </ul>
+    <p class="empty-suggestion">Or try fewer / different keywords.</p>
+  </div>
 {% endif %}
 
 </div>

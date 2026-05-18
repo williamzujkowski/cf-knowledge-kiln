@@ -23,9 +23,16 @@
         autocomplete="off"
         autofocus
         spellcheck="false"
+        list="recent-queries"
         value="{{ query or '' }}">
       <button type="submit" class="query-submit">Search</button>
     </div>
+
+    {# #123 recent-queries datalist. kiln-empty.js populates the
+       <option> children from localStorage on load + after each
+       submit. Browsers render the datalist natively when the input
+       is focused, so no custom dropdown chrome to maintain. #}
+    <datalist id="recent-queries"></datalist>
 
     <fieldset class="filters" aria-label="Status filters">
       <legend class="filters-legend">Status</legend>
@@ -150,7 +157,18 @@
       {% if initial_results is not none %}
         {% include "_results.html" %}
       {% else %}
-        <p class="empty-hint">Type a query above to search.</p>
+        {# #123 empty state — italic invitation + exemplar prompts.
+           Each exemplar is a button that JS handles: sets the input
+           value and triggers the existing HTMX search form. #}
+        <div class="empty-state">
+          <p class="empty-invite"><em>What are you trying to remember?</em></p>
+          <ul class="empty-exemplars" aria-label="Example queries">
+            <li><button type="button" class="empty-exemplar" data-exemplar-query="postgres connection pool">postgres connection pool</button></li>
+            <li><button type="button" class="empty-exemplar" data-exemplar-query="how do we rotate api keys">how do we rotate api keys</button></li>
+            <li><button type="button" class="empty-exemplar" data-exemplar-query="incident runbook for stuck deploy">incident runbook for stuck deploy</button></li>
+            <li><button type="button" class="empty-exemplar" data-exemplar-query="adr for hybrid retrieval">adr for hybrid retrieval</button></li>
+          </ul>
+        </div>
       {% endif %}
     </section>
 

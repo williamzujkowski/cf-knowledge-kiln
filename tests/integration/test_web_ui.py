@@ -107,8 +107,8 @@ def test_search_page_renders_form(client: TestClient) -> None:
     assert 'hx-post="/search"' in body
     assert 'hx-target="#results"' in body
     assert 'name="query"' in body
-    # No HTML-escaping bugs on the empty-state hint.
-    assert "Type a query above to search." in body
+    # #123 empty state — italic invitation in place of the old hint.
+    assert "What are you trying to remember?" in body
 
 
 def test_static_css_is_served(client: TestClient) -> None:
@@ -1084,6 +1084,130 @@ def test_result_card_has_data_chunk_id_for_status_badge(
     body = response.text
     assert "status-badge" in body
     assert "status-active" in body
+
+
+# ─── #123: empty + edge states ──────────────────────────────────────
+
+
+def test_empty_state_renders_invitation_and_exemplars(client: TestClient) -> None:
+    """Initial page load shows the italic invitation + 4 exemplar buttons."""
+    body = client.get("/").text
+    assert "empty-state" in body
+    assert "What are you trying to remember?" in body
+    # Four exemplar buttons present, each with the data attribute the JS reads.
+    assert body.count('class="empty-exemplar"') == 4
+    assert body.count("data-exemplar-query=") == 4
+    # Sample one specific exemplar to lock the markup contract.
+    assert "postgres connection pool" in body
+
+
+def test_search_page_includes_recent_queries_datalist(client: TestClient) -> None:
+    """The input wires `list="recent-queries"` to a sibling datalist."""
+    body = client.get("/").text
+    assert 'list="recent-queries"' in body
+    assert '<datalist id="recent-queries">' in body
+
+
+def test_search_page_renders_shortcut_hint_banner(client: TestClient) -> None:
+    """The hint banner is in the DOM; JS reads localStorage to dismiss."""
+    body = client.get("/").text
+    assert 'id="shortcut-hint"' in body
+    assert "press" in body
+    assert "<kbd>/</kbd>" in body
+    assert "<kbd>?</kbd>" in body
+
+
+def test_empty_state_loads_kiln_empty_script(client: TestClient) -> None:
+    """kiln-empty.js is referenced and deferred."""
+    body = client.get("/").text
+    assert "kiln-empty.js" in body
+    script_line = [line for line in body.splitlines() if "kiln-empty.js" in line]
+    assert script_line and "defer" in script_line[0]
+
+
+def test_static_keys_empty_js_is_served(client: TestClient) -> None:
+    """The kiln-empty.js asset is reachable through the StaticFiles mount."""
+    response = client.get("/static/kiln-empty.js")
+    assert response.status_code == 200
+    assert "javascript" in response.headers["content-type"]
+    body = response.text
+    for marker in ("pushRecent", "renderRecent", "onExemplarClick", "hideHint"):
+        assert marker in body, f"missing {marker} in kiln-empty.js"
+
+
+def test_no_results_renders_widen_filter_buttons(
+    client: TestClient, session: AsyncSession, small_corpus: Path
+) -> None:
+    """A no-results POST surfaces one-click widen-filter buttons.
+
+    Each button is a real form that POSTs /search with widened
+    statuses and hx-swap=innerHTML target #results — one click does
+    the thing per the #123 spec.
+    """
+    asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
+    response = client.post(
+        "/search", data={"query": "completelynonexistentterm", "status": ["active"]}
+    )
+    body = response.text
+    assert "empty-results" in body
+    assert "empty-actions" in body
+    assert "widen-button" in body
+    # The "include drafts" widen path is exposed because draft wasn't
+    # in the selected statuses.
+    assert "include&nbsp;drafts" in body or "include drafts" in body
+    # Each widen form posts back via HTMX.
+    assert 'hx-post="/search"' in body
+    assert 'hx-target="#results"' in body
+
+
+def test_no_results_widen_button_actually_widens(
+    client: TestClient, session: AsyncSession, small_corpus: Path
+) -> None:
+    """Following the widen-drafts form actually re-runs search with broader status.
+
+    Fixture has 'widgets' in beta.md (active). Searching with status=draft
+    only returns no results. The widen form should POST with active+approved+draft
+    and surface the match.
+    """
+    asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
+    # Pretend the user clicked the widen-drafts button — POST what the form would send.
+    response = client.post(
+        "/search",
+        data={
+            "query": "widgets",
+            "_filters_set": "1",
+            "status": ["active", "approved", "draft"],
+        },
+    )
+    body = response.text
+    assert "result-card" in body
+    assert "Beta" in body
+
+
+def test_widen_button_hidden_when_status_already_selected(
+    client: TestClient, session: AsyncSession, small_corpus: Path
+) -> None:
+    """A widen option that wouldn't add anything new isn't rendered.
+
+    If the user already has draft in their status filter, the
+    "include drafts" button should not appear.
+    """
+    asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
+    response = client.post(
+        "/search",
+        data={
+            "query": "completelynonexistentterm",
+            "_filters_set": "1",
+            "status": ["active", "approved", "draft"],
+        },
+    )
+    body = response.text
+    assert "empty-results" in body
+    # "include drafts" is suppressed because draft is already selected.
+    assert "include&nbsp;drafts" not in body
+    assert "include drafts" not in body
+    # "include deprecated" still appears because deprecated isn't selected.
+    assert "include&nbsp;deprecated" in body or "include deprecated" in body
 
 
 async def _neighbors(session: AsyncSession, chunk_id: str) -> tuple[int, int, int]:
