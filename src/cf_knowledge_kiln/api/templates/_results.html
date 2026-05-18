@@ -5,7 +5,11 @@
 <div class="results-fade">
 
 {% if warnings %}
-  <ul class="warnings" role="status">
+  {# role="status" is invalid on <ul> per axe-allowed-role; setting it
+     also strips list semantics so the children <li> failed listitem
+     validation. The live-region announcement happens on the sibling
+     #search-status (#120), so this list is back to plain HTML. #}
+  <ul class="warnings">
     {% for w in warnings %}
       <li class="warning warning-{{ w.type }}">
         {% if w.prefix %}<em class="warning-prefix">{{ w.prefix }}</em> {% endif %}
@@ -40,7 +44,10 @@
             {# Title is a button so click + Enter both load the preview;
                HTMX swaps the response into #preview. The onclick adds
                data-open so the mobile drawer slides in. #}
-            <h3 class="result-title">
+            {# Brand is h1; result-title is h2 so the heading order
+               doesn't skip (axe heading-order rule). The visual
+               treatment is driven by .result-title CSS, not the tag. #}
+            <h2 class="result-title">
               <button
                 type="button"
                 class="result-title-button"
@@ -50,7 +57,7 @@
                 onclick="document.getElementById('preview').setAttribute('data-open', 'true')">
                 {{ r.title }}
               </button>
-            </h3>
+            </h2>
             <span class="status-badge status-{{ r.status }}">{{ r.status }}</span>
           </header>
           {% if r.heading_path %}

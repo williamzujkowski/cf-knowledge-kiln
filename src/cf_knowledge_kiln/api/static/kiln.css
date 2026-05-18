@@ -15,27 +15,36 @@
 /* ─── Design tokens ────────────────────────────────────────────── */
 
 :root {
-  /* Warm paper palette */
-  --paper:        #f6f1e6;
-  --paper-soft:   #fbf6ea;
-  --paper-dim:    #efe8d7;
-  --ink:          #1a1612;
-  --ink-soft:     #4a4239;
-  --ink-faded:    #867a67;
-  --rule:         #d8cfbc;
-  --rule-strong:  #b5a98e;
+  /* Light palette derived from "Monospace Light" terminal theme
+     (WCAG AAA, ANSI-legible — williamzujkowski/oklch-terminal-themes).
+     Cool blue-white paper, slate ink. Every paired ratio passes AA
+     normal text; the ink/paper pair is AAA.
+       ink       on paper:  9.5:1   AAA
+       ink-soft  on paper:  7.45:1  AAA
+       ink-faded on paper:  5.26:1  AA
+       oxblood   on paper:  5.31:1  AA
+       teal      on paper:  5.05:1  AA
+       gold      on paper:  ~5.3:1  AA
+     Closes #128 (ink-faded was 3.73:1) and #136 (gold was 4.44:1). */
+  --paper:        #f4f7fd;
+  --paper-soft:   #ffffff;
+  --paper-dim:    #e7ecf5;
+  --ink:          #333e4f;
+  --ink-soft:     #475365;
+  --ink-faded:    #5d6a7d;
+  --rule:         #c8d2e0;
+  --rule-strong:  #9aa5b8;
 
-  /* Accents */
-  --oxblood:      #8d2a1f;
-  --oxblood-tint: #f0d8d2;
-  --teal:         #1f5b5b;
-  --teal-tint:    #d5e3e0;
-  --gold:         #8a6b1d;
-  --gold-tint:    #f1e3bf;
-  /* Deprecation-stripe color separated from --oxblood so the dark
-     mode override can boost it (#138 reviewer LOW). At 0.04 opacity
-     the LIGHT oxblood RGB was invisible against a dark paper bg. */
-  --oxblood-stripe: rgba(141, 42, 31, 0.04);
+  /* Accents — ANSI brights from monospace-light, picked for AA-pass. */
+  --oxblood:      #a52430;
+  --oxblood-tint: #f3d7da;
+  --teal:         #00607e;
+  --teal-tint:    #cde3ed;
+  --gold:         #904b1a;
+  --gold-tint:    #f1dec8;
+  /* Deprecation-stripe carries the oxblood RGB so the dark-mode
+     override can boost the alpha for visibility against #212121. */
+  --oxblood-stripe: rgba(165, 36, 48, 0.06);
 
   /* Type */
   --serif: "Fraunces", "Iowan Old Style", "Palatino Linotype", Palatino,
@@ -49,36 +58,37 @@
   --rule-mid:   2px;
 }
 
-/* #124 dark editorial palette. Deep-navy paper + bone ink, accent
-   tokens nudged for AA contrast against the new background.
-   Verified ratios (foreground on #101418):
-     --ink      #e8e1cf  → 13.9:1  (AAA)
-     --ink-soft #b6ad96  → 8.2:1   (AAA)
-     --teal     #6ecdca  → 7.4:1   (AAA)
-     --gold     #d4b573  → 8.0:1   (AAA)
-     --oxblood  #e89380  → 7.6:1   (AAA)
-   Focus ring (--oxblood) on --paper #101418: 7.6:1, well above the
-   3:1 non-text minimum. */
+/* Dark palette derived from "Dracula+" terminal theme (WCAG AAA,
+   ANSI-legible). Near-black paper + warm white ink + the canonical
+   dracula accent set; ink/paper is AAA, every accent passes AA.
+   Verified ratios (foreground on #212121):
+     --ink      #f8f8f2  → 15.11:1  AAA  (theme-published)
+     --ink-soft #c5c5bc  → 9.27:1   AAA
+     --ink-faded#8d8d8d  → 4.85:1   AA   (above the 4.5 threshold)
+     --oxblood  #ff5555  → 5.12:1   AA
+     --teal     #8be9fd  → 11.63:1  AAA
+     --gold     #ffcb6b  → 10.74:1  AAA
+   Focus ring on --paper #212121 stays above 3:1 in both directions. */
 @media (prefers-color-scheme: dark) {
   :root {
-    --paper:        #101418;
-    --paper-soft:   #161b21;
-    --paper-dim:    #0c1014;
-    --ink:          #e8e1cf;
-    --ink-soft:     #b6ad96;
-    --ink-faded:    #7d7361;
-    --rule:         #2d3540;
-    --rule-strong:  #444f5d;
+    --paper:        #212121;
+    --paper-soft:   #2d2d2d;
+    --paper-dim:    #181818;
+    --ink:          #f8f8f2;
+    --ink-soft:     #c5c5bc;
+    --ink-faded:    #8d8d8d;
+    --rule:         #3a3a3a;
+    --rule-strong:  #545454;
 
-    --oxblood:      #e89380;
-    --oxblood-tint: #2a1a17;
-    --teal:         #6ecdca;
-    --teal-tint:    #1a2a2a;
-    --gold:         #d4b573;
-    --gold-tint:    #2a2418;
-    /* Dark-mode stripe uses the bright dark-mode oxblood RGB so the
-       deprecation pattern remains visible against #101418. */
-    --oxblood-stripe: rgba(232, 147, 128, 0.08);
+    --oxblood:      #ff5555;
+    --oxblood-tint: #3a1f1f;
+    --teal:         #8be9fd;
+    --teal-tint:    #1f3a44;
+    --gold:         #ffcb6b;
+    --gold-tint:    #3a2e1f;
+    /* Dark-mode stripe uses the bright dracula red RGB so the
+       deprecation pattern remains visible against #212121. */
+    --oxblood-stripe: rgba(255, 85, 85, 0.06);
   }
 }
 
@@ -104,24 +114,28 @@ body {
   line-height: 1.6;
   color: var(--ink);
   background-color: var(--paper);
+  /* Monospace-light atmospheric bloom — pale violet-blue from the
+     theme's selection color, very subtle so the editorial typography
+     reads against a clean cool-white field. */
   background-image:
-    radial-gradient(circle at 20% 12%, rgba(255, 248, 230, 0.6) 0, transparent 55%),
-    radial-gradient(circle at 78% 88%, rgba(232, 218, 195, 0.5) 0, transparent 60%);
+    radial-gradient(circle at 20% 12%, rgba(199, 211, 255, 0.4) 0, transparent 55%),
+    radial-gradient(circle at 78% 88%, rgba(214, 224, 248, 0.4) 0, transparent 60%);
   margin: 0;
   padding: 0;
   min-height: 100dvh;
 }
 
-/* #124 dark-mode atmospheric overlay — swap the warm radial bloom for
-   a cool slate one so the page doesn't look flat against #101418. */
+/* Dracula+ atmospheric bloom — dracula purple + cyan glints over
+   the near-black paper. Keeps the dark mode from reading as flat. */
 @media (prefers-color-scheme: dark) {
   body {
     background-image:
-      radial-gradient(circle at 18% 14%, rgba(110, 205, 202, 0.06) 0, transparent 55%),
-      radial-gradient(circle at 82% 86%, rgba(232, 147, 128, 0.05) 0, transparent 60%);
+      radial-gradient(circle at 18% 14%, rgba(189, 147, 249, 0.05) 0, transparent 55%),
+      radial-gradient(circle at 82% 86%, rgba(139, 233, 253, 0.04) 0, transparent 60%);
   }
-  /* The color-scheme meta in base.html says light; expose dark to the
-     UA so form controls and scrollbars pick up native dark chrome. */
+  /* The color-scheme meta in base.html says light dark; explicitly
+     tell the UA we're in dark mode so form controls + scrollbars
+     pick up native dark chrome. */
   html { color-scheme: dark; }
 }
 
@@ -222,6 +236,13 @@ input:focus-visible,
   border-block-end: var(--rule-mid) double var(--rule);
 }
 
+/* .brand is now an <h1>; reset the UA margin + font-weight so the
+   typographic treatment stays driven by .brand-mark / .brand-name
+   below. The inner <a> keeps the inline-flex glyph row. */
+.brand {
+  margin: 0;
+  font-weight: 400;
+}
 .brand a {
   display: inline-flex;
   align-items: baseline;

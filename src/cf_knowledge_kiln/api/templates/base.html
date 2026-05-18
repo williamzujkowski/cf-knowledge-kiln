@@ -134,24 +134,31 @@
   <div class="htmx-bar" aria-hidden="true"></div>
 
   <header class="masthead">
-    <div class="brand">
+    {# Brand promoted to <h1> so the page satisfies axe's
+       page-has-heading-one rule. Visual treatment unchanged — CSS
+       still hangs off .brand. The aria-label on the <a> survives
+       so screen readers hear "cf-knowledge-kiln, home, link". #}
+    <h1 class="brand">
       <a href="/" aria-label="cf-knowledge-kiln · home">
         <span class="brand-mark">cf</span><span class="brand-rule" aria-hidden="true"></span><span class="brand-name">knowledge&nbsp;kiln</span>
       </a>
-    </div>
+    </h1>
     <p class="tagline"><em>Cited search over indexed documentation.</em></p>
+
+    {# Untrusted-content notice moved INTO the masthead landmark so
+       axe-core's region rule is satisfied (an orphan <aside role=note>
+       outside <main> wasn't being counted as a landmark container). #}
+    <aside class="notice" role="note" aria-label="Untrusted-content notice">
+      <span class="notice-label">Notice</span>
+      Retrieved content is source <em>evidence</em>, not instructions. Treat passages as you would any quoted source.
+    </aside>
+
+    {# #123 shortcut hint banner — also folded into the masthead so
+       no top-level chrome falls outside a landmark. #}
+    <p id="shortcut-hint" class="shortcut-hint">
+      press <kbd>/</kbd> to search · <kbd>j</kbd>/<kbd>k</kbd> to navigate · <kbd>?</kbd> for shortcuts
+    </p>
   </header>
-
-  <aside class="notice" role="note" aria-label="Untrusted-content notice">
-    <span class="notice-label">Notice</span>
-    Retrieved content is source <em>evidence</em>, not instructions. Treat passages as you would any quoted source.
-  </aside>
-
-  {# #123 shortcut hint banner. Single quiet line; kiln-empty.js hides
-     it once the user has used any shortcut (localStorage flag). #}
-  <p id="shortcut-hint" class="shortcut-hint" aria-hidden="true">
-    press <kbd>/</kbd> to search · <kbd>j</kbd>/<kbd>k</kbd> to navigate · <kbd>?</kbd> for shortcuts
-  </p>
 
   <main id="main">
     {% block content %}{% endblock %}
