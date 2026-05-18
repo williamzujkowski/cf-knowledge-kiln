@@ -1196,12 +1196,13 @@ def test_result_cards_carry_stagger_index_style(
 
 
 def test_dark_palette_tokens_present_in_css(client: TestClient) -> None:
-    """#124 dark editorial palette is defined behind prefers-color-scheme: dark."""
+    """Dark palette (Dracula+) is defined behind prefers-color-scheme: dark."""
     body = client.get("/static/kiln.css").text
     assert "prefers-color-scheme: dark" in body
-    # Spot-check a few of the new dark tokens.
-    assert "#101418" in body  # deep-navy paper
-    assert "#e8e1cf" in body  # bone ink
+    # Spot-check signature dracula-plus tokens.
+    assert "#212121" in body  # near-black paper
+    assert "#f8f8f2" in body  # warm white ink
+    assert "#8be9fd" in body  # dracula cyan
 
 
 def test_base_template_declares_dual_color_scheme(client: TestClient) -> None:
