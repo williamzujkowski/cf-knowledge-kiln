@@ -148,7 +148,12 @@
     const shouldOpen = typeof force === "boolean" ? force : !isOpen;
     if (shouldOpen) {
       sheet.setAttribute("data-open", "true");
-      sheet.focus();
+      // Move focus to the close button (the only interactive control)
+      // so Tab/Shift+Tab cycles within the dialog instead of escaping
+      // into the obscured page (#133 reviewer MED).
+      const closeBtn = sheet.querySelector("[data-cheatsheet-close]");
+      if (closeBtn) closeBtn.focus();
+      else sheet.focus();
     } else {
       sheet.removeAttribute("data-open");
     }
@@ -160,12 +165,22 @@
 
     // Cheatsheet handling is the only set of shortcuts that fires
     // inside inputs (Esc closes it; ? in the input still types it).
-    if (e.key === "Escape") {
-      const sheet = document.getElementById("cheatsheet");
-      if (sheet && sheet.hasAttribute("data-open")) {
-        toggleCheatsheet(false);
-        return;
+    const sheet = document.getElementById("cheatsheet");
+    const sheetOpen = sheet && sheet.hasAttribute("data-open");
+    if (e.key === "Escape" && sheetOpen) {
+      toggleCheatsheet(false);
+      return;
+    }
+    // Focus trap: while the cheatsheet is open, Tab + Shift+Tab loop
+    // within it. With only one focusable control (the close button)
+    // both directions land back on the close button (#133 reviewer MED).
+    if (sheetOpen && e.key === "Tab") {
+      const closeBtn = sheet.querySelector("[data-cheatsheet-close]");
+      if (closeBtn) {
+        e.preventDefault();
+        closeBtn.focus();
       }
+      return;
     }
 
     const typing = isTypingInElement(document.activeElement);
