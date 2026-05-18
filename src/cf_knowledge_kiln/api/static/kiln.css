@@ -395,6 +395,164 @@ input:focus-visible,
   outline-offset: 2px;
 }
 
+/* #118: quieter pill variant for inside the More-filters rail. The
+   primary status pills upstairs are the loud affordance; doc-type
+   pills inside the rail should sit a half-step back so the rail
+   reads as a single secondary surface. */
+.pill-quiet {
+  font-size: 0.78rem;
+  padding: 0.18rem 0.55rem;
+  border-style: dashed;
+  color: var(--ink-faded);
+}
+
+.pill-quiet:has(input:checked) {
+  background: var(--ink-soft);
+  border-style: solid;
+}
+
+/* ─── #118: expanded filter rail ───────────────────────────────── */
+
+.filter-rail {
+  margin: 0.75rem 0 0;
+  border-block-start: 1px dashed var(--rule);
+  padding-block-start: 0.65rem;
+}
+
+.filter-rail[open] {
+  /* When opened, the rail earns a hairline above + below to read as a
+     deliberate secondary surface, not as a popover that fell down. */
+  border-block-end: 1px dashed var(--rule);
+  padding-block-end: 0.85rem;
+  margin-block-end: 0.5rem;
+}
+
+.filter-rail-toggle {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: baseline;
+  gap: 0.65rem;
+  user-select: none;
+  /* Editorial caret — a small italic chevron that rotates on open. */
+  --caret: "›";
+}
+
+.filter-rail-toggle::-webkit-details-marker { display: none; }
+
+.filter-rail-toggle::before {
+  content: var(--caret);
+  font-family: var(--serif);
+  font-style: italic;
+  color: var(--ink-faded);
+  font-size: 1.1rem;
+  line-height: 1;
+  transition: transform 160ms ease;
+  display: inline-block;
+}
+
+.filter-rail[open] .filter-rail-toggle::before {
+  transform: rotate(90deg);
+}
+
+.filter-rail-label {
+  font-family: var(--serif);
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  font-variant-caps: all-small-caps;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--ink-faded);
+}
+
+.filter-rail-hint {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 0.78rem;
+  color: var(--ink-faded);
+  font-variation-settings: "opsz" 14;
+}
+
+.filter-rail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem 1.25rem;
+  margin-block-start: 0.85rem;
+  align-items: end;
+}
+
+@media (max-width: 640px) {
+  .filter-rail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.rail-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-inline-size: 0;
+}
+
+.rail-field-wide {
+  grid-column: 1 / -1;
+}
+
+.rail-field-multi {
+  /* Doc-type pills wrap horizontally inside this fieldset. */
+  flex-direction: column;
+}
+
+.rail-field-label {
+  font-family: var(--serif);
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  font-variant-caps: all-small-caps;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--ink-faded);
+  padding: 0;
+}
+
+.rail-field-multi .rail-field-label {
+  margin-block-end: 0.35rem;
+}
+
+.rail-field-multi > .pill {
+  margin-inline-end: 0.35rem;
+}
+
+.rail-field-input {
+  font-family: var(--serif);
+  font-size: 0.95rem;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  border-block-end: 1px solid var(--rule);
+  padding: 0.25rem 0.1rem 0.35rem;
+  transition: border-color 120ms ease;
+}
+
+.rail-field-input::placeholder {
+  color: var(--ink-faded);
+  font-style: italic;
+}
+
+.rail-field-input:focus-visible {
+  outline: 0;
+  border-block-end-color: var(--oxblood);
+  border-block-end-width: 2px;
+  padding-block-end: 0.25rem;
+}
+
+.rail-field-input[type="date"] {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+}
+
 /* ─── Results ──────────────────────────────────────────────────── */
 
 .results {

@@ -58,6 +58,78 @@
         <span>Superseded</span>
       </label>
     </fieldset>
+
+    {# #118: expanded filter rail. Closed by default — the dominant
+       flow is query + status. Power users open it once; the browser
+       remembers the open state for the session. #}
+    <details class="filter-rail" aria-label="More filters">
+      <summary class="filter-rail-toggle">
+        <span class="filter-rail-label">More filters</span>
+        <span class="filter-rail-hint" aria-hidden="true">repo · doc_type · owner · reviewed after · tags</span>
+      </summary>
+
+      <div class="filter-rail-grid">
+        <label class="rail-field">
+          <span class="rail-field-label">Repo</span>
+          <input
+            type="text"
+            name="repo"
+            class="rail-field-input"
+            placeholder="owner/name"
+            autocomplete="off"
+            spellcheck="false"
+            value="{{ filters.repo or '' }}">
+        </label>
+
+        <fieldset class="rail-field rail-field-multi">
+          <legend class="rail-field-label">Doc type</legend>
+          {% set selected_doc_types = filters.doc_type or [] %}
+          {% for dt in ['runbook', 'adr', 'standard', 'sop', 'guide', 'reference'] %}
+            <label class="pill pill-quiet">
+              <input
+                type="checkbox"
+                name="doc_type"
+                value="{{ dt }}"
+                {% if dt in selected_doc_types %}checked{% endif %}>
+              <span>{{ dt }}</span>
+            </label>
+          {% endfor %}
+        </fieldset>
+
+        <label class="rail-field">
+          <span class="rail-field-label">Owner</span>
+          <input
+            type="text"
+            name="owner"
+            class="rail-field-input"
+            placeholder="platform"
+            autocomplete="off"
+            spellcheck="false"
+            value="{{ filters.owner or '' }}">
+        </label>
+
+        <label class="rail-field">
+          <span class="rail-field-label">Reviewed after</span>
+          <input
+            type="date"
+            name="last_reviewed_after"
+            class="rail-field-input"
+            value="{{ filters.last_reviewed_after or '' }}">
+        </label>
+
+        <label class="rail-field rail-field-wide">
+          <span class="rail-field-label">Tags</span>
+          <input
+            type="text"
+            name="tags"
+            class="rail-field-input"
+            placeholder="comma-separated"
+            autocomplete="off"
+            spellcheck="false"
+            value="{{ filters.tags or '' }}">
+        </label>
+      </div>
+    </details>
   </form>
 
   <section id="results" class="results" aria-live="polite" aria-busy="false">

@@ -58,8 +58,24 @@ async def search_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "search.html",
-        {"query": "", "initial_results": None},
+        {"query": "", "initial_results": None, "filters": _empty_filters_view()},
     )
+
+
+def _empty_filters_view() -> dict[str, Any]:
+    r"""Default filter-rail view dict — every field empty/None.
+
+    The template reads dotted keys (\`filters.repo\` etc.) so a flat
+    dict with the same keys lets the rail render with no values on
+    initial page load.
+    """
+    return {
+        "repo": "",
+        "doc_type": [],
+        "owner": "",
+        "last_reviewed_after": "",
+        "tags": "",
+    }
 
 
 @router.post("/search", response_class=HTMLResponse)
@@ -72,6 +88,13 @@ async def search_partial(
     query: Annotated[str, Form()] = "",
     status: Annotated[list[str] | None, Form()] = None,
     filters_set: Annotated[str | None, Form(alias="_filters_set")] = None,
+    # #118: expanded filter rail. Each is optional and skipped when
+    # empty so the form behaves identically without the rail expanded.
+    repo: Annotated[str, Form()] = "",
+    doc_type: Annotated[list[str] | None, Form()] = None,
+    owner: Annotated[str, Form()] = "",
+    last_reviewed_after: Annotated[str, Form()] = "",
+    tags: Annotated[str, Form()] = "",
 ) -> HTMLResponse:
     """HTMX target — return the results-list fragment.
 
@@ -109,7 +132,15 @@ async def search_partial(
         return templates.TemplateResponse(
             request, "_results.html", {"results": [], "warnings": [], "query": query}
         )
-    filters = _filters_from_form(status, filters_set=fs)
+    filters = _filters_from_form(
+        status,
+        filters_set=fs,
+        repo=repo,
+        doc_type=doc_type,
+        owner=owner,
+        last_reviewed_after=last_reviewed_after,
+        tags=tags,
+    )
     try:
         result = await retriever.search(query, filters=filters, max_results=20, session=session)
     except Exception:
@@ -140,6 +171,16 @@ async def search_partial(
             "results": cards,
             "warnings": [_humanize_warning(w) for w in (result.warnings or [])],
             "query_id": str(query_id) if query_id else None,
+            # The rail isn't re-rendered in the HTMX partial today, but
+            # passing the values through keeps the contract symmetric
+            # so a future partial can include it.
+            "filters": {
+                "repo": repo,
+                "doc_type": doc_type or [],
+                "owner": owner,
+                "last_reviewed_after": last_reviewed_after,
+                "tags": tags,
+            },
         },
     )
 
@@ -266,8 +307,17 @@ def _selected_statuses(status: list[str] | None) -> list[str]:
     return [s for s in (status or []) if s in _VALID_STATUSES]
 
 
-def _filters_from_form(status: list[str] | None, *, filters_set: bool) -> RetrievalFilters:
-    """Translate form checkbox values into :class:`RetrievalFilters`.
+def _filters_from_form(
+    status: list[str] | None,
+    *,
+    filters_set: bool,
+    repo: str = "",
+    doc_type: list[str] | None = None,
+    owner: str = "",
+    last_reviewed_after: str = "",
+    tags: str = "",
+) -> RetrievalFilters:
+    """Translate form values into :class:`RetrievalFilters`.
 
     ``filters_set=True`` means the search form actually submitted the
     filter fieldset (the hidden ``_filters_set`` marker arrived). In
@@ -279,6 +329,10 @@ def _filters_from_form(status: list[str] | None, *, filters_set: bool) -> Retrie
 
     Unknown status values are dropped silently (the form is closed by
     the template, but a hand-crafted POST might submit anything).
+
+    #118 adds the expanded rail (repo / doc_type / owner /
+    last_reviewed_after / tags). Each is optional — empty input
+    becomes ``None`` so the engine sees no constraint.
     """
     if filters_set:
         raw: list[str] = status or []
@@ -292,7 +346,46 @@ def _filters_from_form(status: list[str] | None, *, filters_set: bool) -> Retrie
     # `status=[]` to the engine (which would be a no-constraint
     # surprise). When filters_set=False, selected is at minimum the
     # _DEFAULT_STATUSES, so `selected or None` always gives a list.
-    return RetrievalFilters(status=selected or None)  # type: ignore[arg-type]
+    # status is typed `list[Status]` (a Literal) on the model; we
+    # narrow to those values above but mypy doesn't track that.
+    return RetrievalFilters(
+        status=selected or None,  # type: ignore[arg-type]
+        repo=_split_csv(repo) or None,
+        doc_type=doc_type or None,
+        owner=_split_csv(owner) or None,
+        last_reviewed_after=_parse_iso_date(last_reviewed_after),
+        tags=_split_csv(tags) or None,
+    )
+
+
+def _split_csv(raw: str) -> list[str]:
+    """Split a comma- or whitespace-separated input into a clean list.
+
+    Used for free-text fields (repo, owner, tags) where the form
+    accepts either ``foo,bar`` or ``foo bar`` or ``foo, bar``. Empty
+    input returns an empty list — caller decides whether that becomes
+    ``None``.
+    """
+    return [t for t in re.split(r"[,\s]+", raw.strip()) if t]
+
+
+def _parse_iso_date(raw: str) -> Any:
+    """Coerce an HTML ``<input type=\"date\">`` value to ``datetime.date``.
+
+    HTML date inputs always submit ISO-8601 (\"YYYY-MM-DD\") so a
+    permissive parser isn't needed. Empty input returns ``None``.
+    Invalid input also returns ``None`` rather than 422-ing — the
+    form-side validator catches malformed values before they reach
+    here in normal use.
+    """
+    if not raw:
+        return None
+    from datetime import date
+
+    try:
+        return date.fromisoformat(raw)
+    except ValueError:
+        return None
 
 
 def _result_card_view(

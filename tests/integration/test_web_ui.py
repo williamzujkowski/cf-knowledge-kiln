@@ -491,3 +491,134 @@ def test_search_warning_renders_spec_mandated_copy(
     if "warning-weak_evidence" in body:
         assert "no clearly authoritative source" in body
         assert "Confidence is low" in body
+
+
+# ─── #118: filter expansion (repo / doc_type / owner / last_reviewed / tags) ──
+
+
+def test_search_page_renders_filter_rail(client: TestClient) -> None:
+    """The collapsible filter rail markup is present on initial load."""
+    response = client.get("/")
+    body = response.text
+    assert 'class="filter-rail"' in body
+    assert 'name="repo"' in body
+    assert 'name="doc_type"' in body
+    assert 'name="owner"' in body
+    assert 'name="last_reviewed_after"' in body
+    assert 'name="tags"' in body
+
+
+def test_search_post_repo_filter_round_trips_to_engine(
+    client: TestClient, session: AsyncSession, small_corpus: Path
+) -> None:
+    """A repo= form field narrows the engine query.
+
+    The fixture ingests under name='web-tests' so that's the repo
+    value. A non-matching repo filter should return zero results.
+    """
+    asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
+    # Non-matching repo → zero results.
+    response = client.post(
+        "/search",
+        data={"query": "widgets", "status": ["active"], "repo": "nope/missing"},
+    )
+    assert response.status_code == 200
+    assert "result-card" not in response.text
+    # Matching repo → results return.
+    response = client.post(
+        "/search",
+        data={"query": "widgets", "status": ["active"], "repo": "web-tests"},
+    )
+    assert response.status_code == 200
+    assert "result-card" in response.text
+
+
+def test_search_post_tags_form_field_is_accepted(
+    client: TestClient, session: AsyncSession, small_corpus: Path
+) -> None:
+    """tags= form field is parsed by the handler without a 422.
+
+    The engine-side tags filter has a separate pre-existing SQL bug
+    (#126: JSONB index access vs ?| operator mismatch) which crashes
+    when a non-empty tags list reaches the CTE. Once #126 lands, this
+    test should tighten to round-trip a real tagged corpus.
+    For now we verify only that the form layer accepts and parses
+    the field — empty input becomes None and never reaches the broken
+    SQL path.
+    """
+    asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
+    response = client.post(
+        "/search",
+        data={"query": "widgets", "status": ["active"], "tags": ""},
+    )
+    assert response.status_code == 200
+    assert "result-card" in response.text
+
+
+def test_search_post_owner_filter_round_trips(
+    client: TestClient, session: AsyncSession, small_corpus: Path
+) -> None:
+    """owner= form field narrows the engine query."""
+    asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
+    # No owner is set on fixture docs → owner filter returns zero.
+    response = client.post(
+        "/search",
+        data={"query": "widgets", "status": ["active"], "owner": "platform"},
+    )
+    assert response.status_code == 200
+    # Fixture corpus has no owner stamped, so platform filter → 0 results.
+    assert "result-card" not in response.text
+
+
+def test_search_post_last_reviewed_after_filter(
+    client: TestClient, session: AsyncSession, small_corpus: Path
+) -> None:
+    """last_reviewed_after= parses ISO date and narrows the query."""
+    asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
+    # Future cutoff → zero results (no doc has last_reviewed past it).
+    response = client.post(
+        "/search",
+        data={
+            "query": "widgets",
+            "status": ["active"],
+            "last_reviewed_after": "2099-01-01",
+        },
+    )
+    assert response.status_code == 200
+    assert "result-card" not in response.text
+
+
+def test_search_post_invalid_iso_date_is_ignored(
+    client: TestClient, session: AsyncSession, small_corpus: Path
+) -> None:
+    """Malformed last_reviewed_after returns None — no 422 / 500."""
+    asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
+    response = client.post(
+        "/search",
+        data={
+            "query": "widgets",
+            "status": ["active"],
+            "last_reviewed_after": "not-a-date",
+        },
+    )
+    assert response.status_code == 200
+    # Filter was silently dropped — query still returns the matching doc.
+    assert "result-card" in response.text
+
+
+def test_search_post_doc_type_multi_select(
+    client: TestClient, session: AsyncSession, small_corpus: Path
+) -> None:
+    """doc_type= can repeat (multi-checkbox)."""
+    asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
+    # Fixture corpus has no doc_type set, so the filter matches nothing.
+    response = client.post(
+        "/search",
+        data={
+            "query": "widgets",
+            "status": ["active"],
+            "doc_type": ["runbook", "adr"],
+        },
+    )
+    assert response.status_code == 200
+    assert "result-card" not in response.text
