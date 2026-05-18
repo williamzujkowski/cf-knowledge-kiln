@@ -571,6 +571,18 @@ input:focus-visible,
   overflow: hidden;
 }
 
+/* #117: query-term highlighting in the excerpt.
+   Editorial restraint — no bright yellow. A warm gold tint that
+   reads as "I noticed this", anchored by an underline so it works
+   for color-blind users too. */
+.excerpt mark {
+  background: var(--gold-tint);
+  color: var(--ink);
+  padding: 0 0.1em;
+  border-bottom: 1px solid var(--gold);
+  border-radius: 1px;
+}
+
 .result-footer {
   display: flex;
   justify-content: space-between;
@@ -625,6 +637,19 @@ a.source-link:focus-visible {
   font-variation-settings: "opsz" 14;
 }
 
+/* #117: owner byline — quiet credit between the source and the
+   freshness stamp. The leading em-dash gives it a typographic
+   anchor without needing a bullet. */
+.owner {
+  color: var(--ink-faded);
+  font-size: 0.82rem;
+}
+
+.owner em {
+  font-style: italic;
+  color: var(--ink-soft);
+}
+
 .score {
   display: inline-flex;
   align-items: baseline;
@@ -658,9 +683,9 @@ a.source-link:focus-visible {
 }
 
 .warning {
-  display: grid;
-  grid-template-columns: 1.5rem 1fr;
-  gap: 0.5rem;
+  /* #117: dropped the icon column — the italic prefix is the visual
+     anchor now. Stays as a row with the inline-start rule keeping
+     the warning visually grouped. */
   padding: 0.55rem 0.85rem;
   border-inline-start: 2px solid currentColor;
   font-size: 0.92rem;
@@ -669,12 +694,13 @@ a.source-link:focus-visible {
   line-height: 1.45;
 }
 
-.warning-icon {
-  font-family: var(--serif);
-  font-weight: 700;
+.warning-prefix {
+  /* The spec-mandated copy lives in the prefix — set italic so the
+     voice reads as a margin note rather than a system alert. */
   font-style: italic;
+  font-variation-settings: "opsz" 18;
   color: currentColor;
-  text-align: center;
+  margin-inline-end: 0.15rem;
 }
 
 .warning-stale_source,

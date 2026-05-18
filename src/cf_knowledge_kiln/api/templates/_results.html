@@ -8,7 +8,7 @@
   <ul class="warnings" role="status">
     {% for w in warnings %}
       <li class="warning warning-{{ w.type }}">
-        <span class="warning-icon" aria-hidden="true">!</span>
+        {% if w.prefix %}<em class="warning-prefix">{{ w.prefix }}</em> {% endif %}
         <span class="warning-message">{{ w.message }}</span>
       </li>
     {% endfor %}
@@ -35,7 +35,7 @@
               {% for part in r.heading_path %}<span>{{ part }}</span>{% if not loop.last %} <span class="sep" aria-hidden="true">›</span> {% endif %}{% endfor %}
             </p>
           {% endif %}
-          <p class="excerpt">{{ r.excerpt }}</p>
+          <p class="excerpt">{{ r.excerpt_html }}</p>
           <footer class="result-footer">
             <span class="source-line">
               {% if r.repo and r.path %}
@@ -57,6 +57,9 @@
                 {% else %}
                   <span class="source">{{ r.repo }}/{{ r.path }}</span>
                 {% endif %}
+              {% endif %}
+              {% if r.owner %}
+                <span class="owner">— by <em>{{ r.owner }}</em></span>
               {% endif %}
               {% if r.last_reviewed %}
                 <time datetime="{{ r.last_reviewed }}" class="freshness">
