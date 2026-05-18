@@ -1184,6 +1184,32 @@ def test_no_results_widen_button_actually_widens(
     assert "Beta" in body
 
 
+def test_result_cards_carry_stagger_index_style(
+    client: TestClient, session: AsyncSession, small_corpus: Path
+) -> None:
+    """#124 staggered reveal — each card has `style="--i: N"` for animation-delay."""
+    asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
+    response = client.post("/search", data={"query": "widgets", "status": ["active"]})
+    body = response.text
+    # First (and only matching) card carries --i: 0.
+    assert "--i: 0" in body
+
+
+def test_dark_palette_tokens_present_in_css(client: TestClient) -> None:
+    """#124 dark editorial palette is defined behind prefers-color-scheme: dark."""
+    body = client.get("/static/kiln.css").text
+    assert "prefers-color-scheme: dark" in body
+    # Spot-check a few of the new dark tokens.
+    assert "#101418" in body  # deep-navy paper
+    assert "#e8e1cf" in body  # bone ink
+
+
+def test_base_template_declares_dual_color_scheme(client: TestClient) -> None:
+    """meta color-scheme advertises both modes so the UA picks dark chrome."""
+    body = client.get("/").text
+    assert 'content="light dark"' in body
+
+
 def test_widen_button_hidden_when_status_already_selected(
     client: TestClient, session: AsyncSession, small_corpus: Path
 ) -> None:
