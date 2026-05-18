@@ -538,13 +538,7 @@ def test_search_post_tags_form_field_is_accepted(
 ) -> None:
     """tags= form field is parsed by the handler without a 422.
 
-    The engine-side tags filter has a separate pre-existing SQL bug
-    (#126: JSONB index access vs ?| operator mismatch) which crashes
-    when a non-empty tags list reaches the CTE. Once #126 lands, this
-    test should tighten to round-trip a real tagged corpus.
-    For now we verify only that the form layer accepts and parses
-    the field — empty input becomes None and never reaches the broken
-    SQL path.
+    Empty input becomes None and never reaches the SQL filter path.
     """
     asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
     response = client.post(
@@ -553,6 +547,76 @@ def test_search_post_tags_form_field_is_accepted(
     )
     assert response.status_code == 200
     assert "result-card" in response.text
+
+
+@pytest.fixture
+def tagged_corpus(tmp_path: Path) -> Path:
+    """Corpus where one doc carries ``tags: [runbook, postgres]`` in frontmatter.
+
+    The frontmatter parser lands ``tags`` on ``documents.metadata['tags']``
+    (and chunk-side as well via ingestion); both are checked by the
+    ``_tags_predicate`` and either path matching is a pass.
+    """
+    (tmp_path / "tagged.md").write_text(
+        textwrap.dedent(
+            """\
+            ---
+            title: Tagged Doc
+            tags:
+              - runbook
+              - postgres
+            ---
+            # Tagged Doc
+            beta documentation about widgets and gadgets.
+            """
+        )
+    )
+    (tmp_path / "untagged.md").write_text(
+        textwrap.dedent(
+            """\
+            # Untagged Doc
+            beta documentation about widgets and gadgets.
+            """
+        )
+    )
+    return tmp_path
+
+
+def test_search_post_tags_filter_matches_doc_with_overlapping_tag(
+    client: TestClient, session: AsyncSession, tagged_corpus: Path
+) -> None:
+    """tags=postgres,redis returns the doc whose metadata.tags includes 'postgres'.
+
+    Regression for #126: the engine-side filter used JSONB index access
+    (``metadata[$key] ?| jsonb``) which is an invalid operator pairing.
+    The correct shape is ``metadata->'tags' ?| ARRAY[...]::text[]``.
+    """
+    asyncio.get_event_loop().run_until_complete(_seed(session, tagged_corpus))
+    response = client.post(
+        "/search",
+        data={"query": "widgets", "status": ["active"], "tags": "postgres,redis"},
+    )
+    assert response.status_code == 200, response.text
+    body = response.text
+    assert "result-card" in body
+    # The tagged doc must appear; the untagged doc must not.
+    assert "Tagged Doc" in body
+    assert "Untagged Doc" not in body
+
+
+def test_search_post_tags_filter_excludes_doc_when_no_overlap(
+    client: TestClient, session: AsyncSession, tagged_corpus: Path
+) -> None:
+    """A tag filter with no overlap returns zero results — confirms the
+    SQL predicate is actually being evaluated, not silently dropped.
+    """
+    asyncio.get_event_loop().run_until_complete(_seed(session, tagged_corpus))
+    response = client.post(
+        "/search",
+        data={"query": "widgets", "status": ["active"], "tags": "unrelated-tag"},
+    )
+    assert response.status_code == 200, response.text
+    assert "result-card" not in response.text
 
 
 def test_search_post_owner_filter_round_trips(
