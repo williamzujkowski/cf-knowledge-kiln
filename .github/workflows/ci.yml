@@ -173,7 +173,7 @@ jobs:
         # phase-8 hardening policy: HIGH/CRITICAL → CI red, MEDIUM
         # and below stay informational. Operators tune the cutoff
         # for their org's risk appetite in a follow-up PR.
-        uses: anchore/scan-action@v6
+        uses: anchore/scan-action@v7
         id: grype
         with:
           sbom: sbom.spdx.json
