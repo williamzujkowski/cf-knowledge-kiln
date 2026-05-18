@@ -489,13 +489,22 @@ def _result_card_view(
     is required to highlight; passing empty string is a no-op.
     """
     excerpt = content[:500]
+    heading_path_list = list(chunk.heading_path) or None
     return {
         "chunk_id": chunk.chunk_id,
         "document_id": chunk.document_id,
         "title": getattr(ref, "title", None) or "(unknown)",
         "excerpt": excerpt,
         "excerpt_html": _highlight_excerpt(excerpt, query),
-        "heading_path": list(chunk.heading_path) or None,
+        # #121: full-text variant for the `o` expand toggle. Same
+        # highlighting pass so the marks stay aligned. When content
+        # is already ≤500 chars, this is identical to excerpt_html
+        # and the toggle is a visual no-op.
+        "excerpt_full_html": _highlight_excerpt(content, query),
+        "heading_path": heading_path_list,
+        # #121: " > "-joined for the `c` copy-citation data attribute.
+        # Empty string when no heading path so the JS can omit "#" cleanly.
+        "heading_path_str": " > ".join(heading_path_list) if heading_path_list else "",
         "repo": getattr(ref, "repo", None),
         "path": getattr(ref, "path", None),
         "source_url": getattr(ref, "source_url", None),

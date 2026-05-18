@@ -913,6 +913,74 @@ def test_base_template_focus_grab_uses_closed_to_open_guard(client: TestClient) 
     assert "data-focus-grabbed" in body
 
 
+# ─── #121: keyboard navigation ──────────────────────────────────────
+
+
+def test_search_page_renders_cheatsheet(client: TestClient) -> None:
+    """The shortcut cheatsheet markup is in the DOM (hidden by default)."""
+    body = client.get("/").text
+    assert 'id="cheatsheet"' in body
+    assert 'role="dialog"' in body
+    assert "Focus search" in body
+    assert "Copy citation" in body
+    assert "Toggle full chunk" in body
+    # All shortcut keys appear in <kbd> elements.
+    for key in ("/", "j", "k", "Enter", "c", "o", "?", "Esc"):
+        assert f"<kbd>{key}</kbd>" in body, f"missing <kbd>{key}</kbd>"
+
+
+def test_search_page_loads_keys_script(client: TestClient) -> None:
+    """The keyboard-nav JS is referenced from base.html with defer."""
+    body = client.get("/").text
+    assert "kiln-keys.js" in body
+    # Script tag is deferred so it doesn't block parse.
+    script_line = [line for line in body.splitlines() if "kiln-keys.js" in line]
+    assert script_line and "defer" in script_line[0]
+
+
+def test_static_keys_js_is_served(client: TestClient) -> None:
+    """The kiln-keys.js asset is reachable through the StaticFiles mount."""
+    response = client.get("/static/kiln-keys.js")
+    assert response.status_code == 200
+    assert "javascript" in response.headers["content-type"]
+    body = response.text
+    # Sanity: each shortcut name appears in the source.
+    for marker in ("focusQuery", "openPreview", "copyCitation", "toggleExpand", "toggleCheatsheet"):
+        assert marker in body, f"missing {marker} in kiln-keys.js"
+
+
+def test_search_result_cards_carry_keyboard_nav_data_attrs(
+    client: TestClient, session: AsyncSession, small_corpus: Path
+) -> None:
+    """Result cards expose the data- attributes the JS reads."""
+    asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
+    response = client.post("/search", data={"query": "widgets", "status": ["active"]})
+    body = response.text
+    assert "data-card" in body
+    assert "data-chunk-id=" in body
+    assert "data-repo=" in body
+    assert "data-path=" in body
+    assert "data-heading-path=" in body
+
+
+def test_search_result_cards_include_full_excerpt_for_expand_toggle(
+    client: TestClient, session: AsyncSession, small_corpus: Path
+) -> None:
+    """The `o` toggle needs the full chunk pre-rendered + hidden."""
+    asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
+    response = client.post("/search", data={"query": "widgets", "status": ["active"]})
+    body = response.text
+    assert "excerpt-trimmed" in body
+    assert "excerpt-full" in body
+
+
+def test_search_page_renders_toast_region(client: TestClient) -> None:
+    """The toast region is reserved server-side for #121 feedback."""
+    body = client.get("/").text
+    assert 'id="toast"' in body
+    assert 'aria-live="polite"' in body
+
+
 async def _neighbors(session: AsyncSession, chunk_id: str) -> tuple[int, int, int]:
     """Helper: returns (prev_count, target_present, next_count)."""
     import uuid as _uuid

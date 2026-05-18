@@ -23,7 +23,13 @@
   </p>
   <ol class="results-list">
     {% for r in results %}
-      <li class="result-card status-{{ r.status }}" data-document-id="{{ r.document_id }}">
+      <li class="result-card status-{{ r.status }}"
+          data-card
+          data-document-id="{{ r.document_id }}"
+          data-chunk-id="{{ r.chunk_id }}"
+          data-repo="{{ r.repo or '' }}"
+          data-path="{{ r.path or '' }}"
+          data-heading-path="{{ r.heading_path_str or '' }}">
         <span class="result-index" aria-hidden="true">{{ '%02d' % loop.index }}</span>
         <div class="result-body">
           <header class="result-header">
@@ -48,7 +54,12 @@
               {% for part in r.heading_path %}<span>{{ part }}</span>{% if not loop.last %} <span class="sep" aria-hidden="true">›</span> {% endif %}{% endfor %}
             </p>
           {% endif %}
-          <p class="excerpt">{{ r.excerpt_html }}</p>
+          {# #121: `o` toggles between the trimmed excerpt and the full
+             chunk. Both are rendered; CSS hides one based on
+             data-expanded on the card. excerpt_full_html costs ~1-2KB
+             extra per card — acceptable for 20 results. #}
+          <p class="excerpt excerpt-trimmed">{{ r.excerpt_html }}</p>
+          <p class="excerpt excerpt-full" hidden>{{ r.excerpt_full_html }}</p>
           <footer class="result-footer">
             <span class="source-line">
               {% if r.repo and r.path %}

@@ -25,6 +25,8 @@
        the parser finish before HTMX initializes — first paint isn't
        blocked on the network fetch. -->
   <script defer src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous"></script> <!-- pragma: allowlist secret -->
+  <!-- #121 keyboard nav. Vanilla, no deps. Defer so it runs after parse. -->
+  <script defer src="{{ url_for('static', path='kiln-keys.js') }}"></script>
   <script>
     // a11y (#120): announcements live on #search-status, NOT on
     // #results. The results region only carries aria-busy so AT can
@@ -115,6 +117,13 @@
     // Backdrop click closes the drawer on mobile (#120 / #130 review).
     document.addEventListener("click", (e) => {
       if (e.target && e.target.id === "preview-backdrop") _closePreview();
+    });
+    // #121 cheatsheet close button (kiln-keys.js handles `?` to open).
+    document.addEventListener("click", (e) => {
+      if (e.target && e.target.hasAttribute && e.target.hasAttribute("data-cheatsheet-close")) {
+        const sheet = document.getElementById("cheatsheet");
+        if (sheet) sheet.removeAttribute("data-open");
+      }
     });
   </script>
 </head>
