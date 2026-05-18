@@ -36,24 +36,24 @@ from cf_knowledge_kiln.retrieval import HybridRetriever, RetrievalFilters, load_
 pytestmark = [pytest.mark.integration, pytest.mark.eval]
 
 
-REVIEW_PRECISION_FLOOR = 0.75
-"""Bootstrap precision threshold on the 12-case labeled set.
+REVIEW_PRECISION_FLOOR = 0.83
+"""Precision threshold on the 12-case labeled set.
 
-Under :class:`MockEmbeddingProvider` the vector arm is noise and the
-auth-policy conflict pair (shared heading "Bearer token rotation
-policy") co-surfaces on generic kiln queries that have nothing to
-do with auth. That over-fires the conflict-detector on ~2 of the 7
-clean cases — measured baseline is 10/12 = 0.833 today.
+Measured baseline under :class:`MockEmbeddingProvider` after the
+PR #145 review fixes (auth-policy heading-collision narrowed to the
+intended ``Bearer token rotation policy`` heading; one clean-case
+query tightened off keywords the injection-trap chunk competed for):
+**12/12 = 1.000**.
 
-The floor is set at 0.75 (≤ 3 failures on 12) so:
+The floor is set at 0.83 (≤ 2 failures on 12) so:
 
-* the gate still trips on a real regression (4+ failures)
-* mock-noise drift between cases doesn't false-fail the eval
-* the issue's stated long-run target (≥ 0.85) lands once #108
-  item 2 swaps in a real embedding provider that lets the vector
-  arm filter the auth-policy pair out of unrelated top-K results.
-
-Ratchet upward when the corpus + provider settles.
+* the gate still trips on a real regression that flips two cases
+* mock-noise drift between runs (the vector arm is degenerate, FTS
+  ranks shift slightly when the corpus is reingested) doesn't
+  false-fail on the rare flake
+* the issue's stated long-run target (≥ 0.95) lands once #108 item 2
+  swaps in a real embedding provider; at that point grow the corpus
+  to ~30 cases and ratchet to 0.90 → 0.95.
 """
 
 

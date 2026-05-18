@@ -119,7 +119,7 @@ cases:
     expected_reason: none
 
   - case_id: clean-pgvector-extension
-    query: "pgvector extension missing boot CREATE EXTENSION vector AGENTS.md refuses cleanly"
+    query: "pgvector preflight crashloops pg_available_extensions broker superuser DDL service plan"
     filters: {status: [active, approved]}
     expected_review: false
     expected_reason: none

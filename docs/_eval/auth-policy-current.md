@@ -15,14 +15,14 @@ Operators with kiln API access rotate their bearer tokens every
 the prior 90-day window is preserved at `auth-policy-legacy.md` for
 audit reference and should NOT be followed.
 
-## Cadence rationale
+## Why 30 days
 
 The 30-day window aligns the kiln with the rotation cadence of every
 other internal service that consumes the same operator population.
 A shorter window also bounds the blast radius of a leaked `cf env`
 snapshot to roughly one operations cycle.
 
-## Mechanics
+## Rotation steps (current cadence)
 
 1. Generate a new token: `python -m cf_knowledge_kiln.auth.tokens new`.
 2. `cf set-env cf-knowledge-kiln-api KILN_AUTH_TOKENS '<new-token>'`.
@@ -30,7 +30,7 @@ snapshot to roughly one operations cycle.
 4. Distribute the new token via the secrets channel; revoke the prior
    token on the next rotation cycle.
 
-## Exception
+## Compromise response
 
 A token compromise rotates immediately, not on the 30-day cadence.
 File an incident, generate the new token, restart, and document in
