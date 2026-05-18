@@ -100,3 +100,51 @@ class TestHumanizeWarning:
         out = _humanize_warning(object())
         assert out["type"] == ""
         assert out["message"] == ""
+
+
+# ─── #118: filter-form helpers ──────────────────────────────────────
+
+
+class TestSplitCsv:
+    def test_splits_on_commas(self) -> None:
+        from cf_knowledge_kiln.api.web import _split_csv
+
+        assert _split_csv("foo,bar,baz") == ["foo", "bar", "baz"]
+
+    def test_splits_on_whitespace(self) -> None:
+        from cf_knowledge_kiln.api.web import _split_csv
+
+        assert _split_csv("foo bar baz") == ["foo", "bar", "baz"]
+
+    def test_splits_on_mixed_separators(self) -> None:
+        from cf_knowledge_kiln.api.web import _split_csv
+
+        assert _split_csv("foo, bar,  baz   qux") == ["foo", "bar", "baz", "qux"]
+
+    def test_empty_returns_empty_list(self) -> None:
+        from cf_knowledge_kiln.api.web import _split_csv
+
+        assert _split_csv("") == []
+        assert _split_csv("   ") == []
+        assert _split_csv(",,,") == []
+
+
+class TestParseIsoDate:
+    def test_valid_iso_date(self) -> None:
+        from datetime import date
+
+        from cf_knowledge_kiln.api.web import _parse_iso_date
+
+        assert _parse_iso_date("2026-05-17") == date(2026, 5, 17)
+
+    def test_empty_returns_none(self) -> None:
+        from cf_knowledge_kiln.api.web import _parse_iso_date
+
+        assert _parse_iso_date("") is None
+
+    def test_invalid_returns_none(self) -> None:
+        """Malformed input drops silently — form-side validator catches it."""
+        from cf_knowledge_kiln.api.web import _parse_iso_date
+
+        assert _parse_iso_date("not-a-date") is None
+        assert _parse_iso_date("2026-13-99") is None
