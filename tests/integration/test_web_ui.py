@@ -888,6 +888,31 @@ def test_search_page_renders_backdrop_for_mobile_drawer(client: TestClient) -> N
     assert 'id="preview-backdrop"' in response.text
 
 
+def test_base_template_handles_error_fragment_status(client: TestClient) -> None:
+    """Status JS recognizes .error-fragment so users hear a resting state.
+
+    #132 reviewer MED: previously, a 503 retrieval failure left the
+    status region stuck on "Searching…" because no .results-count or
+    .empty-results branch matched. The error fragment now drives a
+    "Search unavailable" announcement.
+    """
+    body = client.get("/").text
+    # Sanity: the error-fragment branch is wired into the status JS.
+    assert "error-fragment" in body
+    assert "Search unavailable" in body
+
+
+def test_base_template_focus_grab_uses_closed_to_open_guard(client: TestClient) -> None:
+    """Drawer focus-grab fires once per open, not on every chunk-swap.
+
+    #132 reviewer MED: re-grabbing focus on every preview-card click
+    was a UX trap on mobile. The data-focus-grabbed attribute now
+    gates the focus call.
+    """
+    body = client.get("/").text
+    assert "data-focus-grabbed" in body
+
+
 async def _neighbors(session: AsyncSession, chunk_id: str) -> tuple[int, int, int]:
     """Helper: returns (prev_count, target_present, next_count)."""
     import uuid as _uuid

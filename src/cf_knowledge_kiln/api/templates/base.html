@@ -51,21 +51,30 @@
           _setStatus(n === 1 ? "1 result" : n + " results");
         } else if (r.querySelector(".empty-results")) {
           _setStatus("No results");
+        } else if (r.querySelector(".error-fragment")) {
+          // #132 reviewer MED: error swaps left status stuck on
+          // "Searching…". The error fragment itself carries
+          // role="alert" so AT does announce it, but the status
+          // region must surface the resting state too.
+          _setStatus("Search unavailable");
         } else {
           _setStatus("");
         }
       }
-      // Mobile drawer focus (#120 / #130 review): when the preview
-      // panel finishes swapping with data-open set, move keyboard
-      // focus into it so Tab stays inside instead of cycling through
-      // obscured controls behind the drawer.
+      // Mobile drawer focus (#120 / #130 review): only on closed→open
+      // transition. Re-grabbing focus on every chunk-swap was a UX
+      // trap — repeated preview-card clicks kept yanking focus from
+      // wherever the user had tabbed to (#132 reviewer MED).
+      const panel = e.detail.target;
       if (
-        e.detail.target &&
-        e.detail.target.id === "preview" &&
-        e.detail.target.hasAttribute("data-open") &&
+        panel &&
+        panel.id === "preview" &&
+        panel.hasAttribute("data-open") &&
+        !panel.hasAttribute("data-focus-grabbed") &&
         window.matchMedia("(max-width: 959px)").matches
       ) {
-        e.detail.target.focus();
+        panel.setAttribute("data-focus-grabbed", "true");
+        panel.focus();
       }
     });
     // #120 telemetry gating: keyup-debounced searches add an
@@ -74,7 +83,7 @@
     // exposes the originating event on detail.triggeringEvent.
     document.addEventListener("htmx:configRequest", (e) => {
       const ev = e.detail.triggeringEvent;
-      if (ev && (ev.type === "keyup" || ev.type === "input")) {
+      if (ev && ev.type === "keyup") {
         e.detail.headers["X-Kiln-Source"] = "keyup-debounce";
       }
     });
@@ -96,6 +105,8 @@
       const p = document.getElementById("preview");
       if (!p || !p.hasAttribute("data-open")) return;
       p.removeAttribute("data-open");
+      // Allow focus-grab again next time the drawer reopens.
+      p.removeAttribute("data-focus-grabbed");
       p.innerHTML = "";
     };
     document.addEventListener("keydown", (e) => {
