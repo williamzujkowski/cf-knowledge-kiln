@@ -17,6 +17,12 @@ sources:
       - "**/node_modules/**"
       - "**/.git/**"
       - "**/*draft*.md"
+      # `docs/_eval/` is the kiln's review-precision eval corpus —
+      # deliberately contains a conflict pair, a deprecated runbook,
+      # a sensitive marker, and a prompt-injection trap. The eval
+      # harness ingests it on its own; never let it land in a real
+      # operator's index. (#108)
+      - "docs/_eval/**"
     status: active
     authority: standard
     default_owner: platform
