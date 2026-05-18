@@ -90,6 +90,7 @@ cf-push: ## Push to Cloud Foundry using ./manifest.yml.
 	@cf push -f manifest.yml
 
 build-css: ## Concatenate the static/kiln/*.css partials into static/kiln.css.
+	@printf '/* GENERATED FILE — DO NOT EDIT.\n   Source: src/cf_knowledge_kiln/api/static/kiln/_*.css\n   Regenerate with `make build-css`; `make verify-css` blocks drift in CI. */\n\n' > src/cf_knowledge_kiln/api/static/kiln.css
 	@cat src/cf_knowledge_kiln/api/static/kiln/_tokens.css \
 	     src/cf_knowledge_kiln/api/static/kiln/_base.css \
 	     src/cf_knowledge_kiln/api/static/kiln/_search.css \
@@ -99,7 +100,7 @@ build-css: ## Concatenate the static/kiln/*.css partials into static/kiln.css.
 	     src/cf_knowledge_kiln/api/static/kiln/_keyboard.css \
 	     src/cf_knowledge_kiln/api/static/kiln/_empty.css \
 	     src/cf_knowledge_kiln/api/static/kiln/_motion.css \
-	     > src/cf_knowledge_kiln/api/static/kiln.css
+	     >> src/cf_knowledge_kiln/api/static/kiln.css
 
 verify-css: ## Rebuild kiln.css from partials and fail if the file drifted.
 	@$(MAKE) build-css
