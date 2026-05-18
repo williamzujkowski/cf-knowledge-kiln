@@ -622,3 +622,209 @@ def test_search_post_doc_type_multi_select(
     )
     assert response.status_code == 200
     assert "result-card" not in response.text
+
+
+# ─── #119: document-preview side panel ──────────────────────────────
+
+
+@pytest.fixture
+def long_corpus(tmp_path: Path) -> Path:
+    """Corpus with one doc large enough to chunk into ≥3 pieces.
+
+    Required for the preview neighbor tests — a single-chunk doc would
+    give us no prev/next to assert on.
+    """
+    body = "\n\n".join(f"## Section {i}\n\n" + ("widgets " * 80) for i in range(6))
+    (tmp_path / "long.md").write_text(f"# Long Doc\n\n{body}\n")
+    return tmp_path
+
+
+def test_search_page_renders_preview_panel_slot(client: TestClient) -> None:
+    """The search shell mounts an empty #preview slot for HTMX to fill."""
+    response = client.get("/")
+    body = response.text
+    assert 'id="preview"' in body
+    assert "preview-panel" in body
+    assert "Open a result to preview" in body
+
+
+def test_search_result_card_title_targets_preview(
+    client: TestClient, session: AsyncSession, small_corpus: Path
+) -> None:
+    """Each result title is an hx-get button against /preview/<chunk_id>."""
+    asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
+    response = client.post("/search", data={"query": "widgets", "status": ["active"]})
+    assert response.status_code == 200
+    body = response.text
+    assert "result-title-button" in body
+    assert 'hx-target="#preview"' in body
+    # UUIDs are hex+dashes, exact value is data-dependent — assert the route shape.
+    assert 'hx-get="/preview/' in body
+
+
+def test_preview_endpoint_returns_fragment_with_chunk(
+    client: TestClient, session: AsyncSession, small_corpus: Path
+) -> None:
+    """GET /preview/<chunk_id> returns the panel fragment for that chunk."""
+    asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
+
+    async def _first_chunk_id() -> str:
+        from cf_knowledge_kiln.db.models import DocumentChunk
+
+        row = (
+            await session.execute(
+                select(DocumentChunk).join(Document).where(Document.path == "beta.md")
+            )
+        ).scalar_one()
+        return str(row.id)
+
+    cid = asyncio.get_event_loop().run_until_complete(_first_chunk_id())
+    response = client.get(f"/preview/{cid}")
+    assert response.status_code == 200
+    body = response.text
+    # Self-contained partial — no full document chrome.
+    assert "<html" not in body
+    # Doc metadata renders.
+    assert "Beta" in body
+    assert "beta.md" in body
+    # The target-chunk body renders the seeded content.
+    assert "widgets" in body
+    # Selected-chunk label is present (sets the visual anchor).
+    assert "preview-target" in body
+
+
+def test_preview_endpoint_404_on_unknown_chunk(client: TestClient) -> None:
+    """A well-formed but unknown chunk id renders a not-found fragment."""
+    import uuid
+
+    response = client.get(f"/preview/{uuid.uuid4()}")
+    assert response.status_code == 404
+    body = response.text
+    assert "preview" in body
+    assert "no longer available" in body
+
+
+def test_preview_endpoint_400_on_malformed_chunk_id(client: TestClient) -> None:
+    """Garbage in the path renders the not-found fragment, not a 500."""
+    response = client.get("/preview/not-a-uuid")
+    assert response.status_code == 404
+    assert "no longer available" in response.text
+
+
+def test_preview_endpoint_escapes_chunk_content(
+    client: TestClient, session: AsyncSession, tmp_path: Path
+) -> None:
+    """Stored chunk text with HTML special chars renders escaped."""
+    (tmp_path / "xss.md").write_text(
+        textwrap.dedent(
+            """\
+            # XSS Test
+
+            Inline <script>alert('x')</script> in the body widgets.
+            """
+        )
+    )
+    asyncio.get_event_loop().run_until_complete(_seed(session, tmp_path))
+
+    async def _first_chunk_id() -> str:
+        from cf_knowledge_kiln.db.models import DocumentChunk
+
+        row = (
+            await session.execute(
+                select(DocumentChunk).join(Document).where(Document.path == "xss.md")
+            )
+        ).scalar_one()
+        return str(row.id)
+
+    cid = asyncio.get_event_loop().run_until_complete(_first_chunk_id())
+    response = client.get(f"/preview/{cid}")
+    assert response.status_code == 200
+    # The literal script tag must be escaped, not rendered as HTML.
+    assert "<script>alert" not in response.text
+    assert "&lt;script&gt;" in response.text
+
+
+def test_preview_endpoint_includes_neighbors_when_present(
+    client: TestClient, session: AsyncSession, long_corpus: Path
+) -> None:
+    """A middle chunk shows prev + next neighbor previews."""
+    asyncio.get_event_loop().run_until_complete(_seed(session, long_corpus))
+
+    async def _middle_chunk_id() -> str:
+        from cf_knowledge_kiln.db.models import DocumentChunk
+
+        rows = list(
+            (
+                await session.execute(
+                    select(DocumentChunk)
+                    .join(Document)
+                    .where(Document.path == "long.md")
+                    .order_by(DocumentChunk.chunk_index)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(rows) >= 3, "fixture must produce ≥3 chunks for neighbor coverage"
+        return str(rows[len(rows) // 2].id)
+
+    cid = asyncio.get_event_loop().run_until_complete(_middle_chunk_id())
+    response = client.get(f"/preview/{cid}")
+    assert response.status_code == 200
+    body = response.text
+    # Both neighbor sections render.
+    assert "preview-neighbor-prev" in body
+    assert "preview-neighbor-next" in body
+
+
+async def _neighbors(session: AsyncSession, chunk_id: str) -> tuple[int, int, int]:
+    """Helper: returns (prev_count, target_present, next_count)."""
+    import uuid as _uuid
+
+    from cf_knowledge_kiln.db.repositories import ChunksRepository
+
+    prev, target, nxt = await ChunksRepository(session).neighbors(_uuid.UUID(chunk_id))
+    return (len(prev), 1 if target is not None else 0, len(nxt))
+
+
+def test_chunks_repository_neighbors_returns_prev_target_next(
+    session: AsyncSession, long_corpus: Path
+) -> None:
+    """Repo method returns (prev, target, next) for a middle chunk."""
+    asyncio.get_event_loop().run_until_complete(_seed(session, long_corpus))
+
+    async def _check() -> None:
+        from cf_knowledge_kiln.db.models import DocumentChunk
+        from cf_knowledge_kiln.db.repositories import ChunksRepository
+
+        rows = list(
+            (
+                await session.execute(
+                    select(DocumentChunk)
+                    .join(Document)
+                    .where(Document.path == "long.md")
+                    .order_by(DocumentChunk.chunk_index)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(rows) >= 3
+        mid = rows[len(rows) // 2]
+        prev, target, nxt = await ChunksRepository(session).neighbors(mid.id)
+        assert target is not None
+        assert target.id == mid.id
+        assert len(prev) == 1
+        assert prev[0].chunk_index == mid.chunk_index - 1
+        assert len(nxt) == 1
+        assert nxt[0].chunk_index == mid.chunk_index + 1
+
+        # First chunk has no prev.
+        p0, t0, n0 = await ChunksRepository(session).neighbors(rows[0].id)
+        assert t0 is not None and len(p0) == 0 and len(n0) == 1
+
+        # Last chunk has no next.
+        pl, tl, nl = await ChunksRepository(session).neighbors(rows[-1].id)
+        assert tl is not None and len(pl) == 1 and len(nl) == 0
+
+    asyncio.get_event_loop().run_until_complete(_check())

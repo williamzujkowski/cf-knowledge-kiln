@@ -1,0 +1,73 @@
+{# Preview fragment for #preview panel. Renders the selected chunk
+   with its neighbors trimmed to ~500 chars. The whole panel is the
+   HTMX swap target, so we re-render the close button + heading on
+   every request — keeps the markup self-contained for the partial. #}
+<article class="preview" aria-label="Document preview">
+  <header class="preview-head">
+    <span class="preview-eyebrow" aria-hidden="true">Preview</span>
+    <button
+      type="button"
+      class="preview-close"
+      aria-label="Close preview"
+      onclick="(function(p){p.removeAttribute('data-open');p.innerHTML='';})(document.getElementById('preview'))">
+      <span aria-hidden="true">×</span>
+    </button>
+  </header>
+
+  {% if missing %}
+    <p class="preview-missing"><em>That chunk is no longer available. Try another result.</em></p>
+  {% else %}
+    <section class="preview-doc">
+      <h2 class="preview-title">{{ doc.title or '(unknown)' }}</h2>
+      <p class="preview-meta">
+        {% if doc.repo and doc.path %}
+          <span class="preview-source">{{ doc.repo }}/{{ doc.path }}</span>
+        {% endif %}
+        {% if doc.status %}
+          <span class="preview-status status-{{ doc.status }}">{{ doc.status }}</span>
+        {% endif %}
+      </p>
+      {% if target.heading_path %}
+        <p class="preview-heading-path">
+          {% for part in target.heading_path %}<span>{{ part }}</span>{% if not loop.last %} <span class="sep" aria-hidden="true">›</span> {% endif %}{% endfor %}
+        </p>
+      {% endif %}
+    </section>
+
+    {% if prev %}
+      <details class="preview-neighbor preview-neighbor-prev">
+        <summary>
+          <span class="preview-neighbor-label">← Previous chunk</span>
+          <span class="preview-neighbor-index">#{{ '%02d' % (prev[-1].chunk_index + 1) }}</span>
+        </summary>
+        <pre class="preview-body preview-body-neighbor">{{ prev[-1].content }}{% if prev[-1].truncated %}…{% endif %}</pre>
+      </details>
+    {% endif %}
+
+    <section class="preview-target" aria-label="Selected chunk">
+      <p class="preview-target-label"><em>Selected chunk</em> <span class="preview-target-index">#{{ '%02d' % (target.chunk_index + 1) }}</span></p>
+      <pre class="preview-body">{{ target.content }}</pre>
+    </section>
+
+    {% if next %}
+      <details class="preview-neighbor preview-neighbor-next">
+        <summary>
+          <span class="preview-neighbor-label">Next chunk →</span>
+          <span class="preview-neighbor-index">#{{ '%02d' % (next[0].chunk_index + 1) }}</span>
+        </summary>
+        <pre class="preview-body preview-body-neighbor">{{ next[0].content }}{% if next[0].truncated %}…{% endif %}</pre>
+      </details>
+    {% endif %}
+
+    {% if doc and doc.source_url and (doc.source_url.startswith('https://') or doc.source_url.startswith('http://')) %}
+      <footer class="preview-foot">
+        <a class="preview-source-link"
+           href="{{ doc.source_url }}"
+           target="_blank"
+           rel="noopener noreferrer">
+          Open canonical source<span aria-hidden="true">&nbsp;↗</span>
+        </a>
+      </footer>
+    {% endif %}
+  {% endif %}
+</article>

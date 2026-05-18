@@ -33,10 +33,20 @@
     // coarse for an inline form replacement.
     document.addEventListener("htmx:beforeSwap", (e) => {
       const s = e.detail.xhr.status;
-      if (s === 429 || s === 503 || s === 400) {
+      // 404 included so the preview panel's not-found fragment swaps in
+      // instead of being silently dropped by HTMX 2.x's default behavior.
+      if (s === 429 || s === 503 || s === 400 || s === 404) {
         e.detail.shouldSwap = true;
         e.detail.isError = false;
       }
+    });
+    // #119 preview panel: Esc clears it (mobile drawer + desktop rail).
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      const p = document.getElementById("preview");
+      if (!p || !p.hasAttribute("data-open")) return;
+      p.removeAttribute("data-open");
+      p.innerHTML = "";
     });
   </script>
 </head>
