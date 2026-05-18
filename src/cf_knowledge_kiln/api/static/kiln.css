@@ -32,6 +32,10 @@
   --teal-tint:    #d5e3e0;
   --gold:         #8a6b1d;
   --gold-tint:    #f1e3bf;
+  /* Deprecation-stripe color separated from --oxblood so the dark
+     mode override can boost it (#138 reviewer LOW). At 0.04 opacity
+     the LIGHT oxblood RGB was invisible against a dark paper bg. */
+  --oxblood-stripe: rgba(141, 42, 31, 0.04);
 
   /* Type */
   --serif: "Fraunces", "Iowan Old Style", "Palatino Linotype", Palatino,
@@ -72,6 +76,9 @@
     --teal-tint:    #1a2a2a;
     --gold:         #d4b573;
     --gold-tint:    #2a2418;
+    /* Dark-mode stripe uses the bright dark-mode oxblood RGB so the
+       deprecation pattern remains visible against #101418. */
+    --oxblood-stripe: rgba(232, 147, 128, 0.08);
   }
 }
 
@@ -797,7 +804,7 @@ input:focus-visible,
     repeating-linear-gradient(
       135deg,
       transparent 0 14px,
-      rgba(141, 42, 31, 0.04) 14px 15px);
+      var(--oxblood-stripe) 14px 15px);
 }
 
 .result-card.status-deprecated::before,
@@ -1174,7 +1181,10 @@ a.source-link:focus-visible {
   font-family: var(--mono);
   font-style: normal;
   font-size: 0.7rem;
-  background: var(--paper);
+  /* --paper-soft sits one shade lighter than --paper-dim (the banner
+     background), so the chip reads as a raised tile in both light and
+     dark mode (#138 reviewer LOW — kbd was invisible against banner). */
+  background: var(--paper-soft, var(--paper));
   border: 1px solid var(--rule);
   border-block-end-width: 2px;
   padding: 0.02rem 0.28rem;
