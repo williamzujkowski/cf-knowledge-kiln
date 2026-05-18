@@ -1,0 +1,141 @@
+/* ─── Empty states ─────────────────────────────────────────────── */
+
+.empty-hint,
+.empty-results {
+  font-family: var(--serif);
+  font-style: italic;
+  color: var(--ink-faded);
+  text-align: center;
+  margin: 2.5rem 0;
+  font-size: 1.05rem;
+  font-variation-settings: "opsz" 36;
+}
+
+.empty-query {
+  font-style: normal;
+  font-family: var(--mono);
+  font-size: 0.95em;
+  color: var(--ink);
+}
+
+.empty-suggestion {
+  display: block;
+  font-size: 0.9rem;
+  margin-block-start: 0.5rem;
+  color: var(--ink-faded);
+}
+/* ─── #123 Empty + edge states ─────────────────────────────────── */
+
+/* Empty state: italic invitation + exemplar prompts. Reads as a
+   page-opening editorial question, not a banner. */
+.empty-state {
+  margin-block: 1.5rem 1.25rem;
+  padding-block-start: 0.75rem;
+}
+
+.empty-invite {
+  margin: 0 0 1rem;
+  font-family: var(--serif);
+  font-size: 1.25rem;
+  line-height: 1.35;
+  color: var(--ink-soft);
+  font-variation-settings: "opsz" 48, "SOFT" 40;
+}
+.empty-invite em {
+  font-style: italic;
+  color: var(--ink);
+}
+
+.empty-exemplars {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem 1.1rem;
+  font-family: var(--serif);
+  font-size: 0.92rem;
+}
+.empty-exemplars li { margin: 0; }
+.empty-exemplar {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-family: var(--serif);
+  font-style: italic;
+  color: var(--teal);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-decoration-color: var(--rule-strong);
+  text-underline-offset: 0.18em;
+  transition: color 120ms ease, text-decoration-color 120ms ease;
+}
+.empty-exemplar:hover,
+.empty-exemplar:focus-visible {
+  color: var(--oxblood);
+  text-decoration-color: var(--oxblood);
+}
+.empty-exemplar:focus-visible {
+  outline: 2px solid var(--oxblood);
+  outline-offset: 3px;
+  border-radius: 1px;
+}
+
+/* No-results widen actions: one row of inline-flex buttons that POST
+   widened status filters. Style matches the inline-italic feedback
+   widget so the voice stays consistent. */
+.empty-results-line {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 1rem;
+  color: var(--ink);
+}
+.empty-results-line .empty-query {
+  font-style: italic;
+  color: var(--ink-soft);
+}
+.empty-actions {
+  list-style: none;
+  margin: 0.55rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem 1rem;
+  font-family: var(--serif);
+  font-size: 0.88rem;
+}
+.empty-actions li { margin: 0; }
+.widen-form { display: inline; margin: 0; }
+.widen-button {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-family: var(--serif);
+  font-style: italic;
+  color: var(--teal);
+  cursor: pointer;
+  border-block-end: 1px solid var(--rule);
+  transition: color 120ms ease, border-color 120ms ease;
+}
+.widen-button:hover,
+.widen-button:focus-visible {
+  color: var(--oxblood);
+  border-block-end-color: var(--oxblood);
+}
+.widen-button:focus-visible {
+  outline: 2px solid var(--oxblood);
+  outline-offset: 3px;
+  border-radius: 1px;
+}
+.empty-suggestion {
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+  font-style: italic;
+  color: var(--ink-faded);
+}

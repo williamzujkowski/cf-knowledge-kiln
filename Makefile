@@ -19,7 +19,7 @@ PKG       := cf_knowledge_kiln
 
 .PHONY: help bootstrap install lint format typecheck test test-unit test-integration \
         eval security sbom scan openapi-lint run run-worker migrate migrate-down \
-        ingest cf-push verify clean
+        ingest cf-push verify clean build-css verify-css
 
 help: ## Show this help.
 	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z_-]+:.*?##/ {printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -89,7 +89,27 @@ cf-push: ## Push to Cloud Foundry using ./manifest.yml.
 	@command -v cf >/dev/null 2>&1 || { echo "cf CLI not installed"; exit 1; }
 	@cf push -f manifest.yml
 
-verify: lint typecheck test openapi-lint ## The local quality gate. Run before pushing.
+build-css: ## Concatenate the static/kiln/*.css partials into static/kiln.css.
+	@cat src/cf_knowledge_kiln/api/static/kiln/_tokens.css \
+	     src/cf_knowledge_kiln/api/static/kiln/_base.css \
+	     src/cf_knowledge_kiln/api/static/kiln/_search.css \
+	     src/cf_knowledge_kiln/api/static/kiln/_results.css \
+	     src/cf_knowledge_kiln/api/static/kiln/_feedback.css \
+	     src/cf_knowledge_kiln/api/static/kiln/_preview.css \
+	     src/cf_knowledge_kiln/api/static/kiln/_keyboard.css \
+	     src/cf_knowledge_kiln/api/static/kiln/_empty.css \
+	     src/cf_knowledge_kiln/api/static/kiln/_motion.css \
+	     > src/cf_knowledge_kiln/api/static/kiln.css
+
+verify-css: ## Rebuild kiln.css from partials and fail if the file drifted.
+	@$(MAKE) build-css
+	@git diff --exit-code src/cf_knowledge_kiln/api/static/kiln.css \
+	  || { echo ""; \
+	       echo "✗ kiln.css is out of sync with src/cf_knowledge_kiln/api/static/kiln/*.css partials."; \
+	       echo "  Run 'make build-css' and commit the regenerated kiln.css."; \
+	       exit 1; }
+
+verify: lint typecheck test openapi-lint verify-css ## The local quality gate. Run before pushing.
 	@echo ""
 	@echo "✓ verify passed"
 

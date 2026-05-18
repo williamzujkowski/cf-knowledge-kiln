@@ -1,0 +1,93 @@
+/* cf-knowledge-kiln — "Editorial Reference" stylesheet for Phase 6.
+ *
+ * Aesthetic: cross between an academic journal, a library card
+ * catalog, and a tasteful editorial site. The product is cited
+ * search over indexed documentation — the visual language should
+ * read as "reference work", not "chat-bot SaaS".
+ *
+ * Single-family typography (Fraunces variable, optical-size axis)
+ * for cohesion. JetBrains Mono for paths + scores. Warm-paper
+ * ivory background, deep ink, single oxblood accent for warnings
+ * and deprecation. Hairline rules instead of boxes. Numbered
+ * results in a gutter. No framework, no build step.
+ */
+
+/* ─── Design tokens ────────────────────────────────────────────── */
+
+:root {
+  /* Light palette derived from "Monospace Light" terminal theme
+     (WCAG AAA, ANSI-legible — williamzujkowski/oklch-terminal-themes).
+     Cool blue-white paper, slate ink. Every paired ratio passes AA
+     normal text; the ink/paper pair is AAA.
+       ink       on paper:  9.5:1   AAA
+       ink-soft  on paper:  7.45:1  AAA
+       ink-faded on paper:  5.26:1  AA
+       oxblood   on paper:  5.31:1  AA
+       teal      on paper:  5.05:1  AA
+       gold      on paper:  ~5.3:1  AA
+     Closes #128 (ink-faded was 3.73:1) and #136 (gold was 4.44:1). */
+  --paper:        #f4f7fd;
+  --paper-soft:   #ffffff;
+  --paper-dim:    #e7ecf5;
+  --ink:          #333e4f;
+  --ink-soft:     #475365;
+  --ink-faded:    #5d6a7d;
+  --rule:         #c8d2e0;
+  --rule-strong:  #9aa5b8;
+
+  /* Accents — ANSI brights from monospace-light, picked for AA-pass. */
+  --oxblood:      #a52430;
+  --oxblood-tint: #f3d7da;
+  --teal:         #00607e;
+  --teal-tint:    #cde3ed;
+  --gold:         #904b1a;
+  --gold-tint:    #f1dec8;
+  /* Deprecation-stripe carries the oxblood RGB so the dark-mode
+     override can boost the alpha for visibility against #212121. */
+  --oxblood-stripe: rgba(165, 36, 48, 0.06);
+
+  /* Type */
+  --serif: "Fraunces", "Iowan Old Style", "Palatino Linotype", Palatino,
+           "Book Antiqua", Georgia, serif;
+  --mono:  "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+
+  /* Geometry */
+  --measure:    44rem;          /* reading column */
+  --gutter:     2.75rem;         /* index-number gutter */
+  --rule-thin:  1px;
+  --rule-mid:   2px;
+}
+
+/* Dark palette derived from "Dracula+" terminal theme (WCAG AAA,
+   ANSI-legible). Near-black paper + warm white ink + the canonical
+   dracula accent set; ink/paper is AAA, every accent passes AA.
+   Verified ratios (foreground on #212121):
+     --ink      #f8f8f2  → 15.11:1  AAA  (theme-published)
+     --ink-soft #c5c5bc  → 9.27:1   AAA
+     --ink-faded#8d8d8d  → 4.85:1   AA   (above the 4.5 threshold)
+     --oxblood  #ff5555  → 5.12:1   AA
+     --teal     #8be9fd  → 11.63:1  AAA
+     --gold     #ffcb6b  → 10.74:1  AAA
+   Focus ring on --paper #212121 stays above 3:1 in both directions. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper:        #212121;
+    --paper-soft:   #2d2d2d;
+    --paper-dim:    #181818;
+    --ink:          #f8f8f2;
+    --ink-soft:     #c5c5bc;
+    --ink-faded:    #8d8d8d;
+    --rule:         #3a3a3a;
+    --rule-strong:  #545454;
+
+    --oxblood:      #ff5555;
+    --oxblood-tint: #3a1f1f;
+    --teal:         #8be9fd;
+    --teal-tint:    #1f3a44;
+    --gold:         #ffcb6b;
+    --gold-tint:    #3a2e1f;
+    /* Dark-mode stripe uses the bright dracula red RGB so the
+       deprecation pattern remains visible against #212121. */
+    --oxblood-stripe: rgba(255, 85, 85, 0.06);
+  }
+}

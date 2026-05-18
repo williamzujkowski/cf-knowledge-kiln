@@ -1,0 +1,118 @@
+/* ─── #121 Keyboard nav: cheatsheet + toast + expand toggle ────── */
+
+/* Roving-tabindex focus ring — same hairline oxblood as native focus
+   but on the result-card itself, not the inner button. */
+.result-card[data-card]:focus,
+.result-card[data-card]:focus-visible {
+  outline: 2px solid var(--oxblood);
+  outline-offset: -2px;
+  background: linear-gradient(to right, var(--oxblood-tint), transparent 35%);
+}
+
+/* `o` toggles full chunk text. Default state shows the trimmed
+   excerpt; data-expanded swaps which paragraph is hidden. */
+.result-card[data-expanded] .excerpt-trimmed { display: none; }
+.result-card[data-expanded] .excerpt-full,
+.result-card[data-expanded] .excerpt-full[hidden] { display: block; }
+.excerpt-full { white-space: pre-wrap; }
+
+/* Cheatsheet overlay. Quiet, centered, low scrim. */
+.cheatsheet {
+  position: fixed;
+  inset: 0;
+  display: none;
+  z-index: 50;
+  background: rgba(20, 18, 14, 0.36);
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+.cheatsheet[data-open] { display: flex; }
+
+.cheatsheet-card {
+  background: var(--paper);
+  border: 1px solid var(--rule-strong);
+  box-shadow: 0 24px 64px -12px rgba(20, 18, 14, 0.3);
+  padding: 1.5rem 1.8rem 1.6rem;
+  max-inline-size: min(28rem, 92vw);
+  inline-size: 100%;
+  font-family: var(--serif);
+}
+.cheatsheet-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-block-end: 1rem;
+}
+.cheatsheet-title {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 1.2rem;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  font-variation-settings: "opsz" 36;
+}
+.cheatsheet-close {
+  background: transparent;
+  border: 0;
+  font-family: var(--serif);
+  font-size: 1.4rem;
+  line-height: 1;
+  color: var(--ink-soft);
+  cursor: pointer;
+  padding: 0.1rem 0.4rem;
+}
+.cheatsheet-close:hover { color: var(--ink); }
+.cheatsheet-list {
+  margin: 0;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.55rem 1.2rem;
+  font-family: var(--serif);
+  font-size: 0.92rem;
+}
+.cheatsheet-row { display: contents; }
+.cheatsheet-row dt {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  text-align: end;
+  align-self: center;
+}
+.cheatsheet-row dd { margin: 0; color: var(--ink); }
+.cheatsheet kbd {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  background: var(--paper-soft, var(--paper));
+  border: 1px solid var(--rule);
+  border-block-end-width: 2px;
+  padding: 0.05rem 0.32rem;
+  border-radius: 2px;
+  color: var(--ink);
+}
+
+/* Toast: bottom-center, fades in only when data-visible is set. */
+#toast {
+  position: fixed;
+  inset-block-end: 1.5rem;
+  inset-inline: 0;
+  margin-inline: auto;
+  max-inline-size: max-content;
+  padding: 0.55rem 1rem;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--serif);
+  font-size: 0.85rem;
+  font-style: italic;
+  border-radius: 2px;
+  box-shadow: 0 6px 20px -6px rgba(20, 18, 14, 0.4);
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+  transition: opacity 180ms ease, transform 180ms ease;
+  z-index: 60;
+}
+#toast[data-visible] {
+  opacity: 1;
+  transform: translateY(0);
+}

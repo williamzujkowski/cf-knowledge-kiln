@@ -1,0 +1,51 @@
+@keyframes kiln-card-rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  html { scroll-behavior: auto; }
+  .htmx-bar.htmx-request { opacity: 1; animation: none; background-position: 50% 0; }
+  /* #124 explicit overrides for the staggered reveal + hover hairline.
+     Cards render at final state immediately; hover decoration becomes
+     a static rule rather than a transform. */
+  .result-card { animation: none !important; opacity: 1 !important; transform: none !important; }
+  .result-card::after { transition: none !important; }
+}
+
+/* ─── Small screens ────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+  body { font-size: 16px; }
+  main,
+  header.masthead,
+  aside.notice,
+  footer.colophon { padding-inline: 1rem; }
+
+  .query-row {
+    grid-template-columns: 1fr;
+    gap: 0.4rem;
+  }
+  .query-submit { justify-self: end; }
+
+  .result-card {
+    grid-template-columns: 1.75rem 1fr;
+  }
+  .result-index {
+    padding-block-start: 0.4rem;
+    font-size: 0.7rem;
+  }
+
+  .colophon {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+}

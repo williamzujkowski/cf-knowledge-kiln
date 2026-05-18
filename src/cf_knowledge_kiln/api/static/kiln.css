@@ -91,7 +91,6 @@
     --oxblood-stripe: rgba(255, 85, 85, 0.06);
   }
 }
-
 /* ─── Reset & page ─────────────────────────────────────────────── */
 
 *,
@@ -318,7 +317,77 @@ input:focus-visible,
   margin-inline-end: 0.5rem;
   font-weight: 600;
 }
+/* Shortcut hint banner — single quiet line under the masthead. */
+.shortcut-hint {
+  margin: 0;
+  padding: 0.45rem 1.5rem;
+  font-family: var(--serif);
+  font-size: 0.78rem;
+  font-style: italic;
+  color: var(--ink-faded);
+  text-align: center;
+  background: var(--paper-dim, transparent);
+  border-block-end: 1px dashed var(--rule);
+  transition: opacity 180ms ease, max-height 220ms ease, padding 220ms ease;
+}
+.shortcut-hint kbd {
+  font-family: var(--mono);
+  font-style: normal;
+  font-size: 0.7rem;
+  /* --paper-soft sits one shade lighter than --paper-dim (the banner
+     background), so the chip reads as a raised tile in both light and
+     dark mode (#138 reviewer LOW — kbd was invisible against banner). */
+  background: var(--paper-soft, var(--paper));
+  border: 1px solid var(--rule);
+  border-block-end-width: 2px;
+  padding: 0.02rem 0.28rem;
+  border-radius: 2px;
+  color: var(--ink);
+}
+.shortcut-hint[data-dismissed] {
+  opacity: 0;
+  max-height: 0;
+  padding-block: 0;
+  border-block-end: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+/* ─── Colophon (footer) ────────────────────────────────────────── */
 
+.colophon {
+  margin-block: 4rem 2.5rem;
+  padding-block-start: 1.25rem;
+  border-block-start: 1px solid var(--rule);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 1rem;
+  font-size: 0.85rem;
+  color: var(--ink-faded);
+}
+
+.colophon nav {
+  display: inline-flex;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+.colophon nav a {
+  color: var(--ink-soft);
+}
+
+.set-mark {
+  margin: 0;
+  font-family: var(--serif);
+  font-style: italic;
+  font-variation-settings: "opsz" 14;
+}
+
+.set-mark span {
+  margin-inline-end: 0.3rem;
+  color: var(--rule-strong);
+}
 /* ─── Search form ──────────────────────────────────────────────── */
 
 .search-form {
@@ -625,7 +694,27 @@ input:focus-visible,
   font-family: var(--mono);
   font-size: 0.85rem;
 }
+/* ─── #120 Status region ───────────────────────────────────────── */
 
+/* Sibling status region for screen-reader announcements. Visually
+   subtle; the text mirrors what the user sees in #results but is
+   the only thing AT reads on each search. visually-hidden by default
+   when empty, but rendered as a quiet eyebrow when populated so
+   sighted users get the same feedback. */
+.search-status {
+  min-block-size: 1.2rem;
+  margin-block: 0.4rem 0.6rem;
+  font-family: var(--serif);
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  font-style: italic;
+  font-variation-settings: "opsz" 14;
+}
+.search-status:empty {
+  /* Collapse silently when there's nothing to say. */
+  margin-block: 0;
+  min-block-size: 0;
+}
 /* ─── Results ──────────────────────────────────────────────────── */
 
 .results {
@@ -705,11 +794,6 @@ input:focus-visible,
 .result-card:hover::after,
 .result-card:focus-within::after {
   transform: scaleX(1);
-}
-
-@keyframes kiln-card-rise {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
 }
 
 /* #122: numbered gutter leans in — italic Fraunces with the largest
@@ -1020,34 +1104,6 @@ a.source-link:focus-visible {
   background: var(--paper-dim);
   border-inline-start-color: var(--ink-faded);
 }
-
-/* ─── Empty states ─────────────────────────────────────────────── */
-
-.empty-hint,
-.empty-results {
-  font-family: var(--serif);
-  font-style: italic;
-  color: var(--ink-faded);
-  text-align: center;
-  margin: 2.5rem 0;
-  font-size: 1.05rem;
-  font-variation-settings: "opsz" 36;
-}
-
-.empty-query {
-  font-style: normal;
-  font-family: var(--mono);
-  font-size: 0.95em;
-  color: var(--ink);
-}
-
-.empty-suggestion {
-  display: block;
-  font-size: 0.9rem;
-  margin-block-start: 0.5rem;
-  color: var(--ink-faded);
-}
-
 /* ─── Error fragment (#122 margin-note voice) ─────────────────── */
 
 /* The .notice class already carries the oxblood-rule + italic
@@ -1068,159 +1124,6 @@ a.source-link:focus-visible {
 .notice-alert .error-message {
   color: var(--oxblood);
 }
-
-/* ─── #123 Empty + edge states ─────────────────────────────────── */
-
-/* Empty state: italic invitation + exemplar prompts. Reads as a
-   page-opening editorial question, not a banner. */
-.empty-state {
-  margin-block: 1.5rem 1.25rem;
-  padding-block-start: 0.75rem;
-}
-
-.empty-invite {
-  margin: 0 0 1rem;
-  font-family: var(--serif);
-  font-size: 1.25rem;
-  line-height: 1.35;
-  color: var(--ink-soft);
-  font-variation-settings: "opsz" 48, "SOFT" 40;
-}
-.empty-invite em {
-  font-style: italic;
-  color: var(--ink);
-}
-
-.empty-exemplars {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.55rem 1.1rem;
-  font-family: var(--serif);
-  font-size: 0.92rem;
-}
-.empty-exemplars li { margin: 0; }
-.empty-exemplar {
-  appearance: none;
-  background: transparent;
-  border: 0;
-  padding: 0;
-  margin: 0;
-  font: inherit;
-  font-family: var(--serif);
-  font-style: italic;
-  color: var(--teal);
-  cursor: pointer;
-  text-decoration: underline;
-  text-decoration-style: dotted;
-  text-decoration-color: var(--rule-strong);
-  text-underline-offset: 0.18em;
-  transition: color 120ms ease, text-decoration-color 120ms ease;
-}
-.empty-exemplar:hover,
-.empty-exemplar:focus-visible {
-  color: var(--oxblood);
-  text-decoration-color: var(--oxblood);
-}
-.empty-exemplar:focus-visible {
-  outline: 2px solid var(--oxblood);
-  outline-offset: 3px;
-  border-radius: 1px;
-}
-
-/* No-results widen actions: one row of inline-flex buttons that POST
-   widened status filters. Style matches the inline-italic feedback
-   widget so the voice stays consistent. */
-.empty-results-line {
-  margin: 0;
-  font-family: var(--serif);
-  font-size: 1rem;
-  color: var(--ink);
-}
-.empty-results-line .empty-query {
-  font-style: italic;
-  color: var(--ink-soft);
-}
-.empty-actions {
-  list-style: none;
-  margin: 0.55rem 0 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.55rem 1rem;
-  font-family: var(--serif);
-  font-size: 0.88rem;
-}
-.empty-actions li { margin: 0; }
-.widen-form { display: inline; margin: 0; }
-.widen-button {
-  appearance: none;
-  background: transparent;
-  border: 0;
-  padding: 0;
-  font: inherit;
-  font-family: var(--serif);
-  font-style: italic;
-  color: var(--teal);
-  cursor: pointer;
-  border-block-end: 1px solid var(--rule);
-  transition: color 120ms ease, border-color 120ms ease;
-}
-.widen-button:hover,
-.widen-button:focus-visible {
-  color: var(--oxblood);
-  border-block-end-color: var(--oxblood);
-}
-.widen-button:focus-visible {
-  outline: 2px solid var(--oxblood);
-  outline-offset: 3px;
-  border-radius: 1px;
-}
-.empty-suggestion {
-  margin: 0.5rem 0 0;
-  font-size: 0.85rem;
-  font-style: italic;
-  color: var(--ink-faded);
-}
-
-/* Shortcut hint banner — single quiet line under the masthead. */
-.shortcut-hint {
-  margin: 0;
-  padding: 0.45rem 1.5rem;
-  font-family: var(--serif);
-  font-size: 0.78rem;
-  font-style: italic;
-  color: var(--ink-faded);
-  text-align: center;
-  background: var(--paper-dim, transparent);
-  border-block-end: 1px dashed var(--rule);
-  transition: opacity 180ms ease, max-height 220ms ease, padding 220ms ease;
-}
-.shortcut-hint kbd {
-  font-family: var(--mono);
-  font-style: normal;
-  font-size: 0.7rem;
-  /* --paper-soft sits one shade lighter than --paper-dim (the banner
-     background), so the chip reads as a raised tile in both light and
-     dark mode (#138 reviewer LOW — kbd was invisible against banner). */
-  background: var(--paper-soft, var(--paper));
-  border: 1px solid var(--rule);
-  border-block-end-width: 2px;
-  padding: 0.02rem 0.28rem;
-  border-radius: 2px;
-  color: var(--ink);
-}
-.shortcut-hint[data-dismissed] {
-  opacity: 0;
-  max-height: 0;
-  padding-block: 0;
-  border-block-end: 0;
-  overflow: hidden;
-  pointer-events: none;
-}
-
 /* ─── #122 Feedback widget (inline italic phrase) ──────────────── */
 
 /* The widget reads as a one-line editorial caption at the foot of
@@ -1340,66 +1243,6 @@ a.source-link:focus-visible {
   color: var(--ink);
   font-style: italic;
 }
-
-/* ─── Colophon (footer) ────────────────────────────────────────── */
-
-.colophon {
-  margin-block: 4rem 2.5rem;
-  padding-block-start: 1.25rem;
-  border-block-start: 1px solid var(--rule);
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 1rem;
-  font-size: 0.85rem;
-  color: var(--ink-faded);
-}
-
-.colophon nav {
-  display: inline-flex;
-  gap: 0.5rem;
-  align-items: baseline;
-}
-
-.colophon nav a {
-  color: var(--ink-soft);
-}
-
-.set-mark {
-  margin: 0;
-  font-family: var(--serif);
-  font-style: italic;
-  font-variation-settings: "opsz" 14;
-}
-
-.set-mark span {
-  margin-inline-end: 0.3rem;
-  color: var(--rule-strong);
-}
-
-/* ─── #120 Status region ───────────────────────────────────────── */
-
-/* Sibling status region for screen-reader announcements. Visually
-   subtle; the text mirrors what the user sees in #results but is
-   the only thing AT reads on each search. visually-hidden by default
-   when empty, but rendered as a quiet eyebrow when populated so
-   sighted users get the same feedback. */
-.search-status {
-  min-block-size: 1.2rem;
-  margin-block: 0.4rem 0.6rem;
-  font-family: var(--serif);
-  font-size: 0.78rem;
-  color: var(--ink-soft);
-  font-style: italic;
-  font-variation-settings: "opsz" 14;
-}
-.search-status:empty {
-  /* Collapse silently when there's nothing to say. */
-  margin-block: 0;
-  min-block-size: 0;
-}
-
 /* ─── #119 Preview panel ───────────────────────────────────────── */
 
 /* The .search-grid wraps the results list + the preview panel. Above
@@ -1647,7 +1490,6 @@ a.source-link:focus-visible {
 @media (min-width: 960px) {
   #preview-backdrop { display: none; }
 }
-
 /* ─── #121 Keyboard nav: cheatsheet + toast + expand toggle ────── */
 
 /* Roving-tabindex focus ring — same hairline oxblood as native focus
@@ -1765,6 +1607,151 @@ a.source-link:focus-visible {
 #toast[data-visible] {
   opacity: 1;
   transform: translateY(0);
+}
+/* ─── Empty states ─────────────────────────────────────────────── */
+
+.empty-hint,
+.empty-results {
+  font-family: var(--serif);
+  font-style: italic;
+  color: var(--ink-faded);
+  text-align: center;
+  margin: 2.5rem 0;
+  font-size: 1.05rem;
+  font-variation-settings: "opsz" 36;
+}
+
+.empty-query {
+  font-style: normal;
+  font-family: var(--mono);
+  font-size: 0.95em;
+  color: var(--ink);
+}
+
+.empty-suggestion {
+  display: block;
+  font-size: 0.9rem;
+  margin-block-start: 0.5rem;
+  color: var(--ink-faded);
+}
+/* ─── #123 Empty + edge states ─────────────────────────────────── */
+
+/* Empty state: italic invitation + exemplar prompts. Reads as a
+   page-opening editorial question, not a banner. */
+.empty-state {
+  margin-block: 1.5rem 1.25rem;
+  padding-block-start: 0.75rem;
+}
+
+.empty-invite {
+  margin: 0 0 1rem;
+  font-family: var(--serif);
+  font-size: 1.25rem;
+  line-height: 1.35;
+  color: var(--ink-soft);
+  font-variation-settings: "opsz" 48, "SOFT" 40;
+}
+.empty-invite em {
+  font-style: italic;
+  color: var(--ink);
+}
+
+.empty-exemplars {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem 1.1rem;
+  font-family: var(--serif);
+  font-size: 0.92rem;
+}
+.empty-exemplars li { margin: 0; }
+.empty-exemplar {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-family: var(--serif);
+  font-style: italic;
+  color: var(--teal);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-decoration-color: var(--rule-strong);
+  text-underline-offset: 0.18em;
+  transition: color 120ms ease, text-decoration-color 120ms ease;
+}
+.empty-exemplar:hover,
+.empty-exemplar:focus-visible {
+  color: var(--oxblood);
+  text-decoration-color: var(--oxblood);
+}
+.empty-exemplar:focus-visible {
+  outline: 2px solid var(--oxblood);
+  outline-offset: 3px;
+  border-radius: 1px;
+}
+
+/* No-results widen actions: one row of inline-flex buttons that POST
+   widened status filters. Style matches the inline-italic feedback
+   widget so the voice stays consistent. */
+.empty-results-line {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 1rem;
+  color: var(--ink);
+}
+.empty-results-line .empty-query {
+  font-style: italic;
+  color: var(--ink-soft);
+}
+.empty-actions {
+  list-style: none;
+  margin: 0.55rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem 1rem;
+  font-family: var(--serif);
+  font-size: 0.88rem;
+}
+.empty-actions li { margin: 0; }
+.widen-form { display: inline; margin: 0; }
+.widen-button {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-family: var(--serif);
+  font-style: italic;
+  color: var(--teal);
+  cursor: pointer;
+  border-block-end: 1px solid var(--rule);
+  transition: color 120ms ease, border-color 120ms ease;
+}
+.widen-button:hover,
+.widen-button:focus-visible {
+  color: var(--oxblood);
+  border-block-end-color: var(--oxblood);
+}
+.widen-button:focus-visible {
+  outline: 2px solid var(--oxblood);
+  outline-offset: 3px;
+  border-radius: 1px;
+}
+.empty-suggestion {
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+  font-style: italic;
+  color: var(--ink-faded);
+}
+@keyframes kiln-card-rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 @media (prefers-reduced-motion: reduce) {
