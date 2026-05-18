@@ -341,7 +341,30 @@ def _highlight_excerpt(text: str, query: str) -> Markup:
     if not query:
         # escape() already returns Markup; no need to re-wrap.
         return escape(text)
-    terms = [t for t in re.split(r"\s+", query.strip()) if len(t) >= 3]
+    # ≥2 to keep domain acronyms (CF, DB, OS, AI) without highlighting
+    # noisy 1-letter matches. Common 2-letter stopwords are filtered
+    # explicitly — small list, narrow ambition.
+    _stopwords = {
+        "a",
+        "an",
+        "the",
+        "is",
+        "of",
+        "to",
+        "in",
+        "on",
+        "or",
+        "by",
+        "at",
+        "as",
+        "if",
+        "it",
+        "be",
+        "do",
+    }
+    terms = [
+        t for t in re.split(r"\s+", query.strip()) if len(t) >= 2 and t.lower() not in _stopwords
+    ]
     if not terms:
         return escape(text)
     escaped = str(escape(text))
@@ -352,7 +375,9 @@ def _highlight_excerpt(text: str, query: str) -> Markup:
     # The only literal HTML we inject is the <mark> tag. Everything
     # else flowing through this Markup() is the output of escape(),
     # so the result is XSS-safe by construction.
-    return Markup(pattern.sub(r"<mark>\1</mark>", escaped))  # noqa: S704
+    return Markup(  # noqa: S704
+        pattern.sub(r"<mark>\1</mark>", escaped)
+    )  # nosec B704
 
 
 # Spec-mandated warning copy from docs/user-journeys.md, plus a quiet
@@ -383,6 +408,11 @@ def _humanize_warning(w: Any) -> dict[str, str]:
     Falls back to the engine's raw ``message`` when the warning type
     isn't in the spec-mandated copy table (so a future warning type
     surfaces something rather than nothing).
+
+    An empty override string in :data:`_WARNING_COPY` is intentional:
+    the prefix carries the spec-mandated voice, and the engine's raw
+    message carries the per-instance detail (e.g., \"Document last
+    reviewed 2024-01-15\"). The two together read as a margin note.
     """
     wtype = getattr(w, "type", "")
     raw = getattr(w, "message", "") or ""

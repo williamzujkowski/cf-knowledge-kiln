@@ -435,15 +435,16 @@ def test_search_excerpt_highlights_query_terms(
     assert "<mark>widgets</mark>" in response.text.lower()
 
 
-def test_search_excerpt_highlight_dropped_for_short_terms(
+def test_search_excerpt_highlight_dropped_for_stopwords(
     client: TestClient, session: AsyncSession, small_corpus: Path
 ) -> None:
-    """Terms shorter than 3 chars are dropped to avoid stopword noise."""
+    """Stopwords + single-letter terms are dropped to avoid noise."""
     asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
-    response = client.post("/search", data={"query": "a widgets", "status": ["active"]})
-    # "a" is too short — should not be highlighted; "widgets" still is.
+    response = client.post("/search", data={"query": "a the widgets", "status": ["active"]})
+    # "a" and "the" must not be highlighted; "widgets" still is.
     assert "<mark>widgets</mark>" in response.text.lower()
     assert "<mark>a</mark>" not in response.text
+    assert "<mark>the</mark>" not in response.text
 
 
 def test_search_excerpt_html_escapes_user_input(
