@@ -25,109 +25,18 @@
        the parser finish before HTMX initializes — first paint isn't
        blocked on the network fetch. -->
   <script defer src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous"></script> <!-- pragma: allowlist secret -->
+  <!-- #131 application lifecycle JS (htmx hooks, preview drawer,
+       cheatsheet close, data-action delegation). Loaded BEFORE the
+       other scripts so its event listeners register first — both
+       defer scripts execute in source order, and HTMX initializes
+       after this file is parsed. Extracted from base.html so a
+       future Content-Security-Policy (`script-src 'self'`) doesn't
+       break the UI. -->
+  <script defer src="{{ url_for('static', path='kiln-app.js') }}"></script>
   <!-- #121 keyboard nav. Vanilla, no deps. Defer so it runs after parse. -->
   <script defer src="{{ url_for('static', path='kiln-keys.js') }}"></script>
   <!-- #123 empty-state polish: exemplars, recent queries, hint banner. -->
   <script defer src="{{ url_for('static', path='kiln-empty.js') }}"></script>
-  <script>
-    // a11y (#120): announcements live on #search-status, NOT on
-    // #results. The results region only carries aria-busy so AT can
-    // hint "this is loading". The status text is the only thing the
-    // screen reader speaks — "Searching…", then the new count.
-    const _setStatus = (text) => {
-      const s = document.getElementById("search-status");
-      if (s) s.textContent = text;
-    };
-    document.addEventListener("htmx:beforeRequest", (e) => {
-      const r = document.getElementById("results");
-      if (r && e.target.closest("form.search-form")) {
-        r.setAttribute("aria-busy", "true");
-        _setStatus("Searching…");
-      }
-    });
-    document.addEventListener("htmx:afterSwap", (e) => {
-      const r = document.getElementById("results");
-      if (r && e.detail.target && e.detail.target.id === "results") {
-        r.setAttribute("aria-busy", "false");
-        const count = r.querySelector(".results-count .count");
-        if (count) {
-          const n = parseInt(count.textContent, 10);
-          _setStatus(n === 1 ? "1 result" : n + " results");
-        } else if (r.querySelector(".empty-results")) {
-          _setStatus("No results");
-        } else if (r.querySelector(".error-fragment")) {
-          // #132 reviewer MED: error swaps left status stuck on
-          // "Searching…". The error fragment itself carries
-          // role="alert" so AT does announce it, but the status
-          // region must surface the resting state too.
-          _setStatus("Search unavailable");
-        } else {
-          _setStatus("");
-        }
-      }
-      // Mobile drawer focus (#120 / #130 review): only on closed→open
-      // transition. Re-grabbing focus on every chunk-swap was a UX
-      // trap — repeated preview-card clicks kept yanking focus from
-      // wherever the user had tabbed to (#132 reviewer MED).
-      const panel = e.detail.target;
-      if (
-        panel &&
-        panel.id === "preview" &&
-        panel.hasAttribute("data-open") &&
-        !panel.hasAttribute("data-focus-grabbed") &&
-        window.matchMedia("(max-width: 959px)").matches
-      ) {
-        panel.setAttribute("data-focus-grabbed", "true");
-        panel.focus();
-      }
-    });
-    // #120 telemetry gating: keyup-debounced searches add an
-    // X-Kiln-Source header so the server can skip the rag_queries
-    // row write. Only explicit submits persist telemetry. HTMX 2.x
-    // exposes the originating event on detail.triggeringEvent.
-    document.addEventListener("htmx:configRequest", (e) => {
-      const ev = e.detail.triggeringEvent;
-      if (ev && ev.type === "keyup") {
-        e.detail.headers["X-Kiln-Source"] = "keyup-debounce";
-      }
-    });
-    // HTMX 2.x drops 4xx/5xx swaps by default. We deliberately render
-    // a swap-friendly fragment on 429 (rate limit) and 503 (retrieval
-    // outage) — let those statuses swap so the user sees the inline
-    // error instead of a silent no-op. 404 covers the preview panel's
-    // not-found fragment. Status comes back via detail.xhr.status
-    // because HX-Retarget on the server is too coarse here.
-    document.addEventListener("htmx:beforeSwap", (e) => {
-      const s = e.detail.xhr.status;
-      if (s === 429 || s === 503 || s === 400 || s === 404) {
-        e.detail.shouldSwap = true;
-        e.detail.isError = false;
-      }
-    });
-    // #119 preview panel: Esc clears it (mobile drawer + desktop rail).
-    const _closePreview = () => {
-      const p = document.getElementById("preview");
-      if (!p || !p.hasAttribute("data-open")) return;
-      p.removeAttribute("data-open");
-      // Allow focus-grab again next time the drawer reopens.
-      p.removeAttribute("data-focus-grabbed");
-      p.innerHTML = "";
-    };
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") _closePreview();
-    });
-    // Backdrop click closes the drawer on mobile (#120 / #130 review).
-    document.addEventListener("click", (e) => {
-      if (e.target && e.target.id === "preview-backdrop") _closePreview();
-    });
-    // #121 cheatsheet close button (kiln-keys.js handles `?` to open).
-    document.addEventListener("click", (e) => {
-      if (e.target && e.target.hasAttribute && e.target.hasAttribute("data-cheatsheet-close")) {
-        const sheet = document.getElementById("cheatsheet");
-        if (sheet) sheet.removeAttribute("data-open");
-      }
-    });
-  </script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to results</a>
