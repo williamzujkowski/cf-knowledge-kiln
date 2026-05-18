@@ -895,11 +895,18 @@ def test_base_template_handles_error_fragment_status(client: TestClient) -> None
     status region stuck on "Searching…" because no .results-count or
     .empty-results branch matched. The error fragment now drives a
     "Search unavailable" announcement.
+
+    #131: the JS itself was moved out of an inline ``<script>`` block
+    into ``static/kiln-app.js``. base.html now just references the
+    asset; the resting-state copy lives in that file.
     """
     body = client.get("/").text
-    # Sanity: the error-fragment branch is wired into the status JS.
-    assert "error-fragment" in body
-    assert "Search unavailable" in body
+    # base.html references the extracted app script.
+    assert "kiln-app.js" in body
+    # The error-fragment branch is wired into the extracted JS.
+    asset = client.get("/static/kiln-app.js").text
+    assert "error-fragment" in asset
+    assert "Search unavailable" in asset
 
 
 def test_base_template_focus_grab_uses_closed_to_open_guard(client: TestClient) -> None:
@@ -908,9 +915,86 @@ def test_base_template_focus_grab_uses_closed_to_open_guard(client: TestClient) 
     #132 reviewer MED: re-grabbing focus on every preview-card click
     was a UX trap on mobile. The data-focus-grabbed attribute now
     gates the focus call.
+
+    #131: the focus-grab logic moved into ``static/kiln-app.js``.
+    """
+    asset = client.get("/static/kiln-app.js").text
+    assert "data-focus-grabbed" in asset
+
+
+def test_base_template_has_no_inline_script_or_onclick(client: TestClient) -> None:
+    """#131: CSP-readiness — zero inline ``<script>`` blocks, zero ``onclick=``.
+
+    The page must remain compatible with a future ``script-src 'self'``
+    policy (no ``unsafe-inline``). Only ``<script src=...>`` references
+    are allowed. ``onclick=`` is checked separately because it would
+    require ``script-src-attr 'unsafe-inline'`` to keep firing.
     """
     body = client.get("/").text
-    assert "data-focus-grabbed" in body
+    # No opening <script> without a src attribute — i.e. no inline block.
+    # We allow <script defer src=...> and <script src=...> only.
+    import re
+
+    inline_script = re.search(r"<script(?![^>]*\bsrc=)[^>]*>", body)
+    assert inline_script is None, (
+        f"unexpected inline <script> tag in base.html: {inline_script.group(0)!r}"
+    )
+    # No inline event handlers on any rendered element.
+    assert "onclick=" not in body, "inline onclick= attribute leaked into rendered HTML"
+
+
+def test_base_template_loads_kiln_app_js_before_other_scripts(client: TestClient) -> None:
+    """#131: kiln-app.js wires htmx lifecycle handlers — must register first.
+
+    Order on the page (in the document source) must be:
+    ``kiln-app.js`` → ``kiln-keys.js`` → ``kiln-empty.js``. The defer
+    attribute means execution waits for parse, but execution order
+    among defer scripts follows source order.
+    """
+    body = client.get("/").text
+    app_idx = body.find("kiln-app.js")
+    keys_idx = body.find("kiln-keys.js")
+    empty_idx = body.find("kiln-empty.js")
+    assert app_idx >= 0, "kiln-app.js script tag missing"
+    assert keys_idx >= 0, "kiln-keys.js script tag missing"
+    assert empty_idx >= 0, "kiln-empty.js script tag missing"
+    assert app_idx < keys_idx < empty_idx, (
+        f"script order wrong: app={app_idx} keys={keys_idx} empty={empty_idx}"
+    )
+    # kiln-app.js must be deferred to match the other lifecycle scripts.
+    script_line = [line for line in body.splitlines() if "kiln-app.js" in line]
+    assert script_line and "defer" in script_line[0]
+
+
+def test_static_kiln_app_js_is_served(client: TestClient) -> None:
+    """#131: the extracted JS asset is reachable through the static mount."""
+    response = client.get("/static/kiln-app.js")
+    assert response.status_code == 200
+    assert "javascript" in response.headers["content-type"]
+    body = response.text
+    # Behavioral markers carried over from the old inline block.
+    for marker in (
+        "htmx:beforeRequest",
+        "htmx:afterSwap",
+        "htmx:beforeSwap",
+        "htmx:configRequest",
+        "X-Kiln-Source",
+        "preview-backdrop",
+        "data-cheatsheet-close",
+        "data-action",
+    ):
+        assert marker in body, f"missing {marker!r} in kiln-app.js"
+
+
+def test_results_fragment_uses_data_action_for_preview_open(
+    client: TestClient, session: AsyncSession, small_corpus: Path
+) -> None:
+    """#131: result-title-button uses ``data-action="open-preview"`` (no onclick)."""
+    asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
+    response = client.post("/search", data={"query": "widgets", "status": ["active"]})
+    body = response.text
+    assert 'data-action="open-preview"' in body
+    assert "onclick=" not in body
 
 
 # ─── #121: keyboard navigation ──────────────────────────────────────

@@ -42,8 +42,11 @@
         <div class="result-body">
           <header class="result-header">
             {# Title is a button so click + Enter both load the preview;
-               HTMX swaps the response into #preview. The onclick adds
-               data-open so the mobile drawer slides in. #}
+               HTMX swaps the response into #preview. data-action
+               (#131) hooks the delegated listener in kiln-app.js,
+               which sets data-open so the mobile drawer slides in —
+               no inline event handlers, so a future CSP
+               `script-src 'self'` policy can drop `unsafe-inline`. #}
             {# Brand is h1; result-title is h2 so the heading order
                doesn't skip (axe heading-order rule). The visual
                treatment is driven by .result-title CSS, not the tag. #}
@@ -54,7 +57,7 @@
                 hx-get="/preview/{{ r.chunk_id }}"
                 hx-target="#preview"
                 hx-swap="innerHTML"
-                onclick="document.getElementById('preview').setAttribute('data-open', 'true')">
+                data-action="open-preview">
                 {{ r.title }}
               </button>
             </h2>
