@@ -1109,12 +1109,24 @@ def test_search_page_includes_recent_queries_datalist(client: TestClient) -> Non
 
 
 def test_search_page_renders_shortcut_hint_banner(client: TestClient) -> None:
-    """The hint banner is in the DOM; JS reads localStorage to dismiss."""
+    """The hint banner is in the DOM; JS reads localStorage to dismiss.
+
+    Per #139 review (MED): the aria-hidden attribute was intentionally
+    removed when the banner moved into the masthead landmark, so AT
+    users hear the keyboard hints once on page load. Asserting the
+    absence locks the behavior — a future cleanup that restores
+    aria-hidden would have to consciously update this test.
+    """
     body = client.get("/").text
     assert 'id="shortcut-hint"' in body
     assert "press" in body
     assert "<kbd>/</kbd>" in body
     assert "<kbd>?</kbd>" in body
+    # Locate the hint banner element and confirm it's NOT aria-hidden.
+    hint_start = body.index('id="shortcut-hint"')
+    hint_end = body.index("</p>", hint_start)
+    hint_open_tag = body[hint_start - 100 : hint_end]
+    assert 'aria-hidden="true"' not in hint_open_tag
 
 
 def test_empty_state_loads_kiln_empty_script(client: TestClient) -> None:

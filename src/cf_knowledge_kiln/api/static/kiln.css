@@ -60,14 +60,14 @@
 
 /* Dark palette derived from "Dracula+" terminal theme (WCAG AAA,
    ANSI-legible). Near-black paper + warm white ink + the canonical
-   dracula accent set, all AAA against the background.
+   dracula accent set; ink/paper is AAA, every accent passes AA.
    Verified ratios (foreground on #212121):
-     --ink      #f8f8f2  → 15.1:1  AAA  (theme-published)
-     --ink-soft #c5c5bc  → 9.7:1   AAA
-     --ink-faded#8d8d8d  → 5.0:1   AA
-     --oxblood  #ff5555  → 6.4:1   AA
-     --teal     #8be9fd  → 11.5:1  AAA
-     --gold     #ffcb6b  → 10.6:1  AAA
+     --ink      #f8f8f2  → 15.11:1  AAA  (theme-published)
+     --ink-soft #c5c5bc  → 9.27:1   AAA
+     --ink-faded#8d8d8d  → 4.85:1   AA   (above the 4.5 threshold)
+     --oxblood  #ff5555  → 5.12:1   AA
+     --teal     #8be9fd  → 11.63:1  AAA
+     --gold     #ffcb6b  → 10.74:1  AAA
    Focus ring on --paper #212121 stays above 3:1 in both directions. */
 @media (prefers-color-scheme: dark) {
   :root {
