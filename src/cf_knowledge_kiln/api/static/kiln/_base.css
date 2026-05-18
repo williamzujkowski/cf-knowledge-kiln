@@ -1,0 +1,297 @@
+/* ─── Reset & page ─────────────────────────────────────────────── */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--serif);
+  font-feature-settings: "ss01", "ss02", "kern" 1, "liga" 1, "onum" 1;
+  font-variant-numeric: oldstyle-nums proportional-nums;
+  font-optical-sizing: auto;
+  /* #122: drop body to 16px so result-title pulls visually further away. */
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--ink);
+  background-color: var(--paper);
+  /* Monospace-light atmospheric bloom — pale violet-blue from the
+     theme's selection color, very subtle so the editorial typography
+     reads against a clean cool-white field. */
+  background-image:
+    radial-gradient(circle at 20% 12%, rgba(199, 211, 255, 0.4) 0, transparent 55%),
+    radial-gradient(circle at 78% 88%, rgba(214, 224, 248, 0.4) 0, transparent 60%);
+  margin: 0;
+  padding: 0;
+  min-height: 100dvh;
+}
+
+/* Dracula+ atmospheric bloom — dracula purple + cyan glints over
+   the near-black paper. Keeps the dark mode from reading as flat. */
+@media (prefers-color-scheme: dark) {
+  body {
+    background-image:
+      radial-gradient(circle at 18% 14%, rgba(189, 147, 249, 0.05) 0, transparent 55%),
+      radial-gradient(circle at 82% 86%, rgba(139, 233, 253, 0.04) 0, transparent 60%);
+  }
+  /* The color-scheme meta in base.html says light dark; explicitly
+     tell the UA we're in dark mode so form controls + scrollbars
+     pick up native dark chrome. */
+  html { color-scheme: dark; }
+}
+
+main,
+header.masthead,
+aside.notice,
+footer.colophon {
+  max-width: var(--measure);
+  padding-inline: 1.5rem;
+  margin-inline: auto;
+}
+
+main {
+  padding-block: 1.5rem 3rem;
+}
+
+/* ─── Links ────────────────────────────────────────────────────── */
+
+a {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.16em;
+  text-decoration-color: var(--rule-strong);
+  transition: text-decoration-color 120ms ease, color 120ms ease;
+}
+
+a:hover {
+  text-decoration-color: var(--oxblood);
+  color: var(--oxblood);
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+.pill input:focus-visible + span {
+  outline: 2px solid var(--oxblood);
+  outline-offset: 2px;
+  border-radius: 1px;
+}
+
+/* ─── Skip link + progress bar ─────────────────────────────────── */
+
+.skip-link {
+  position: absolute;
+  inset-inline-start: 1rem;
+  inset-block-start: 1rem;
+  background: var(--ink);
+  color: var(--paper);
+  padding: 0.4rem 0.75rem;
+  text-decoration: none;
+  transform: translateY(-200%);
+  transition: transform 150ms ease;
+  z-index: 100;
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+/* HTMX indicator: a 2px progress bar pinned to the top edge.
+   .htmx-request is added by HTMX to the element listed in
+   `hx-indicator` for the duration of an in-flight request. */
+.htmx-bar {
+  position: fixed;
+  inset-block-start: 0;
+  inset-inline: 0;
+  height: 2px;
+  background:
+    linear-gradient(
+      90deg,
+      transparent 0%,
+      var(--oxblood) 30%,
+      var(--oxblood) 70%,
+      transparent 100%);
+  background-size: 40% 100%;
+  background-repeat: no-repeat;
+  background-position: -40% 0;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 50;
+}
+
+.htmx-bar.htmx-request {
+  opacity: 1;
+  animation: htmx-progress 1.2s cubic-bezier(.4, 0, .2, 1) infinite;
+}
+
+@keyframes htmx-progress {
+  0%   { background-position: -40% 0; }
+  100% { background-position: 140% 0; }
+}
+
+/* ─── Masthead ─────────────────────────────────────────────────── */
+
+.masthead {
+  padding-block: 2.5rem 1.5rem;
+  border-block-end: var(--rule-mid) double var(--rule);
+}
+
+/* .brand is now an <h1>; reset the UA margin + font-weight so the
+   typographic treatment stays driven by .brand-mark / .brand-name
+   below. The inner <a> keeps the inline-flex glyph row. */
+.brand {
+  margin: 0;
+  font-weight: 400;
+}
+.brand a {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.brand-mark {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: clamp(2rem, 4.5vw, 2.85rem);
+  font-style: italic;
+  letter-spacing: -0.01em;
+  font-variation-settings: "opsz" 144, "SOFT" 30;
+  line-height: 1;
+}
+
+.brand-rule {
+  display: inline-block;
+  width: 1.25rem;
+  height: 0;
+  border-block-start: 1px solid var(--rule-strong);
+  position: relative;
+  inset-block-end: 0.6em;
+}
+
+.brand-name {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: clamp(1.05rem, 2vw, 1.2rem);
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  font-variant-caps: small-caps;
+  font-feature-settings: "smcp" 1, "kern" 1;
+  color: var(--ink-soft);
+}
+
+.tagline {
+  margin: 0.65rem 0 0;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+  font-style: italic;
+  font-variation-settings: "opsz" 14;
+}
+
+/* ─── Untrusted-content notice ─────────────────────────────────── */
+
+.notice {
+  margin-block: 1.25rem 1.5rem;
+  padding: 0.75rem 1rem 0.85rem;
+  border-inline-start: var(--rule-mid) solid var(--oxblood);
+  background: linear-gradient(to right, var(--oxblood-tint), transparent 65%);
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+  line-height: 1.5;
+}
+
+.notice em {
+  color: var(--oxblood);
+  font-style: italic;
+  font-weight: 500;
+}
+
+.notice-label {
+  display: inline-block;
+  font-family: var(--serif);
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  font-variant-caps: all-small-caps;
+  font-size: 0.7rem;
+  color: var(--oxblood);
+  margin-inline-end: 0.5rem;
+  font-weight: 600;
+}
+/* Shortcut hint banner — single quiet line under the masthead. */
+.shortcut-hint {
+  margin: 0;
+  padding: 0.45rem 1.5rem;
+  font-family: var(--serif);
+  font-size: 0.78rem;
+  font-style: italic;
+  color: var(--ink-faded);
+  text-align: center;
+  background: var(--paper-dim, transparent);
+  border-block-end: 1px dashed var(--rule);
+  transition: opacity 180ms ease, max-height 220ms ease, padding 220ms ease;
+}
+.shortcut-hint kbd {
+  font-family: var(--mono);
+  font-style: normal;
+  font-size: 0.7rem;
+  /* --paper-soft sits one shade lighter than --paper-dim (the banner
+     background), so the chip reads as a raised tile in both light and
+     dark mode (#138 reviewer LOW — kbd was invisible against banner). */
+  background: var(--paper-soft, var(--paper));
+  border: 1px solid var(--rule);
+  border-block-end-width: 2px;
+  padding: 0.02rem 0.28rem;
+  border-radius: 2px;
+  color: var(--ink);
+}
+.shortcut-hint[data-dismissed] {
+  opacity: 0;
+  max-height: 0;
+  padding-block: 0;
+  border-block-end: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+/* ─── Colophon (footer) ────────────────────────────────────────── */
+
+.colophon {
+  margin-block: 4rem 2.5rem;
+  padding-block-start: 1.25rem;
+  border-block-start: 1px solid var(--rule);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 1rem;
+  font-size: 0.85rem;
+  color: var(--ink-faded);
+}
+
+.colophon nav {
+  display: inline-flex;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+.colophon nav a {
+  color: var(--ink-soft);
+}
+
+.set-mark {
+  margin: 0;
+  font-family: var(--serif);
+  font-style: italic;
+  font-variation-settings: "opsz" 14;
+}
+
+.set-mark span {
+  margin-inline-end: 0.3rem;
+  color: var(--rule-strong);
+}

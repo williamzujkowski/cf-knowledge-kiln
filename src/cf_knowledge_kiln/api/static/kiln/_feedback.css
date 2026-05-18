@@ -1,0 +1,139 @@
+/* ─── Error fragment (#122 margin-note voice) ─────────────────── */
+
+/* The .notice class already carries the oxblood-rule + italic
+   editorial annotation styling. .notice-alert is the only override
+   needed: when the same chrome appears inside #results (vs the page
+   shell) the spacing should hug tighter and the label color stays
+   loud. */
+.error-fragment {
+  /* Reset the previous chat-box treatment. Most styling comes from
+     the shared .notice class. */
+  display: block;
+  background: linear-gradient(to right, var(--oxblood-tint), transparent 65%);
+  color: var(--ink-soft);
+}
+.notice-alert {
+  margin-block: 0.5rem 0;
+}
+.notice-alert .error-message {
+  color: var(--oxblood);
+}
+/* ─── #122 Feedback widget (inline italic phrase) ──────────────── */
+
+/* The widget reads as a one-line editorial caption at the foot of
+   each card. The prompt sits in italic Fraunces; each signal is a
+   bare text button separated by hairline middots. The whole thing
+   collapses to a smaller font-size than the body so it doesn't
+   compete with the title or excerpt. */
+.feedback {
+  margin-block-start: 0.45rem;
+  padding-block-start: 0.45rem;
+  border-block-start: 1px dashed var(--rule);
+  font-family: var(--serif);
+  font-size: 0.86rem;
+  color: var(--ink-soft);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: baseline;
+  line-height: 1.5;
+}
+
+.feedback-prompt {
+  font-style: italic;
+  font-variation-settings: "opsz" 14;
+  color: var(--ink-faded);
+}
+
+.feedback-row {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0;
+}
+
+.feedback-link {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-family: var(--serif);
+  color: var(--ink-soft);
+  cursor: pointer;
+  border-block-end: 1px solid transparent;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+.feedback-link:hover {
+  color: var(--oxblood);
+  border-block-end-color: var(--oxblood);
+}
+.feedback-link:focus-visible {
+  outline: 2px solid var(--oxblood);
+  outline-offset: 3px;
+  border-radius: 1px;
+}
+
+.feedback-sep {
+  color: var(--rule-strong);
+  margin-inline: 0.25rem;
+  user-select: none;
+}
+
+/* The ack and error variants reset the new .feedback dashed top
+   border + flex layout so they read as standalone status chips. */
+.feedback-ack {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.3rem 0.7rem;
+  background: var(--teal-tint);
+  color: var(--teal);
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 0.85rem;
+  border: 0;
+  border-inline-start: 2px solid var(--teal);
+}
+
+.fb-ack-icon {
+  font-family: var(--mono);
+  font-style: normal;
+  font-weight: 600;
+}
+
+.feedback-failed {
+  display: block;
+  background: var(--oxblood-tint);
+  border: 0;
+  border-inline-start: 2px solid var(--oxblood);
+  padding: 0.45rem 0.7rem;
+}
+
+.feedback-failed > summary {
+  color: var(--oxblood);
+  font-family: var(--serif);
+  font-style: italic;
+  cursor: pointer;
+}
+
+.fb-error {
+  margin: 0.35rem 0 0;
+  color: var(--ink);
+  font-style: italic;
+  font-size: 0.85rem;
+}
+
+.error-icon {
+  font-family: var(--serif);
+  font-weight: 700;
+  font-style: italic;
+  text-align: center;
+}
+
+.error-message {
+  margin: 0;
+  color: var(--ink);
+  font-style: italic;
+}

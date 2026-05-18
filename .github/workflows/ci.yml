@@ -47,6 +47,17 @@ jobs:
       - name: OpenAPI lint
         run: python scripts/lint_openapi.py openapi/openapi.yaml
 
+      - name: kiln.css partials in sync with concatenated artifact
+        # The browser-served stylesheet `static/kiln.css` is a build
+        # artifact of the topical partials under `static/kiln/`. CI
+        # rebuilds it and fails if the committed file drifted, so the
+        # source partials and the served file stay byte-aligned.
+        run: |
+          make build-css
+          git diff --exit-code src/cf_knowledge_kiln/api/static/kiln.css \
+            || { echo "::error::kiln.css is out of sync with src/cf_knowledge_kiln/api/static/kiln/*.css. Run 'make build-css' and commit the result."; \
+                 exit 1; }
+
       - name: Security — bandit
         run: bandit -c pyproject.toml -q -r src
 

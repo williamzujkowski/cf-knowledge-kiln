@@ -1,0 +1,327 @@
+/* ─── Search form ──────────────────────────────────────────────── */
+
+.search-form {
+  margin-block: 1.5rem 1.5rem;
+}
+
+.query-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.85rem;
+  align-items: end;
+  padding-block-end: 0.75rem;
+  border-block-end: 1px solid var(--rule);
+}
+
+.query-label {
+  font-family: var(--serif);
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  font-variant-caps: all-small-caps;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ink-faded);
+  padding-block-end: 0.35rem;
+}
+
+.query-input {
+  font-family: var(--serif);
+  font-size: 1.4rem;
+  font-style: italic;
+  font-variation-settings: "opsz" 60;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  outline: 0;
+  width: 100%;
+  padding: 0.15rem 0;
+  caret-color: var(--oxblood);
+}
+
+.query-input::placeholder {
+  color: var(--ink-faded);
+  font-style: italic;
+}
+
+.query-input:focus-visible {
+  outline: 0;          /* underline IS the focus indicator on this row */
+}
+
+.query-row:focus-within {
+  border-block-end-color: var(--oxblood);
+  border-block-end-width: 2px;
+  margin-block-end: -1px;
+}
+
+.query-submit {
+  font-family: var(--serif);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  font-variant-caps: all-small-caps;
+  font-weight: 600;
+  color: var(--paper);
+  background: var(--ink);
+  border: 0;
+  padding: 0.55rem 1.1rem;
+  cursor: pointer;
+  transition: background 120ms ease, transform 120ms ease;
+}
+
+.query-submit:hover {
+  background: var(--oxblood);
+}
+
+.query-submit:active {
+  transform: translateY(1px);
+}
+
+/* Filters row */
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.9rem 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.filters-legend {
+  float: left;                  /* keep legend inline with pills */
+  font-family: var(--serif);
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  font-variant-caps: all-small-caps;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--ink-faded);
+  padding: 0;
+  margin-inline-end: 0.5rem;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.7rem;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: transparent;
+  font-size: 0.85rem;
+  font-family: var(--serif);
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.pill input[type="checkbox"] {
+  /* Hide the native checkbox; the pill IS the affordance. */
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.pill:hover {
+  border-color: var(--rule-strong);
+  color: var(--ink);
+}
+
+.pill:has(input:checked) {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+
+.pill-warn:has(input:checked) {
+  background: var(--oxblood);
+  border-color: var(--oxblood);
+}
+
+.pill:has(input:focus-visible) {
+  outline: 2px solid var(--oxblood);
+  outline-offset: 2px;
+}
+
+/* #118: quieter pill variant for inside the More-filters rail. The
+   primary status pills upstairs are the loud affordance; doc-type
+   pills inside the rail should sit a half-step back so the rail
+   reads as a single secondary surface. */
+.pill-quiet {
+  font-size: 0.78rem;
+  padding: 0.18rem 0.55rem;
+  border-style: dashed;
+  color: var(--ink-faded);
+}
+
+.pill-quiet:has(input:checked) {
+  background: var(--ink-soft);
+  border-style: solid;
+}
+
+/* ─── #118: expanded filter rail ───────────────────────────────── */
+
+.filter-rail {
+  margin: 0.75rem 0 0;
+  border-block-start: 1px dashed var(--rule);
+  padding-block-start: 0.65rem;
+}
+
+.filter-rail[open] {
+  /* When opened, the rail earns a hairline above + below to read as a
+     deliberate secondary surface, not as a popover that fell down. */
+  border-block-end: 1px dashed var(--rule);
+  padding-block-end: 0.85rem;
+  margin-block-end: 0.5rem;
+}
+
+.filter-rail-toggle {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: baseline;
+  gap: 0.65rem;
+  user-select: none;
+  /* Editorial caret — a small italic chevron that rotates on open. */
+  --caret: "›";
+}
+
+.filter-rail-toggle::-webkit-details-marker { display: none; }
+
+.filter-rail-toggle::before {
+  content: var(--caret);
+  font-family: var(--serif);
+  font-style: italic;
+  color: var(--ink-faded);
+  font-size: 1.1rem;
+  line-height: 1;
+  transition: transform 160ms ease;
+  display: inline-block;
+}
+
+.filter-rail[open] .filter-rail-toggle::before {
+  transform: rotate(90deg);
+}
+
+.filter-rail-label {
+  font-family: var(--serif);
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  font-variant-caps: all-small-caps;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--ink-faded);
+}
+
+.filter-rail-hint {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 0.78rem;
+  color: var(--ink-faded);
+  font-variation-settings: "opsz" 14;
+}
+
+.filter-rail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem 1.25rem;
+  margin-block-start: 0.85rem;
+  align-items: end;
+}
+
+@media (max-width: 640px) {
+  .filter-rail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.rail-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-inline-size: 0;
+}
+
+.rail-field-wide {
+  grid-column: 1 / -1;
+}
+
+.rail-field-multi {
+  /* Doc-type pills wrap horizontally inside this fieldset. */
+  flex-direction: column;
+}
+
+.rail-field-label {
+  font-family: var(--serif);
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  font-variant-caps: all-small-caps;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--ink-faded);
+  padding: 0;
+}
+
+.rail-field-multi .rail-field-label {
+  margin-block-end: 0.35rem;
+}
+
+.rail-field-multi > .pill {
+  margin-inline-end: 0.35rem;
+}
+
+.rail-field-input {
+  font-family: var(--serif);
+  font-size: 0.95rem;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  border-block-end: 1px solid var(--rule);
+  padding: 0.25rem 0.1rem 0.35rem;
+  transition: border-color 120ms ease;
+}
+
+.rail-field-input::placeholder {
+  color: var(--ink-faded);
+  font-style: italic;
+}
+
+.rail-field-input:focus-visible {
+  outline: 0;
+  border-block-end-color: var(--oxblood);
+  border-block-end-width: 2px;
+  padding-block-end: 0.25rem;
+}
+
+.rail-field-input[type="date"] {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+}
+/* ─── #120 Status region ───────────────────────────────────────── */
+
+/* Sibling status region for screen-reader announcements. Visually
+   subtle; the text mirrors what the user sees in #results but is
+   the only thing AT reads on each search. visually-hidden by default
+   when empty, but rendered as a quiet eyebrow when populated so
+   sighted users get the same feedback. */
+.search-status {
+  min-block-size: 1.2rem;
+  margin-block: 0.4rem 0.6rem;
+  font-family: var(--serif);
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  font-style: italic;
+  font-variation-settings: "opsz" 14;
+}
+.search-status:empty {
+  /* Collapse silently when there's nothing to say. */
+  margin-block: 0;
+  min-block-size: 0;
+}

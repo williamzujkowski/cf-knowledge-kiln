@@ -1,0 +1,389 @@
+/* ─── Results ──────────────────────────────────────────────────── */
+
+.results {
+  margin-block-start: 1rem;
+}
+
+.results-fade {
+  animation: paper-fade 220ms ease-out;
+}
+
+@keyframes paper-fade {
+  from { opacity: 0; transform: translateY(2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.results[aria-busy="true"] .results-fade {
+  opacity: 0.6;
+  filter: saturate(0.6);
+}
+
+.results-count {
+  font-family: var(--serif);
+  font-style: italic;
+  color: var(--ink-faded);
+  font-size: 0.95rem;
+  margin: 0 0 1rem;
+  font-variation-settings: "opsz" 14;
+}
+
+.results-count .count {
+  font-style: normal;
+  font-weight: 600;
+  color: var(--ink);
+  font-variant-numeric: oldstyle-nums;
+}
+
+.results-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  counter-reset: result;
+}
+
+.result-card {
+  display: grid;
+  grid-template-columns: var(--gutter) 1fr;
+  gap: 0.5rem;
+  padding-block: 1.25rem;
+  border-block-start: 1px solid var(--rule);
+  position: relative;
+  /* #124 staggered reveal — each card fades + rises in sequence based
+     on the --i custom property set inline by the template (capped at
+     11 so the last card waits ≤440ms). Cubic easing reads as paper-
+     settling rather than spring-y. Disabled under reduced-motion. */
+  animation: kiln-card-rise 360ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation-delay: calc(var(--i, 0) * 40ms);
+}
+
+.result-card:last-child {
+  border-block-end: 1px solid var(--rule);
+}
+
+/* Hover hairline — a 1px rule under the card slides in on hover/focus,
+   reads as a quiet "this card is the one you're looking at" cue. */
+.result-card::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  inset-block-end: -1px;
+  block-size: 1px;
+  background: var(--ink-faded);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 200ms ease;
+  pointer-events: none;
+}
+.result-card:hover::after,
+.result-card:focus-within::after {
+  transform: scaleX(1);
+}
+
+/* #122: numbered gutter leans in — italic Fraunces with the largest
+   optical-size grade and oldstyle nums, baseline-anchored to the
+   title. The display-grade opsz pulls the curves out so the "01"
+   reads as editorial chapter mark, not a list bullet. */
+.result-index {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 1.6rem;
+  line-height: 1;
+  color: var(--ink-faded);
+  font-variant-numeric: oldstyle-nums proportional-nums;
+  font-variation-settings: "opsz" 144;
+  letter-spacing: -0.01em;
+  padding-block-start: 0.05rem;
+}
+
+.result-header {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-block-end: 0.3rem;
+}
+
+.result-title {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 500;
+  /* #122: opsz contrast — push opsz to 96 + SOFT 30 + slightly tighter
+     letter-spacing so titles read as display headings against the now-
+     16px body. Size pulled to 1.35rem per the typographic-depth spec. */
+  font-size: 1.35rem;
+  line-height: 1.25;
+  letter-spacing: -0.012em;
+  color: var(--ink);
+  font-variation-settings: "opsz" 96, "SOFT" 30;
+  flex: 1 1 auto;
+  min-inline-size: 0;
+}
+
+/* Title is a button now (#119) — strip the UA chrome and keep the
+   typographic treatment. The hairline underline on hover reads as
+   an editorial "open this" affordance without a link's color shift. */
+.result-title-button {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  border-block-end: 1px solid transparent;
+  transition: border-color 120ms ease, color 120ms ease;
+}
+.result-title-button:hover,
+.result-title-button:focus-visible {
+  border-block-end-color: currentColor;
+}
+.result-title-button:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+/* #122: status badge softened — drop the border, drop the fill,
+   keep colored small-caps. A leading hairline rule (::before) carries
+   the editorial weight without competing with the title. */
+.status-badge {
+  font-family: var(--serif);
+  font-size: 0.68rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  font-variant-caps: all-small-caps;
+  padding: 0 0.1rem;
+  border: 0;
+  background: transparent;
+  color: var(--teal);
+  white-space: nowrap;
+  align-self: baseline;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+.status-badge::before {
+  content: "";
+  display: inline-block;
+  inline-size: 1.4rem;
+  block-size: 1px;
+  background: currentColor;
+  opacity: 0.55;
+}
+
+.status-badge.status-approved,
+.status-badge.status-active { color: var(--teal); }
+
+.status-badge.status-draft { color: var(--gold); }
+
+.status-badge.status-deprecated,
+.status-badge.status-archived,
+.status-badge.status-superseded { color: var(--oxblood); }
+
+/* Deprecated cards: dimmed AND flagged. Per AGENTS.md:
+   "Deprecated docs must be visibly flagged in results." */
+.result-card.status-deprecated,
+.result-card.status-archived,
+.result-card.status-superseded {
+  background:
+    repeating-linear-gradient(
+      135deg,
+      transparent 0 14px,
+      var(--oxblood-stripe) 14px 15px);
+}
+
+.result-card.status-deprecated::before,
+.result-card.status-archived::before,
+.result-card.status-superseded::before {
+  /* A thin vertical rule in the gutter calling out the deprecation. */
+  content: "";
+  position: absolute;
+  inset-block: 1.25rem;
+  inset-inline-start: 0;
+  width: 2px;
+  background: var(--oxblood);
+}
+
+.result-card.status-deprecated .result-title,
+.result-card.status-archived .result-title,
+.result-card.status-superseded .result-title {
+  color: var(--ink-soft);
+}
+
+.heading-path {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--ink-faded);
+  margin: 0 0 0.6rem;
+}
+
+.heading-path .sep {
+  color: var(--rule-strong);
+  margin-inline: 0.15rem;
+}
+
+.excerpt {
+  margin: 0.3rem 0 0.65rem;
+  color: var(--ink);
+  line-height: 1.6;
+  font-size: 1rem;
+  /* Limit to 4 lines to keep result density. */
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* #117: query-term highlighting in the excerpt.
+   Editorial restraint — no bright yellow. A warm gold tint that
+   reads as "I noticed this", anchored by an underline so it works
+   for color-blind users too. */
+.excerpt mark {
+  background: var(--gold-tint);
+  color: var(--ink);
+  padding: 0 0.1em;
+  border-bottom: 1px solid var(--gold);
+  border-radius: 1px;
+}
+
+.result-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  color: var(--ink-faded);
+  font-size: 0.82rem;
+}
+
+.source-line {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  min-inline-size: 0;
+}
+
+.source {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+
+a.source-link {
+  text-decoration: none;
+  border-bottom: 1px dotted currentColor;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+
+a.source-link:hover,
+a.source-link:focus-visible {
+  color: var(--teal);
+  border-bottom-color: var(--teal);
+}
+
+a.source-link:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
+
+.source-link-icon {
+  font-size: 0.72em;
+  vertical-align: super;
+  opacity: 0.7;
+}
+
+.freshness {
+  font-style: italic;
+  color: var(--ink-faded);
+  font-variation-settings: "opsz" 14;
+}
+
+/* #117: owner byline — quiet credit between the source and the
+   freshness stamp. The leading em-dash gives it a typographic
+   anchor without needing a bullet. */
+.owner {
+  color: var(--ink-faded);
+  font-size: 0.82rem;
+}
+
+.owner em {
+  font-style: italic;
+  color: var(--ink-soft);
+}
+
+.score {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+.score-label {
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.65rem;
+  color: var(--ink-faded);
+}
+
+.score-value {
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+/* ─── Warnings ─────────────────────────────────────────────────── */
+
+.warnings {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.warning {
+  /* #117: dropped the icon column — the italic prefix is the visual
+     anchor now. Stays as a row with the inline-start rule keeping
+     the warning visually grouped. */
+  padding: 0.55rem 0.85rem;
+  border-inline-start: 2px solid currentColor;
+  font-size: 0.92rem;
+  background: var(--paper-dim);
+  color: var(--ink-soft);
+  line-height: 1.45;
+}
+
+.warning-prefix {
+  /* The spec-mandated copy lives in the prefix — set italic so the
+     voice reads as a margin note rather than a system alert. */
+  font-style: italic;
+  font-variation-settings: "opsz" 18;
+  color: currentColor;
+  margin-inline-end: 0.15rem;
+}
+
+.warning-stale_source,
+.warning-deprecated_source {
+  color: var(--gold);
+  background: var(--gold-tint);
+}
+
+.warning-conflicting_sources,
+.warning-prompt_injection_pattern,
+.warning-sensitive_content {
+  color: var(--oxblood);
+  background: var(--oxblood-tint);
+}
+
+.warning-weak_evidence {
+  color: var(--ink-soft);
+  background: var(--paper-dim);
+  border-inline-start-color: var(--ink-faded);
+}
