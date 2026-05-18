@@ -134,4 +134,114 @@ def _parse_hit(entry: object, case_id: str, idx: int) -> ExpectedHit:
     )
 
 
-__all__ = ["ExpectedHit", "GoldenCase", "GoldenSetError", "load_golden_set"]
+# ─── Review-precision set (#108) ────────────────────────────────────
+
+# The closed enum of expected_reason values. Author labels stay
+# narrative; the runner uses this set to validate spelling at load
+# time so a typo doesn't masquerade as a wrong-reason failure.
+REVIEW_REASONS: frozenset[str] = frozenset(
+    {
+        "conflicting_sources",
+        "deprecated_source",
+        "sensitive_content",
+        "prompt_injection_pattern",
+        "weak_evidence",
+        "empty_result",
+        "none",
+    }
+)
+
+
+@dataclass(frozen=True)
+class ReviewCase:
+    """One review-precision case: query + label + optional reason.
+
+    The scorer asserts ``pack.requires_human_review == expected_review``
+    per case and aggregates fraction-correct across the set. The
+    optional ``expected_reason`` is narrative (it's not checked against
+    the actual warning types fired) — kept so a future tightening of
+    the test can add per-reason precision strata without a YAML rewrite.
+    """
+
+    case_id: str
+    query: str
+    filters: dict[str, Any]
+    expected_review: bool
+    expected_reason: str | None = None
+    notes: str | None = None
+
+
+def load_review_set(path: Path) -> list[ReviewCase]:
+    """Parse + validate a review-precision YAML.
+
+    Raises :class:`GoldenSetError` on duplicate case_ids, missing
+    required keys, or invalid filter shapes — all the same failure
+    modes the retrieval-quality loader catches, scaled to the
+    review-precision case shape.
+    """
+    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict) or "cases" not in raw:
+        raise GoldenSetError(f"{path}: top-level 'cases' key missing")
+    version = raw.get("version", 1)
+    if version not in SUPPORTED_VERSIONS:
+        raise GoldenSetError(
+            f"{path}: unsupported schema version {version!r}; "
+            f"this loader handles {sorted(SUPPORTED_VERSIONS)}"
+        )
+    cases_raw = raw["cases"]
+    if not isinstance(cases_raw, list) or not cases_raw:
+        raise GoldenSetError(f"{path}: 'cases' must be a non-empty list")
+
+    cases: list[ReviewCase] = []
+    seen: set[str] = set()
+    for idx, entry in enumerate(cases_raw):
+        if not isinstance(entry, dict):
+            raise GoldenSetError(f"{path}: case {idx} is not a mapping")
+        case = _parse_review_case(entry, path, idx)
+        if case.case_id in seen:
+            raise GoldenSetError(f"{path}: duplicate case_id '{case.case_id}'")
+        seen.add(case.case_id)
+        cases.append(case)
+    return cases
+
+
+def _parse_review_case(entry: dict[str, Any], path: Path, idx: int) -> ReviewCase:
+    for required in ("case_id", "query", "expected_review"):
+        if required not in entry:
+            raise GoldenSetError(f"{path}: case {idx} missing '{required}'")
+    if not isinstance(entry["expected_review"], bool):
+        raise GoldenSetError(f"{path}: case '{entry['case_id']}' expected_review must be a bool")
+    filters_raw = entry.get("filters") or {}
+    if not isinstance(filters_raw, dict):
+        raise GoldenSetError(f"{path}: case '{entry['case_id']}' filters must be a mapping")
+    try:
+        RetrievalFilters(**filters_raw)
+    except Exception as exc:
+        raise GoldenSetError(
+            f"{path}: case '{entry['case_id']}' has invalid filters: {exc}"
+        ) from exc
+    reason = entry.get("expected_reason")
+    if reason is not None and (not isinstance(reason, str) or reason not in REVIEW_REASONS):
+        raise GoldenSetError(
+            f"{path}: case '{entry['case_id']}' expected_reason "
+            f"{reason!r} not in {sorted(REVIEW_REASONS)}"
+        )
+    return ReviewCase(
+        case_id=str(entry["case_id"]),
+        query=str(entry["query"]),
+        filters=filters_raw,
+        expected_review=bool(entry["expected_review"]),
+        expected_reason=reason,
+        notes=entry.get("notes"),
+    )
+
+
+__all__ = [
+    "REVIEW_REASONS",
+    "ExpectedHit",
+    "GoldenCase",
+    "GoldenSetError",
+    "ReviewCase",
+    "load_golden_set",
+    "load_review_set",
+]

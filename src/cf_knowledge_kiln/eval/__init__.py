@@ -15,10 +15,13 @@ Internal modules group concerns:
 """
 
 from cf_knowledge_kiln.eval.dataset import (
+    REVIEW_REASONS,
     ExpectedHit,
     GoldenCase,
     GoldenSetError,
+    ReviewCase,
     load_golden_set,
+    load_review_set,
 )
 from cf_knowledge_kiln.eval.journey_scoring import (
     LatencyMetrics,
@@ -51,6 +54,7 @@ from cf_knowledge_kiln.eval.scoring import (
 
 __all__ = [
     "DEFAULT_K_VALUES",
+    "REVIEW_REASONS",
     "AggregateMetrics",
     "CaseResult",
     "EvalReport",
@@ -58,11 +62,13 @@ __all__ = [
     "GoldenCase",
     "GoldenSetError",
     "LatencyMetrics",
+    "ReviewCase",
     "aggregate",
     "citation_presence_rate",
     "first_matching_rank",
     "latency_metrics",
     "load_golden_set",
+    "load_review_set",
     "matches",
     "recall_at_k",
     "reciprocal_rank",

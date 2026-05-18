@@ -109,6 +109,12 @@ def seeded_db(database_url: str) -> Iterator[None]:
                     type="local",
                     path=str(_DOCS_DIR),
                     include=["**/*.md"],
+                    # #108: docs/_eval/ is the review-precision corpus
+                    # (conflict pair, sensitive marker, prompt-injection
+                    # trap) — its own conftest seeds it; the journey +
+                    # golden tiers must NOT see it or their queries
+                    # against the real docs/ tree get polluted.
+                    exclude=["_eval/**"],
                 )
                 await run_source(
                     session,
@@ -150,6 +156,7 @@ def seeded_db_with_adversarial(database_url: str) -> Iterator[None]:
                         type="local",
                         path=str(_DOCS_DIR),
                         include=["**/*.md"],
+                        exclude=["_eval/**"],  # see seeded_db note above (#108)
                     ),
                     settings=_eval_settings(),
                     embedding_provider=MockEmbeddingProvider(),

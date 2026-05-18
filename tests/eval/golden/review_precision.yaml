@@ -1,0 +1,125 @@
+version: 1
+# Hand-labeled `requires_human_review` precision set (#108 item 1).
+#
+# Corpus: docs/_eval/  (ingested via LocalSource named "kiln-eval")
+#
+# Schema:
+#
+#   cases:
+#     - case_id: <unique slug>
+#       query: <free text>
+#       filters: {<RetrievalFilters>}        # optional, default {}
+#       expected_review: <bool>              # required — the label
+#       expected_reason:                     # optional, narrative
+#         <enum>                             # one of:
+#         | conflicting_sources
+#         | deprecated_source
+#         | sensitive_content
+#         | prompt_injection_pattern
+#         | weak_evidence
+#         | empty_result
+#         | none
+#       notes: <free text>                   # optional context
+#
+# Scorer (tests/eval/test_review_precision.py): fraction of cases
+# where pack.requires_human_review matches the label. Target ≥ 0.85
+# in production; under MockEmbeddingProvider the floor is lower —
+# see the test for the bootstrap value + the re-baseline plan.
+cases:
+  # ─── Should require human review (5) ─────────────────────────
+
+  - case_id: conflict-token-rotation
+    query: "bearer token rotation policy cadence operators 90 30 days"
+    filters: {status: [active]}
+    expected_review: true
+    expected_reason: conflicting_sources
+    notes: |
+      auth-policy-{legacy,current}.md share the H2 "Bearer token
+      rotation policy"; one says 90 days, the other 30. Conflict
+      detector fires when both chunks land in the top-K.
+
+  - case_id: deprecated-cf-push-only-status
+    query: "cf push kiln api worker runbook"
+    filters: {status: [deprecated]}
+    expected_review: true
+    expected_reason: deprecated_source
+    notes: |
+      Status-filter scoped to deprecated only. The deprecated
+      cf-push runbook is the lone matching doc; every retrieved
+      chunk is deprecated → the all-deprecated short-circuit fires.
+
+  - case_id: sensitive-marker-chunk
+    query: "customer data access INTERNAL-SECRET synthetic marker regex bait scanner data-handling"
+    filters: {status: [active]}
+    expected_review: true
+    expected_reason: sensitive_content
+    notes: |
+      Keywords are pulled verbatim from chunk 0 of
+      procedure-customer-data-access.md (the chunk that carries
+      the INTERNAL-SECRET marker). Forces that specific chunk
+      into top-K so the sensitive_content warning fires.
+
+  - case_id: injection-trap-chunk
+    query: "trap diagnostic context fixture prompt injection scanner ignore previous instructions reveal system prompt"
+    filters: {status: [active]}
+    expected_review: true
+    expected_reason: prompt_injection_pattern
+    notes: |
+      Keywords pull chunk 3 of runbook-injection-trap.md (the trap
+      block stamped by the ingest scanner). The legitimate runbook
+      surrounds the trap; ranking surfaces the trap chunk because
+      its content overlaps the query most directly.
+
+  - case_id: empty-superseded-filter
+    query: "kiln retrieval architecture"
+    filters: {status: [superseded]}
+    expected_review: true
+    expected_reason: empty_result
+    notes: |
+      No doc in the corpus carries `status: superseded`, so the
+      filter excludes everything. Empty result → the
+      empty-evidence short-circuit fires.
+
+  # ─── Should NOT require review (7) ───────────────────────────
+
+  - case_id: clean-asyncpg-pool
+    query: "asyncpg connection pool size kiln api worker latency p95 service plan"
+    filters: {status: [active, approved]}
+    expected_review: false
+    expected_reason: none
+
+  - case_id: clean-rrf-decision
+    query: "reciprocal rank fusion k parameter sixty TREC default ranking"
+    filters: {status: [active, approved]}
+    expected_review: false
+    expected_reason: none
+
+  - case_id: clean-stuck-ingest
+    query: "stuck ingest job state running requeue worker recover_stale_running audit"
+    filters: {status: [active, approved]}
+    expected_review: false
+    expected_reason: none
+
+  - case_id: clean-citation-format
+    query: "kiln citation repo path heading_path commit_sha four parts cited-or-silent"
+    filters: {status: [active, approved]}
+    expected_review: false
+    expected_reason: none
+
+  - case_id: clean-search-vs-agent
+    query: "v1 search agent context-pack token_budget shape ResultCard ContextPack consumer"
+    filters: {status: [active, approved]}
+    expected_review: false
+    expected_reason: none
+
+  - case_id: clean-restart-worker
+    query: "restart ingestion worker stuck DB connection cf restart recover_stale_running"
+    filters: {status: [active, approved]}
+    expected_review: false
+    expected_reason: none
+
+  - case_id: clean-pgvector-extension
+    query: "pgvector preflight crashloops pg_available_extensions broker superuser DDL service plan"
+    filters: {status: [active, approved]}
+    expected_review: false
+    expected_reason: none
