@@ -52,10 +52,19 @@
   const renderRecent = () => {
     const datalist = document.getElementById("recent-queries");
     if (!datalist) return;
-    const list = loadRecent();
-    datalist.innerHTML = list
-      .map((q) => `<option value="${q.replace(/"/g, "&quot;")}"></option>`)
-      .join("");
+    // DOM-property assignment (opt.value = q) is XSS-safe regardless of
+    // the string contents. The previous innerHTML approach with manual
+    // " → &quot; escaping was vulnerable to entity-decode round-trip:
+    // a literal "&quot;" string in localStorage would be re-decoded by
+    // the HTML parser on render, breaking out of the attribute and
+    // injecting markup. (#137 reviewer MED.)
+    datalist.replaceChildren(
+      ...loadRecent().map((q) => {
+        const opt = document.createElement("option");
+        opt.value = q;
+        return opt;
+      })
+    );
   };
 
   // ─── Exemplar buttons (empty state) ───────────────────────────────

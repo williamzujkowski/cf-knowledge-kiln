@@ -141,6 +141,16 @@
               {% for s in statuses %}
                 <input type="hidden" name="status" value="{{ s }}">
               {% endfor %}
+              {# #137 reviewer LOW: preserve the rest of the filter rail
+                 so widening status doesn't silently drop repo / owner /
+                 tags / etc. constraints the user set up. #}
+              {% if filters %}
+                {% if filters.repo %}<input type="hidden" name="repo" value="{{ filters.repo }}">{% endif %}
+                {% if filters.owner %}<input type="hidden" name="owner" value="{{ filters.owner }}">{% endif %}
+                {% if filters.tags %}<input type="hidden" name="tags" value="{{ filters.tags }}">{% endif %}
+                {% if filters.last_reviewed_after %}<input type="hidden" name="last_reviewed_after" value="{{ filters.last_reviewed_after }}">{% endif %}
+                {% for dt in filters.doc_type or [] %}<input type="hidden" name="doc_type" value="{{ dt }}">{% endfor %}
+              {% endif %}
               <button type="submit" class="widen-button">include&nbsp;{{ label }}</button>
             </form>
           </li>
