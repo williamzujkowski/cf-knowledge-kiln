@@ -4,6 +4,13 @@
 * ``POST /search`` is the HTMX target — accepts form data and returns
   just the results-list HTML fragment so HTMX can swap it into the
   page without a reload.
+* ``POST /feedback`` writes a rag_feedback row and returns the inline
+  ack chip.
+
+The ``GET /preview/{chunk_id}`` route lives in
+:mod:`cf_knowledge_kiln.api.preview` and form-parsing helpers live in
+:mod:`cf_knowledge_kiln.api.forms`; both are mounted by the app
+factory alongside this router.
 
 These routes intentionally live separately from the JSON API in
 ``api/retrieval.py``. The JSON API is the canonical interface for
@@ -21,7 +28,6 @@ import logging
 import re
 from pathlib import Path
 from typing import Annotated, Any
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, Form, Header, Request
 from fastapi.responses import HTMLResponse
@@ -36,14 +42,18 @@ from cf_knowledge_kiln.api.dependencies import (
     get_session,
     get_trust_xff,
 )
-from cf_knowledge_kiln.api.rate_limit import TokenBucketLimiter, client_ip
-from cf_knowledge_kiln.db.repositories import (
-    ChunksRepository,
-    DocumentsRepository,
-    FeedbackRepository,
-    QueriesRepository,
+from cf_knowledge_kiln.api.forms import (
+    FEEDBACK_COMMENT_MAX_LEN,
+    FEEDBACK_TYPES,
+    empty_filters_view,
+    filters_from_form,
+    parse_uuid,
+    selected_statuses,
 )
-from cf_knowledge_kiln.retrieval import HybridRetriever, RetrievalFilters, Status
+from cf_knowledge_kiln.api.rate_limit import TokenBucketLimiter, client_ip
+from cf_knowledge_kiln.api.views import humanize_warning, log_human_query
+from cf_knowledge_kiln.db.repositories import FeedbackRepository
+from cf_knowledge_kiln.retrieval import HybridRetriever
 
 logger = logging.getLogger(__name__)
 
@@ -52,10 +62,6 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 router = APIRouter(tags=["web"], include_in_schema=False)
 
-# Default status filter shown on initial page load — same heuristic
-# as the JSON API's ``KILN_DEFAULT_STATUS_PREFERENCE`` setting.
-_DEFAULT_STATUSES: list[Status] = ["active", "approved"]
-
 
 @router.get("/", response_class=HTMLResponse)
 async def search_page(request: Request) -> HTMLResponse:
@@ -63,24 +69,8 @@ async def search_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "search.html",
-        {"query": "", "initial_results": None, "filters": _empty_filters_view()},
+        {"query": "", "initial_results": None, "filters": empty_filters_view()},
     )
-
-
-def _empty_filters_view() -> dict[str, Any]:
-    r"""Default filter-rail view dict — every field empty/None.
-
-    The template reads dotted keys (\`filters.repo\` etc.) so a flat
-    dict with the same keys lets the rail render with no values on
-    initial page load.
-    """
-    return {
-        "repo": "",
-        "doc_type": [],
-        "owner": "",
-        "last_reviewed_after": "",
-        "tags": "",
-    }
 
 
 @router.post("/search", response_class=HTMLResponse)
@@ -135,7 +125,7 @@ async def search_partial(
             request, "_results.html", {"results": [], "warnings": [], "query": ""}
         )
     fs = filters_set is not None
-    if fs and not _selected_statuses(status):
+    if fs and not selected_statuses(status):
         # User explicitly unchecked every status filter — short-circuit
         # to zero results without hitting the engine. (build_predicates
         # treats an empty status list as "no constraint", which would
@@ -143,7 +133,7 @@ async def search_partial(
         return templates.TemplateResponse(
             request, "_results.html", {"results": [], "warnings": [], "query": query}
         )
-    filters = _filters_from_form(
+    filters = filters_from_form(
         status,
         filters_set=fs,
         repo=repo,
@@ -171,7 +161,7 @@ async def search_partial(
         # next submit.
         query_id: object | None = None
     else:
-        query_id = await _log_human_query(
+        query_id = await log_human_query(
             session, query=query, filters=filters, chunk_ids=[c.chunk_id for c in result.chunks]
         )
     cards = [
@@ -189,7 +179,7 @@ async def search_partial(
         {
             "query": query,
             "results": cards,
-            "warnings": [_humanize_warning(w) for w in (result.warnings or [])],
+            "warnings": [humanize_warning(w) for w in (result.warnings or [])],
             "query_id": str(query_id) if query_id else None,
             # The rail isn't re-rendered in the HTMX partial today, but
             # passing the values through keeps the contract symmetric
@@ -209,91 +199,7 @@ async def search_partial(
     )
 
 
-# ─── /preview/{chunk_id} ────────────────────────────────────────────
-
-
-_PREVIEW_NEIGHBOR_CHARS: int = 500
-"""Hard char cap on each neighbor preview body — keeps the side panel
-short enough to read at a glance, per #119 acceptance criteria."""
-
-
-@router.get("/preview/{chunk_id}", response_class=HTMLResponse)
-async def preview_chunk(
-    request: Request,
-    chunk_id: str,
-    session: Annotated[AsyncSession, Depends(get_session)],
-) -> HTMLResponse:
-    """HTMX target — render a chunk + its neighbors in the preview panel.
-
-    Returns the ``_preview.html`` fragment ready to be swapped into
-    ``#preview`` by HTMX. Unknown / malformed chunk ids render a small
-    italic message rather than a JSON 404 so the swap stays inline.
-    The neighbor bodies are trimmed to :data:`_PREVIEW_NEIGHBOR_CHARS`
-    characters; the target chunk renders in full.
-    """
-    cid = _parse_uuid(chunk_id)
-    if cid is None:
-        return templates.TemplateResponse(
-            request, "_preview.html", {"missing": True}, status_code=404
-        )
-    prev, target, nxt = await ChunksRepository(session).neighbors(cid, n=1)
-    if target is None:
-        return templates.TemplateResponse(
-            request, "_preview.html", {"missing": True}, status_code=404
-        )
-    doc = await DocumentsRepository(session).get(target.document_id)
-    return templates.TemplateResponse(
-        request,
-        "_preview.html",
-        {
-            "missing": False,
-            "doc": doc,
-            "target": {
-                "chunk_id": target.id,
-                "chunk_index": target.chunk_index,
-                "heading_path": list(target.heading_path or []),
-                "content": target.content,
-            },
-            "prev": [
-                {
-                    "chunk_id": c.id,
-                    "chunk_index": c.chunk_index,
-                    "content": c.content[:_PREVIEW_NEIGHBOR_CHARS],
-                    "truncated": len(c.content) > _PREVIEW_NEIGHBOR_CHARS,
-                }
-                for c in prev
-            ],
-            "next": [
-                {
-                    "chunk_id": c.id,
-                    "chunk_index": c.chunk_index,
-                    "content": c.content[:_PREVIEW_NEIGHBOR_CHARS],
-                    "truncated": len(c.content) > _PREVIEW_NEIGHBOR_CHARS,
-                }
-                for c in nxt
-            ],
-        },
-    )
-
-
 # ─── /feedback ──────────────────────────────────────────────────────
-
-
-_FEEDBACK_TYPES: frozenset[str] = frozenset(
-    {
-        "useful",
-        "not_useful",
-        "stale",
-        "wrong_source",
-        "missing_source",
-        "duplicate_or_conflicting",
-    }
-)
-"""Six feedback signals per the plan + issue #25."""
-
-_FEEDBACK_COMMENT_MAX_LEN: int = 500
-"""Per-comment character cap. Enforced server-side; no PII guarantees
-beyond what the user voluntarily enters."""
 
 
 @router.post("/feedback", response_class=HTMLResponse)
@@ -332,13 +238,13 @@ async def submit_feedback(
             status_code=429,
             headers={"Retry-After": str(retry)},
         )
-    if signal not in _FEEDBACK_TYPES:
+    if signal not in FEEDBACK_TYPES:
         return _feedback_error(request, "Unknown feedback type.")
-    qid = _parse_uuid(query_id)
-    cid = _parse_uuid(chunk_id)
+    qid = parse_uuid(query_id)
+    cid = parse_uuid(chunk_id)
     if qid is None or cid is None:
         return _feedback_error(request, "Invalid query or chunk reference.")
-    note = (comment or "").strip()[:_FEEDBACK_COMMENT_MAX_LEN] or None
+    note = (comment or "").strip()[:FEEDBACK_COMMENT_MAX_LEN] or None
     try:
         async with session.begin_nested():
             await FeedbackRepository(session).create(
@@ -378,105 +284,7 @@ def _feedback_error_with_status(
     )
 
 
-def _parse_uuid(raw: str) -> UUID | None:
-    try:
-        return UUID(raw)
-    except (ValueError, AttributeError, TypeError):
-        return None
-
-
-# ─── helpers ────────────────────────────────────────────────────────
-
-
-_VALID_STATUSES: frozenset[str] = frozenset(
-    {"active", "approved", "draft", "deprecated", "archived", "superseded"}
-)
-
-
-def _selected_statuses(status: list[str] | None) -> list[str]:
-    """Return only the form values that match a real Status enum."""
-    return [s for s in (status or []) if s in _VALID_STATUSES]
-
-
-def _filters_from_form(
-    status: list[str] | None,
-    *,
-    filters_set: bool,
-    repo: str = "",
-    doc_type: list[str] | None = None,
-    owner: str = "",
-    last_reviewed_after: str = "",
-    tags: str = "",
-) -> RetrievalFilters:
-    """Translate form values into :class:`RetrievalFilters`.
-
-    ``filters_set=True`` means the search form actually submitted the
-    filter fieldset (the hidden ``_filters_set`` marker arrived). In
-    that case an empty ``status`` list is the user's intentional choice
-    ("show nothing matching these statuses") and we propagate it.
-    Only when ``filters_set`` is False — i.e., a programmatic POST that
-    didn't include the marker — do we fall back to
-    :data:`_DEFAULT_STATUSES`.
-
-    Unknown status values are dropped silently (the form is closed by
-    the template, but a hand-crafted POST might submit anything).
-
-    #118 adds the expanded rail (repo / doc_type / owner /
-    last_reviewed_after / tags). Each is optional — empty input
-    becomes ``None`` so the engine sees no constraint.
-    """
-    if filters_set:
-        raw: list[str] = status or []
-    elif status is not None:
-        raw = status
-    else:
-        raw = list(_DEFAULT_STATUSES)
-    selected = [s for s in raw if s in _VALID_STATUSES]
-    # When filters_set=True with empty selected, the handler
-    # short-circuits before we get here, so this path never returns
-    # `status=[]` to the engine (which would be a no-constraint
-    # surprise). When filters_set=False, selected is at minimum the
-    # _DEFAULT_STATUSES, so `selected or None` always gives a list.
-    # status is typed `list[Status]` (a Literal) on the model; we
-    # narrow to those values above but mypy doesn't track that.
-    return RetrievalFilters(
-        status=selected or None,  # type: ignore[arg-type]
-        repo=_split_csv(repo) or None,
-        doc_type=doc_type or None,
-        owner=_split_csv(owner) or None,
-        last_reviewed_after=_parse_iso_date(last_reviewed_after),
-        tags=_split_csv(tags) or None,
-    )
-
-
-def _split_csv(raw: str) -> list[str]:
-    """Split a comma- or whitespace-separated input into a clean list.
-
-    Used for free-text fields (repo, owner, tags) where the form
-    accepts either ``foo,bar`` or ``foo bar`` or ``foo, bar``. Empty
-    input returns an empty list — caller decides whether that becomes
-    ``None``.
-    """
-    return [t for t in re.split(r"[,\s]+", raw.strip()) if t]
-
-
-def _parse_iso_date(raw: str) -> Any:
-    """Coerce an HTML ``<input type=\"date\">`` value to ``datetime.date``.
-
-    HTML date inputs always submit ISO-8601 (\"YYYY-MM-DD\") so a
-    permissive parser isn't needed. Empty input returns ``None``.
-    Invalid input also returns ``None`` rather than 422-ing — the
-    form-side validator catches malformed values before they reach
-    here in normal use.
-    """
-    if not raw:
-        return None
-    from datetime import date
-
-    try:
-        return date.fromisoformat(raw)
-    except ValueError:
-        return None
+# ─── presentation helpers (template-coupled) ────────────────────────
 
 
 def _result_card_view(
@@ -571,75 +379,6 @@ def _highlight_excerpt(text: str, query: str) -> Markup:
     return Markup(  # noqa: S704
         pattern.sub(r"<mark>\1</mark>", escaped)
     )  # nosec B704
-
-
-# Spec-mandated warning copy from docs/user-journeys.md, plus a quiet
-# italic prefix for the other emitted warning types. The template
-# renders {prefix, message} and lets the prefix lead with italic
-# voice instead of dropping the engine's raw string into the page.
-_WARNING_COPY: dict[str, tuple[str, str]] = {
-    "weak_evidence": (
-        "Confidence is low —",
-        "I found related content, but no clearly authoritative source.",
-    ),
-    "conflicting_sources": (
-        "Sources disagree —",
-        "I found multiple sources that may conflict. "
-        "Prefer active/approved docs unless you are researching history.",
-    ),
-    "stale_source": ("Source is stale —", ""),
-    "deprecated_source": ("Document is deprecated —", ""),
-    "prompt_injection_pattern": ("Caution —", ""),
-    "sensitive_content": ("Sensitive content —", ""),
-    "query_normalized": ("Query was normalized —", ""),
-}
-
-
-def _humanize_warning(w: Any) -> dict[str, str]:
-    """Map an engine :class:`Warning` to ``{prefix, message, type}``.
-
-    Falls back to the engine's raw ``message`` when the warning type
-    isn't in the spec-mandated copy table (so a future warning type
-    surfaces something rather than nothing).
-
-    An empty override string in :data:`_WARNING_COPY` is intentional:
-    the prefix carries the spec-mandated voice, and the engine's raw
-    message carries the per-instance detail (e.g., \"Document last
-    reviewed 2024-01-15\"). The two together read as a margin note.
-    """
-    wtype = getattr(w, "type", "")
-    raw = getattr(w, "message", "") or ""
-    prefix, override = _WARNING_COPY.get(wtype, ("", raw))
-    return {"type": wtype, "prefix": prefix, "message": override or raw}
-
-
-async def _log_human_query(
-    session: AsyncSession,
-    *,
-    query: str,
-    filters: RetrievalFilters,
-    chunk_ids: list[Any],
-) -> object | None:
-    """Append a row to ``rag_queries`` and return its id (or None on failure).
-
-    The id is rendered into the result page so the feedback widget
-    can tie each rag_feedback row back to the query that produced
-    the chunk. Non-fatal: telemetry failure logs + returns None,
-    which the template renders without feedback widgets (rather
-    than 500'ing the user's search).
-    """
-    try:
-        async with session.begin_nested():
-            row = await QueriesRepository(session).create(
-                query=query,
-                consumer_type="human",
-                filters=filters.model_dump(exclude_none=True),
-                retrieved_chunk_ids=chunk_ids,
-            )
-        return row.id
-    except Exception:
-        logger.exception("rag_queries telemetry write failed (non-fatal)")
-        return None
 
 
 __all__ = ["router"]
