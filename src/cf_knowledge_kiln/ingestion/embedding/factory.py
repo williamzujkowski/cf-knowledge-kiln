@@ -9,7 +9,8 @@ Three policies are enforced here so the rest of the codebase can trust
 the provider it receives:
 
 * **Provider selection is config, not code.** A model swap is a YAML
-  change.
+  change. Backends dispatch through the :data:`_PROVIDER_FACTORIES`
+  registry — adding a new backend is one entry in that dict.
 * **Excluded model families are refused at config-load time.** Qwen,
   DeepSeek, and BAAI/BGE are the plan's hard exclusion list (ADR-0005).
   Naming any of them in ``config/models.yaml`` raises before the worker
@@ -24,6 +25,7 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
 
@@ -38,6 +40,7 @@ from cf_knowledge_kiln.ingestion.embedding import (
 )
 from cf_knowledge_kiln.ingestion.embedding.local import (
     LocalEmbeddingProvider,
+    LocalSentenceTransformersProvider,
     ModelFactory,
 )
 from cf_knowledge_kiln.ingestion.embedding.openai_compatible import (
@@ -48,9 +51,15 @@ from cf_knowledge_kiln.ingestion.embedding.openai_compatible import (
 
 logger = logging.getLogger(__name__)
 
-ProviderName = Literal["local", "openai-compatible", "mock"]
-
-_ALLOWED_PROVIDERS: frozenset[str] = frozenset({"local", "openai-compatible", "mock"})
+# ``local`` is preserved as a back-compat alias for the existing config
+# files; ``local-sentence-transformers`` is the canonical, descriptive
+# name. Both dispatch to the same class.
+ProviderName = Literal[
+    "local",
+    "local-sentence-transformers",
+    "openai-compatible",
+    "mock",
+]
 
 # Substring match, case-insensitive. Mirrors docs/model-providers.md.
 _EXCLUDED_MODEL_PREFIXES: tuple[str, ...] = (
@@ -83,7 +92,68 @@ class EmbeddingConfig(BaseModel):
     enabled: bool = True
     base_url_env: str | None = None
     api_key_env: str | None = None
+    batch_size: int | None = None
+    device: str | None = None
     provider_settings: _ProviderSettings = Field(default_factory=_ProviderSettings)
+
+
+# ───────────────────────── Provider registry ────────────────────────
+#
+# Single dispatch table. Adding a new backend = one entry here + the
+# class implementation. ``_validate_policies`` checks ``config.provider``
+# against the keys of this dict, so the registry is also the authoritative
+# allowlist.
+
+ProviderFactory = Callable[..., EmbeddingProvider]
+
+
+def _mock_factory(
+    config: EmbeddingConfig,
+    settings: Settings,  # noqa: ARG001 — uniform signature
+    *,
+    local_model_factory: ModelFactory | None = None,  # noqa: ARG001
+) -> EmbeddingProvider:
+    return MockEmbeddingProvider(dimensions=config.dimensions, model=config.name)
+
+
+def _local_factory(
+    config: EmbeddingConfig,
+    settings: Settings,  # noqa: ARG001
+    *,
+    local_model_factory: ModelFactory | None = None,
+) -> EmbeddingProvider:
+    """Build a sentence-transformers-backed local provider.
+
+    ``batch_size`` and ``device`` come from YAML when set; otherwise
+    the provider's own defaults (and ``$KILN_EMBEDDING_DEVICE``) apply.
+    """
+    kwargs: dict[str, Any] = {
+        "model_name": config.name,
+        "dimensions": config.dimensions,
+        "model_factory": local_model_factory,
+    }
+    if config.batch_size is not None:
+        kwargs["batch_size"] = config.batch_size
+    if config.device is not None:
+        kwargs["device"] = config.device
+    return LocalSentenceTransformersProvider(**kwargs)
+
+
+def _openai_compatible_factory(
+    config: EmbeddingConfig,
+    settings: Settings,
+    *,
+    local_model_factory: ModelFactory | None = None,  # noqa: ARG001
+) -> EmbeddingProvider:
+    return _build_openai_compatible(config, settings)
+
+
+_PROVIDER_FACTORIES: dict[str, ProviderFactory] = {
+    "mock": _mock_factory,
+    "local": _local_factory,
+    "local-sentence-transformers": _local_factory,
+    "openai-compatible": _openai_compatible_factory,
+}
 
 
 def load_embedding_config(path: str | Path) -> EmbeddingConfig:
@@ -120,9 +190,10 @@ def load_embedding_config(path: str | Path) -> EmbeddingConfig:
 
 
 def _validate_policies(config: EmbeddingConfig) -> None:
-    if config.provider not in _ALLOWED_PROVIDERS:
+    if config.provider not in _PROVIDER_FACTORIES:
         raise EmbeddingConfigError(
-            f"unknown embedding provider {config.provider!r}; allowed: {sorted(_ALLOWED_PROVIDERS)}"
+            f"unknown embedding provider {config.provider!r}; "
+            f"allowed: {sorted(_PROVIDER_FACTORIES)}"
         )
     if config.dimensions <= 0:
         raise EmbeddingConfigError(f"dimensions must be positive, got {config.dimensions}")
@@ -143,25 +214,22 @@ def build_embedding_provider(
 ) -> EmbeddingProvider:
     """Instantiate the active provider per ``config``.
 
-    The factory honors the policy that a disabled model never produces
-    a working provider — even if everything else is valid.
+    Dispatches through :data:`_PROVIDER_FACTORIES`. The factory honors
+    the policy that a disabled model never produces a working provider
+    — even if everything else is valid.
 
     ``local_model_factory`` is injectable so tests can avoid loading
     real sentence-transformers weights.
     """
     if not config.enabled:
         raise EmbeddingConfigError(f"embedding model {config.name!r} is disabled in config")
-    if config.provider == "mock":
-        return MockEmbeddingProvider(dimensions=config.dimensions, model=config.name)
-    if config.provider == "local":
-        return LocalEmbeddingProvider(
-            model=config.name,
-            dimensions=config.dimensions,
-            model_factory=local_model_factory,
-        )
-    if config.provider == "openai-compatible":
-        return _build_openai_compatible(config, settings)
-    raise EmbeddingConfigError(f"unhandled provider {config.provider!r}")
+    try:
+        factory = _PROVIDER_FACTORIES[config.provider]
+    except KeyError as exc:
+        # ``_validate_policies`` should have caught this, but defend
+        # in depth in case a caller built an ``EmbeddingConfig`` directly.
+        raise EmbeddingConfigError(f"unhandled provider {config.provider!r}") from exc
+    return factory(config, settings, local_model_factory=local_model_factory)
 
 
 def _build_openai_compatible(
@@ -227,9 +295,12 @@ def build_provider_from_settings(settings: Settings) -> EmbeddingProvider | None
         raise
 
 
-__all__: list[Any] = [
+# Re-export the canonical alias name so older callers that did
+# ``from ... factory import LocalEmbeddingProvider`` keep working.
+__all__: list[str] = [
     "EmbeddingConfig",
     "EmbeddingConfigError",
+    "LocalEmbeddingProvider",
     "ProviderName",
     "build_embedding_provider",
     "build_provider_from_settings",

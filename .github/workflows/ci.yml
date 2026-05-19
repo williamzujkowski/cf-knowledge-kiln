@@ -27,6 +27,11 @@ jobs:
           python-version: "3.12"
           cache: pip
 
+      # NOTE: no HuggingFace model cache here yet — neither this `verify`
+      # job nor `integration` installs the `[real-embeddings]` extra or
+      # sets `KILN_TEST_REAL_EMBEDDINGS=1`, so the cache would store an
+      # empty directory. Add it back alongside an opt-in real-embedding
+      # job when that runs in CI.
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip

@@ -14,7 +14,10 @@ for the architectural rationale.
 ## Possible additions, subject to provenance review
 
 - Small Llama-family generators (Meta, US).
-- Other US-origin sentence-transformer embeddings with a permissive license.
+- Other US-origin sentence-transformer embeddings with a permissive
+  license. `Snowflake/snowflake-arctic-embed-m` (Snowflake, US,
+  Apache 2.0, 768-dim) is the next likely candidate — it drops in via
+  `provider: local-sentence-transformers` with no code change.
 
 ## Excluded for MVP
 

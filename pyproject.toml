@@ -51,10 +51,21 @@ ingestion = [
   "tiktoken>=0.8,<1.0",
 ]
 embeddings = [
-  # Heavy: pulls in torch transitively. Only needed for the `local`
-  # embedding provider; the `openai-compatible` and `mock` providers
-  # work without this extra.
+  # Heavy: pulls in torch transitively. Only needed for the
+  # `local-sentence-transformers` (a.k.a. `local`) embedding provider;
+  # the `openai-compatible` and `mock` providers work without this
+  # extra. Kept as an alias for back-compat — see `real-embeddings`
+  # below.
   "sentence-transformers>=3.0,<6.0",
+]
+real-embeddings = [
+  # Canonical name for the heavy local-inference extra. Mirrors
+  # `embeddings` above; both install the same set. `torch` is pulled
+  # in transitively by `sentence-transformers` but we pin it explicitly
+  # so CI can pre-cache it as a separate layer and so a bad
+  # transitive resolution can't silently downgrade past the floor.
+  "sentence-transformers>=3.0,<6.0",
+  "torch>=2.0,<3",
 ]
 dev = [
   "ruff>=0.7,<1.0",

@@ -21,7 +21,15 @@ allowlist also gates the OpenAI-compatible factory in
 |---|---|---|
 | OpenAI | `text-embedding-3-small`, `text-embedding-3-large` | 1536, 3072 |
 | AWS Bedrock | `amazon.titan-embed-text-v2` | 1024 |
+| Nomic AI | `nomic-ai/nomic-embed-text-v1.5` (Apache 2.0, US-origin) | 768 |
+| Local (sentence-transformers) | `nomic-ai/nomic-embed-text-v1.5` (default); `Snowflake/snowflake-arctic-embed-m` (alt) | 768 |
 | Local | `MockEmbeddingProvider` (eval-only) | configurable |
+
+The "Local (sentence-transformers)" row is the generic wrapper backing
+the `local-sentence-transformers` provider in `config/models.yaml`.
+Any sentence-transformers-compatible HuggingFace model that's also on
+the [provenance allowlist](../model-providers.md) can be plugged in by
+changing the `name:` field; no code change is required.
 
 ## Generator providers
 
