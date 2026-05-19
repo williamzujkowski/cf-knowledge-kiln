@@ -130,20 +130,35 @@ _DOWNGRADING_WARNING_TYPES: frozenset[str] = frozenset(
 )
 
 
-def derive_confidence(chunks: list[RankedChunk], *, warnings: list[Warning]) -> Confidence:
+def derive_confidence(
+    chunks: list[RankedChunk],
+    *,
+    warnings: list[Warning],
+    weak_evidence_threshold: float | None = None,
+) -> Confidence:
     """Map (top-score, warnings) → ``high|medium|low|none``.
 
     Heuristic, not a probability:
 
     * empty → ``none``
-    * top score < :data:`WEAK_EVIDENCE_SCORE_THRESHOLD` → ``low``
+    * top score < weak-evidence threshold → ``low``
     * presence of a downgrading warning drops one level
     * else: top ≥ 0.8 → ``high``; otherwise ``medium``
+
+    ``weak_evidence_threshold`` overrides the module-level constant;
+    the engine passes ``RetrievalConfig.weak_evidence_score_threshold``
+    so a YAML-configured value actually takes effect. ``None`` falls
+    back to :data:`WEAK_EVIDENCE_SCORE_THRESHOLD`.
     """
     if not chunks:
         return "none"
     top = max(c.score for c in chunks)
-    if top < WEAK_EVIDENCE_SCORE_THRESHOLD:
+    threshold = (
+        WEAK_EVIDENCE_SCORE_THRESHOLD
+        if weak_evidence_threshold is None
+        else weak_evidence_threshold
+    )
+    if top < threshold:
         return "low"
     has_downgrade = any(w.type in _DOWNGRADING_WARNING_TYPES for w in warnings)
     if top >= 0.8:
@@ -161,8 +176,15 @@ def assemble_context_pack(
     query: str,  # noqa: ARG001 — reserved for future summarization
     max_chunks: int,
     max_tokens: int,
+    weak_evidence_threshold: float | None = None,
 ) -> ContextPackResponse:
-    """Compose the full :class:`ContextPackResponse` for an agent caller."""
+    """Compose the full :class:`ContextPackResponse` for an agent caller.
+
+    ``weak_evidence_threshold`` flows from the engine's ``RetrievalConfig``
+    into the review-decision + confidence-bucket helpers below. ``None``
+    falls back to the module-default
+    :data:`cf_knowledge_kiln.retrieval.ranking.WEAK_EVIDENCE_SCORE_THRESHOLD`.
+    """
     # #100: sensitive content is allowed to surface in human search
     # results (with a warning) but MUST be dropped from agent context
     # packs entirely. Filter the input chunks before token budgeting
@@ -175,12 +197,21 @@ def assemble_context_pack(
         safe_inputs, contents=contents, max_chunks=max_chunks, max_tokens=max_tokens
     )
     evidence = [_to_evidence_chunk(c, inputs.chunk_text, inputs.document_refs) for c in kept]
-    needs_review = requires_human_review(kept, inputs.warnings, inputs.conflicts)
+    needs_review = requires_human_review(
+        kept,
+        inputs.warnings,
+        inputs.conflicts,
+        weak_evidence_threshold=weak_evidence_threshold,
+    )
     reasons = _review_reasons(kept, inputs.warnings, inputs.conflicts)
     return ContextPackResponse(
         context_pack_id=uuid4(),
         answerable=bool(kept) and not needs_review,
-        confidence=derive_confidence(kept, warnings=inputs.warnings),
+        confidence=derive_confidence(
+            kept,
+            warnings=inputs.warnings,
+            weak_evidence_threshold=weak_evidence_threshold,
+        ),
         evidence=evidence,
         warnings=inputs.warnings,
         conflicts=inputs.conflicts,

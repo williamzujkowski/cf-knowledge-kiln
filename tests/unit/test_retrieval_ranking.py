@@ -219,7 +219,8 @@ class TestWeakEvidenceWarning:
         assert "No matching" in w.message
 
     def test_below_threshold_emits_warning(self) -> None:
-        [w] = weak_evidence_warning([_mk(score=0.2)])
+        # RRF-scale score — see WEAK_EVIDENCE_SCORE_THRESHOLD docstring.
+        [w] = weak_evidence_warning([_mk(score=0.005)])
         assert w.type == "weak_evidence"
 
     def test_above_threshold_emits_nothing(self) -> None:
@@ -306,7 +307,8 @@ class TestRequiresHumanReview:
         assert requires_human_review([_mk(score=0.9)], [w], []) is True
 
     def test_weak_evidence_requires_review(self) -> None:
-        chunks = [_mk(score=0.1)]
+        # RRF-scale score — well below the 0.015 default threshold.
+        chunks = [_mk(score=0.005)]
         assert requires_human_review(chunks, [], []) is True
 
     def test_stale_warning_alone_does_not_require_review(self) -> None:

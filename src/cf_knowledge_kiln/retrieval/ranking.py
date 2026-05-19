@@ -25,8 +25,16 @@ from cf_knowledge_kiln.retrieval.types import Conflict, Warning
 DEFAULT_RRF_K: int = 60
 """Standard RRF constant per the Cormack et al. paper; tuneable later."""
 
-WEAK_EVIDENCE_SCORE_THRESHOLD: float = 0.5
-"""A chunk below this fused+boosted score is considered weak evidence."""
+WEAK_EVIDENCE_SCORE_THRESHOLD: float = 0.015
+"""A chunk below this fused+boosted score is considered weak evidence.
+
+Module-level constant retained as the default; the value is also exposed
+on :class:`RetrievalConfig.weak_evidence_score_threshold` so deployments
+can tune it from ``config/security.yaml``. The threshold is calibrated
+for the RRF k=60 fused score scale (top-1 in both arms is ≈ 0.0328);
+under MockEmbeddingProvider scores collapse near zero and tests patch
+this constant down to 1e-4 to keep the calibration signal meaningful.
+"""
 
 
 @dataclass(frozen=True)
@@ -230,18 +238,27 @@ def sensitive_content_warnings(chunks: list[RankedChunk]) -> list[Warning]:
     ]
 
 
-def weak_evidence_warning(chunks: list[RankedChunk]) -> list[Warning]:
-    """One ``weak_evidence`` warning if no chunk meets the score threshold."""
+def weak_evidence_warning(
+    chunks: list[RankedChunk], *, threshold: float | None = None
+) -> list[Warning]:
+    """One ``weak_evidence`` warning if no chunk meets the score threshold.
+
+    ``threshold`` overrides the module-level
+    :data:`WEAK_EVIDENCE_SCORE_THRESHOLD` for this call — the engine
+    passes ``RetrievalConfig.weak_evidence_score_threshold`` so a
+    YAML-configured value actually fires. ``None`` means "use the
+    module default" (preserves the old single-arg call shape for
+    existing callers/tests).
+    """
+    effective = WEAK_EVIDENCE_SCORE_THRESHOLD if threshold is None else threshold
     if not chunks:
         return [Warning(type="weak_evidence", message="No matching evidence found.")]
     best = max(c.score for c in chunks)
-    if best < WEAK_EVIDENCE_SCORE_THRESHOLD:
+    if best < effective:
         return [
             Warning(
                 type="weak_evidence",
-                message=(
-                    f"Best chunk score {best:.2f} below threshold {WEAK_EVIDENCE_SCORE_THRESHOLD}."
-                ),
+                message=f"Best chunk score {best:.2f} below threshold {effective}.",
             )
         ]
     return []
@@ -290,6 +307,8 @@ def requires_human_review(
     evidence: list[RankedChunk],
     warnings: list[Warning],
     conflicts: list[Conflict],
+    *,
+    weak_evidence_threshold: float | None = None,
 ) -> bool:
     """Single canonical decision per the Phase 5 design doc rules.
 
@@ -299,7 +318,13 @@ def requires_human_review(
     3. Every retrieved chunk is deprecated/archived/superseded.
     4. Every retrieved chunk is draft.
     5. Any warning has a type in {prompt_injection_pattern, sensitive_content}.
-    6. The top-scoring chunk is below WEAK_EVIDENCE_SCORE_THRESHOLD.
+    6. The top-scoring chunk is below the weak-evidence threshold.
+
+    ``weak_evidence_threshold`` overrides
+    :data:`WEAK_EVIDENCE_SCORE_THRESHOLD` for this call — the agent
+    serializer passes ``RetrievalConfig.weak_evidence_score_threshold``
+    so a YAML override actually fires. ``None`` falls back to the
+    module default.
     """
     if conflicts:
         return True
@@ -313,7 +338,12 @@ def requires_human_review(
     bad_types = {"prompt_injection_pattern", "sensitive_content"}
     if any(w.type in bad_types for w in warnings):
         return True
-    return max(c.score for c in evidence) < WEAK_EVIDENCE_SCORE_THRESHOLD
+    effective = (
+        WEAK_EVIDENCE_SCORE_THRESHOLD
+        if weak_evidence_threshold is None
+        else weak_evidence_threshold
+    )
+    return max(c.score for c in evidence) < effective
 
 
 __all__ = [
