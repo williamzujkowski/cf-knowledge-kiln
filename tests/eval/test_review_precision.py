@@ -92,21 +92,37 @@ def _build_embedding_provider() -> EmbeddingProvider:
     """
     if not _real_embeddings_requested():
         return MockEmbeddingProvider()
+    # Eagerly probe BOTH the symbol re-export (PR #149) and the
+    # optional `sentence-transformers` extra. The provider class
+    # itself loads the model lazily on first encode, so a bare
+    # construction wouldn't surface a missing extra until ingest
+    # had already started. Probing here skips early with a precise
+    # pointer at the missing piece — never a silent mock fallback,
+    # because that would mask the real-vs-mock signal the
+    # calibration test exists to measure.
     try:
-        # PR A lands ``LocalSentenceTransformersProvider`` here.
-        from cf_knowledge_kiln.ingestion.embedding import (  # type: ignore[attr-defined]
+        from cf_knowledge_kiln.ingestion.embedding import (
             LocalSentenceTransformersProvider,
         )
     except ImportError as exc:
         pytest.skip(
-            f"{_REAL_EMBEDDINGS_ENV}=1 requested but "
-            f"LocalSentenceTransformersProvider unavailable: {exc}. "
-            "Install with: pip install 'cf-knowledge-kiln[embeddings]' "
-            "(and ensure PR A has landed)"
+            f"{_REAL_EMBEDDINGS_ENV}=1 requested but the "
+            f"LocalSentenceTransformersProvider symbol is not "
+            f"re-exported from cf_knowledge_kiln.ingestion.embedding "
+            f"(import error: {exc})."
+        )
+    try:
+        import sentence_transformers  # noqa: F401 — presence probe
+    except ImportError as exc:
+        pytest.skip(
+            f"{_REAL_EMBEDDINGS_ENV}=1 requested but the "
+            f"'real-embeddings' extra is not installed: {exc}. "
+            "Install with: pip install -e '.[real-embeddings]'"
         )
     device = os.environ.get(_EMBEDDING_DEVICE_ENV, "cpu")
+    # NB: PR #149 renamed the constructor kwarg from `model` → `model_name`.
     return LocalSentenceTransformersProvider(
-        model=_REAL_EMBEDDING_MODEL,
+        model_name=_REAL_EMBEDDING_MODEL,
         dimensions=_REAL_EMBEDDING_DIMENSIONS,
         device=device,
     )
