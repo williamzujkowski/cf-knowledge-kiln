@@ -16,13 +16,31 @@
 
 models:
   embedding:
-    provider: local                       # local | openai-compatible
+    provider: local                       # local | local-sentence-transformers | openai-compatible | mock
     name: nomic-embed-text-v1.5
     dimensions: 768
     enabled: true
     notes: |
       Apache 2.0 license. US-origin. Subject to provenance/license
       review per ADR-0005.
+
+  # Alternate: explicit `local-sentence-transformers` provider name.
+  # Identical behavior to `local`; the descriptive name is preferred
+  # for new configs. Any sentence-transformers-compatible HuggingFace
+  # model works — swap `name` to change backends, declare the model's
+  # actual output `dimensions`, and (optionally) tune `batch_size` /
+  # `device`. Weights cache to ~/.cache/huggingface/ on first use.
+  #
+  # embedding:
+  #   provider: local-sentence-transformers
+  #   name: nomic-ai/nomic-embed-text-v1.5   # default; Snowflake/snowflake-arctic-embed-m is an alternative
+  #   dimensions: 768                         # arctic-embed-m is also 768
+  #   batch_size: 32
+  #   device: cpu                             # cpu | cuda | mps; KILN_EMBEDDING_DEVICE overrides
+  #   enabled: true
+  #   notes: |
+  #     Generic wrapper. Requires the `real-embeddings` extra:
+  #       pip install -e '.[real-embeddings]'
 
   generator:
     provider: openai-compatible           # local | openai-compatible

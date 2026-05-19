@@ -27,6 +27,16 @@ jobs:
           python-version: "3.12"
           cache: pip
 
+      # Cache the HuggingFace model cache so opt-in real-embedding
+      # smoke tests don't re-download Nomic Embed v1.5 weights on
+      # every run. The cache key includes the default MVP model name
+      # so swapping models invalidates the cache cleanly.
+      - name: Cache HuggingFace models
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-${{ runner.os }}-nomic-embed-text-v1.5
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip

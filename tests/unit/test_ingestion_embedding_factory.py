@@ -20,13 +20,17 @@ import pytest
 from cf_knowledge_kiln.config import Settings
 from cf_knowledge_kiln.ingestion.embedding import MockEmbeddingProvider
 from cf_knowledge_kiln.ingestion.embedding.factory import (
+    _PROVIDER_FACTORIES,
     EmbeddingConfig,
     EmbeddingConfigError,
     build_embedding_provider,
     build_provider_from_settings,
     load_embedding_config,
 )
-from cf_knowledge_kiln.ingestion.embedding.local import LocalEmbeddingProvider
+from cf_knowledge_kiln.ingestion.embedding.local import (
+    LocalEmbeddingProvider,
+    LocalSentenceTransformersProvider,
+)
 from cf_knowledge_kiln.ingestion.embedding.openai_compatible import (
     OpenAICompatibleEmbeddingProvider,
 )
@@ -131,6 +135,41 @@ models:
         with pytest.raises(EmbeddingConfigError, match="excluded"):
             load_embedding_config(str(path))
 
+    def test_local_sentence_transformers_provider_name_accepted(self, tmp_path: Path) -> None:
+        path = _write(
+            tmp_path / "models.yaml",
+            """
+models:
+  embedding:
+    provider: local-sentence-transformers
+    name: nomic-ai/nomic-embed-text-v1.5
+    dimensions: 768
+    enabled: true
+""",
+        )
+        config = load_embedding_config(str(path))
+        assert config.provider == "local-sentence-transformers"
+        assert config.name == "nomic-ai/nomic-embed-text-v1.5"
+        assert config.dimensions == 768
+
+    def test_excluded_check_applies_to_local_sentence_transformers_provider(
+        self, tmp_path: Path
+    ) -> None:
+        """Exclusion list applies regardless of which local-* alias is used."""
+        path = _write(
+            tmp_path / "models.yaml",
+            """
+models:
+  embedding:
+    provider: local-sentence-transformers
+    name: BAAI/bge-base-en-v1.5
+    dimensions: 768
+    enabled: true
+""",
+        )
+        with pytest.raises(EmbeddingConfigError, match="excluded"):
+            load_embedding_config(str(path))
+
     def test_deepseek_excluded(self, tmp_path: Path) -> None:
         path = _write(
             tmp_path / "models.yaml",
@@ -198,11 +237,39 @@ class TestBuildEmbeddingProvider:
             enabled=True,
         )
         # Inject a no-op factory so the test doesn't load real weights.
+        # The factory now receives the device kwarg as well.
         provider = build_embedding_provider(
-            config, _settings(), local_model_factory=lambda _name: object()
+            config,
+            _settings(),
+            local_model_factory=lambda _name, device=None: object(),
         )
         assert isinstance(provider, LocalEmbeddingProvider)
         assert provider.model == "nomic-embed-text-v1.5"
+
+    def test_local_sentence_transformers_alias(self) -> None:
+        """``local-sentence-transformers`` is the canonical provider name."""
+        config = EmbeddingConfig(
+            provider="local-sentence-transformers",
+            name="nomic-ai/nomic-embed-text-v1.5",
+            dimensions=768,
+            enabled=True,
+        )
+        provider = build_embedding_provider(
+            config,
+            _settings(),
+            local_model_factory=lambda _name, device=None: object(),
+        )
+        assert isinstance(provider, LocalSentenceTransformersProvider)
+        assert provider.model == "nomic-ai/nomic-embed-text-v1.5"
+
+    def test_registry_pattern_exposes_factories(self) -> None:
+        """Adding a new backend should be one entry in the registry dict."""
+        # The registry is the single dispatch table; if this changes
+        # shape, callers (and reviewers) need to know.
+        assert "mock" in _PROVIDER_FACTORIES
+        assert "local" in _PROVIDER_FACTORIES
+        assert "local-sentence-transformers" in _PROVIDER_FACTORIES
+        assert "openai-compatible" in _PROVIDER_FACTORIES
 
     def test_openai_compatible_factory(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("KILN_EMBEDDING_API_KEY", "sk-test")
