@@ -49,3 +49,26 @@ retrieval:
   # single-arm-but-correct results. Raise for stricter gating; lower
   # if your provider's score distribution differs from Nomic Embed.
   weak_evidence_score_threshold: 0.015
+
+  # Relevance-aware warning emission (#161). The per-chunk security
+  # warnings — `sensitive_content`, `prompt_injection_pattern`, and
+  # the same-heading `conflicting_sources` detector — gate on BOTH
+  # of these knobs so a flagged chunk that landed in top-K via cosine
+  # noise on an unrelated query doesn't crater precision:
+  #
+  #   * `relevance_floor` — fused-score floor a chunk must clear to
+  #     count toward the per-chunk warnings. Leave unset (null) to
+  #     track `weak_evidence_score_threshold`; the default is to move
+  #     both gates with one knob. Set explicitly to demand a STRICTER
+  #     relevance floor on warnings than on weak-evidence (e.g. a
+  #     1.5x multiple to require a clear both-arm hit).
+  #   * `max_warning_rank` — only the top-N chunks (1-indexed) are
+  #     eligible to trip. Default 3 keeps a tight head-of-list gate;
+  #     a flagged chunk at rank 7 on a clean query is treated as
+  #     cosine noise rather than a security signal.
+  #
+  # The high-relevance security guarantee is preserved: a sensitive
+  # chunk at rank 1 with a both-arm RRF score still trips. See
+  # docs/security.md for the policy framing.
+  # relevance_floor: 0.0225   # 1.5x weak_evidence_score_threshold
+  max_warning_rank: 3

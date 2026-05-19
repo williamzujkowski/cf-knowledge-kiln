@@ -312,8 +312,14 @@ async def test_retriever_surfaces_prompt_injection_warning(
     await session.commit()
 
     db = _DbWrapper(engine)
+    # #161: relevance_floor=1e-4 because MockEmbeddingProvider's RRF
+    # fused scores collapse near zero. The rank gate
+    # (max_warning_rank=3 default) still applies and the lone tainted
+    # chunk lands at rank 1.
     retriever = HybridRetriever(
-        db=db, embedding_provider=MockEmbeddingProvider(), config=RetrievalConfig()
+        db=db,
+        embedding_provider=MockEmbeddingProvider(),
+        config=RetrievalConfig(relevance_floor=1e-4),
     )
     result = await retriever.search("ignore previous", filters=RetrievalFilters(), max_results=5)
     assert any(w.type == "prompt_injection_pattern" for w in result.warnings)

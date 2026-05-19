@@ -188,8 +188,15 @@ async def test_context_pack_includes_conflict_when_heading_shared(
     await session.commit()
 
     db = _DbWrapper(engine)
+    # #161: relevance_floor=1e-4 because MockEmbeddingProvider's RRF
+    # fused scores collapse near zero; the production 0.015 floor would
+    # gate the conflict-pair chunks out under mock. The rank gate
+    # (max_warning_rank=3 default) still applies and the test fixture
+    # has only 2 chunks so rank 1 + 2 trip cleanly.
     retriever = HybridRetriever(
-        db=db, embedding_provider=MockEmbeddingProvider(), config=RetrievalConfig()
+        db=db,
+        embedding_provider=MockEmbeddingProvider(),
+        config=RetrievalConfig(relevance_floor=1e-4),
     )
     pack = await retriever.context_pack(
         "backup",

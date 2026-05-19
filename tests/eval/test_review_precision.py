@@ -57,28 +57,30 @@ from tests.eval._review_precision_helpers import (
 pytestmark = [pytest.mark.integration, pytest.mark.eval]
 
 
-REVIEW_PRECISION_FLOOR = 0.66
+REVIEW_PRECISION_FLOOR = 0.83
 """Precision threshold on the 12-case labeled set.
 
 Measured baselines:
 * MockEmbeddingProvider (default in unit-mode + CI): **12/12 = 1.000**.
-* Nomic Embed v1.5 (`KILN_EVAL_REAL_EMBEDDINGS=1`): **9/12 = 0.750**.
+* Nomic Embed v1.5 (`KILN_EVAL_REAL_EMBEDDINGS=1`): **11/12 = 0.917**
+  after #161 (relevance-aware warning emission landed, max_warning_rank
+  defaulting to 3 + relevance_floor tracking the weak-evidence
+  threshold).
 
-The 0.66 floor (= ≤ 4 failures) is set against the real-embeddings
-baseline. Three clean cases trip review under real embeddings because
-Nomic's cosine similarity pulls semantically-similar-but-off-topic
-chunks into top-K — specifically the auth-policy conflict pair and
-the procedure-customer-data-access sensitive marker. These are
-intrinsic to having adversarial fixtures in the corpus; tightening
-requires the warning-emission relevance work tracked in the follow-up
-issue. The 12-case statistical noise also moves precision ±0.08, so
-a 1-case headroom is appropriate.
+The 0.83 floor (= ≤ 2 failures) is set against the post-#161 real-
+embeddings baseline. The remaining mismatch is ``clean-asyncpg-pool``,
+which trips ``conflicting_sources`` because Nomic still pulls the
+auth-policy "Bearer token rotation policy" pair into the top-3 with
+both above the relevance floor; that pair shares the heading_path the
+conflict detector keys on. Tightening further would require either a
+stricter ``relevance_floor`` (e.g. 1.5x weak-evidence) — risk of
+hiding real positives — or a semantic conflict detector that gates on
+query relevance to the conflict topic rather than heading-path
+sharing alone. Deferred.
 
 Item 1 of #108 (binary precision) is the gate this floor protects.
 Item 2 (per-bucket calibration) has its own floor at
-:data:`_PER_BUCKET_PRECISION_FLOOR`. Tighten this back to 0.85+ once
-the strawman grade map is human-validated and the warning-emission
-relevance tightening lands.
+:data:`_PER_BUCKET_PRECISION_FLOOR`.
 """
 
 
@@ -180,6 +182,13 @@ def review_retriever(
     settings = _eval_settings()
     db = Database(database_url, pool_size=settings.pg_pool_size)
     config = load_retrieval_config(settings.security_config_path)
+    if not _real_embeddings_requested():
+        # #161: same logic as the WEAK_EVIDENCE patch above. The mock
+        # vector arm produces fused scores near zero, so the production
+        # 0.015 relevance floor would gate every per-chunk warning out
+        # and collapse the precision signal on the deliberate-trap
+        # positives. Under real embeddings the production floor stays.
+        config = config.model_copy(update={"relevance_floor": 1e-4})
     provider = _build_embedding_provider()
     retriever = HybridRetriever(
         db=db,

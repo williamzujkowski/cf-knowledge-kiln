@@ -8,8 +8,10 @@ from pathlib import Path
 import pytest
 
 from cf_knowledge_kiln.retrieval.config import (
+    DEFAULT_MAX_WARNING_RANK,
     DEFAULT_STALE_AFTER_DAYS,
     DEFAULT_STATUS_WEIGHTS,
+    DEFAULT_WEAK_EVIDENCE_SCORE_THRESHOLD,
     RetrievalConfig,
     RetrievalConfigError,
     load_retrieval_config,
@@ -139,3 +141,57 @@ freshness:
         config = load_retrieval_config(example)
         assert config.status_weights["active"] == 1.0
         assert config.stale_after_days == 365
+        # #161: example must include max_warning_rank so the policy is
+        # discoverable from the shipped config.
+        assert config.max_warning_rank == DEFAULT_MAX_WARNING_RANK
+
+
+class TestRelevanceAwareWarningKnobs:
+    """#161 — relevance_floor + max_warning_rank loaders + defaults."""
+
+    def test_defaults_track_weak_evidence_threshold(self) -> None:
+        """`relevance_floor=None` means 'use weak_evidence_score_threshold'."""
+        config = RetrievalConfig()
+        assert config.relevance_floor is None
+        assert config.effective_relevance_floor == DEFAULT_WEAK_EVIDENCE_SCORE_THRESHOLD
+        assert config.max_warning_rank == DEFAULT_MAX_WARNING_RANK
+
+    def test_explicit_relevance_floor_overrides_default(self) -> None:
+        config = RetrievalConfig(relevance_floor=0.05)
+        assert config.effective_relevance_floor == 0.05
+
+    def test_explicit_relevance_floor_and_threshold_diverge_cleanly(self) -> None:
+        """An operator can demand a STRICTER floor on warnings vs. weak-evidence."""
+        config = RetrievalConfig(
+            weak_evidence_score_threshold=0.015,
+            relevance_floor=0.0225,  # 1.5x
+        )
+        assert config.weak_evidence_score_threshold == 0.015
+        assert config.effective_relevance_floor == 0.0225
+
+    def test_loads_relevance_floor_and_max_warning_rank_from_yaml(self, tmp_path: Path) -> None:
+        path = _write(
+            tmp_path / "security.yaml",
+            ("retrieval:\n  relevance_floor: 0.0225\n  max_warning_rank: 5\n"),
+        )
+        config = load_retrieval_config(path)
+        assert config.relevance_floor == 0.0225
+        assert config.max_warning_rank == 5
+
+    def test_max_warning_rank_below_one_rejected(self, tmp_path: Path) -> None:
+        """A 0 or negative cutoff would disable per-chunk warnings entirely."""
+        path = _write(
+            tmp_path / "security.yaml",
+            "retrieval:\n  max_warning_rank: 0\n",
+        )
+        with pytest.raises(RetrievalConfigError):
+            load_retrieval_config(path)
+
+    def test_relevance_floor_zero_rejected(self, tmp_path: Path) -> None:
+        """Like weak_evidence: a zero floor is a footgun; refuse at load time."""
+        path = _write(
+            tmp_path / "security.yaml",
+            "retrieval:\n  relevance_floor: 0.0\n",
+        )
+        with pytest.raises(RetrievalConfigError):
+            load_retrieval_config(path)

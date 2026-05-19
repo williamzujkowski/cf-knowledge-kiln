@@ -200,42 +200,80 @@ def deprecated_warnings(chunks: list[RankedChunk]) -> list[Warning]:
     return out
 
 
-def prompt_injection_warnings(chunks: list[RankedChunk]) -> list[Warning]:
-    """One ``prompt_injection_pattern`` per distinct chunk flagged at ingest.
+def prompt_injection_warnings(
+    chunks: list[RankedChunk],
+    *,
+    relevance_floor: float | None = None,
+    max_warning_rank: int | None = None,
+) -> list[Warning]:
+    """One ``prompt_injection_pattern`` per chunk flagged at ingest.
 
-    The flag is set in :mod:`cf_knowledge_kiln.ingestion.prompt_injection`
-    when a chunk matched a phrase from ``config/security.yaml`` —
-    retrieval just reads the boolean and surfaces the warning.
+    Set by :mod:`cf_knowledge_kiln.ingestion.prompt_injection` when a
+    chunk matched a phrase from ``config/security.yaml``; retrieval
+    surfaces the warning only for chunks that cleared the rank +
+    score gates (#161). See :func:`_gate_for_warnings`.
     """
+    eligible = _gate_for_warnings(
+        chunks, relevance_floor=relevance_floor, max_warning_rank=max_warning_rank
+    )
     return [
         Warning(
             type="prompt_injection_pattern",
             message="Chunk contains a configured prompt-injection phrase.",
             source_id=c.document_id,
         )
-        for c in chunks
+        for c in eligible
         if c.has_prompt_injection
     ]
 
 
-def sensitive_content_warnings(chunks: list[RankedChunk]) -> list[Warning]:
-    """One ``sensitive_content`` per distinct chunk flagged at ingest (#100).
+def sensitive_content_warnings(
+    chunks: list[RankedChunk],
+    *,
+    relevance_floor: float | None = None,
+    max_warning_rank: int | None = None,
+) -> list[Warning]:
+    """One ``sensitive_content`` per chunk flagged at ingest (#100).
 
-    The flag is set in :mod:`cf_knowledge_kiln.ingestion.sensitive_content`
-    when a chunk matched a regex from
-    ``config.content_filters.sensitive_patterns``. The agent serializer
-    drops these chunks from the context-pack body entirely; humans see
-    them with the warning attached.
+    Set by :mod:`cf_knowledge_kiln.ingestion.sensitive_content` when a
+    chunk matched a regex from ``content_filters.sensitive_patterns``.
+    The agent serializer drops these chunks from the context-pack body
+    entirely; humans see them with the warning attached. Emission is
+    rank + score gated (#161); see :func:`_gate_for_warnings`.
     """
+    eligible = _gate_for_warnings(
+        chunks, relevance_floor=relevance_floor, max_warning_rank=max_warning_rank
+    )
     return [
         Warning(
             type="sensitive_content",
             message="Chunk matches a configured sensitive-content pattern.",
             source_id=c.document_id,
         )
-        for c in chunks
+        for c in eligible
         if c.has_sensitive_content
     ]
+
+
+def _gate_for_warnings(
+    chunks: list[RankedChunk],
+    *,
+    relevance_floor: float | None,
+    max_warning_rank: int | None,
+) -> list[RankedChunk]:
+    """Pre-filter ``chunks`` for the relevance-aware warning emitters (#161).
+
+    Returns the prefix that satisfies BOTH ``rank ≤ max_warning_rank``
+    (1-indexed; ``None`` disables) AND ``score ≥ relevance_floor``
+    (``None`` disables). The per-chunk score check (rather than
+    short-circuiting on the first failure) keeps the function correct
+    under future input shapes where a caller hasn't sorted by score.
+    """
+    if max_warning_rank is None and relevance_floor is None:
+        return list(chunks)
+    rank_limit = len(chunks) if max_warning_rank is None else max_warning_rank
+    floor = float("-inf") if relevance_floor is None else relevance_floor
+    return [c for c in chunks[:rank_limit] if c.score >= floor]
 
 
 def weak_evidence_warning(
@@ -267,7 +305,12 @@ def weak_evidence_warning(
 # ─── Conflict detection ─────────────────────────────────────────────
 
 
-def detect_conflicts(chunks: list[RankedChunk]) -> list[Conflict]:
+def detect_conflicts(
+    chunks: list[RankedChunk],
+    *,
+    relevance_floor: float | None = None,
+    max_warning_rank: int | None = None,
+) -> list[Conflict]:
     """Phase 5 first cut: syntactic conflict on shared heading_path.
 
     Two or more distinct documents that both return a chunk under the
@@ -276,13 +319,17 @@ def detect_conflicts(chunks: list[RankedChunk]) -> list[Conflict]:
     B says not-X") conflict detection — that requires an LLM mediator.
 
     Active-only: deprecated/archived/superseded docs don't compete.
-    Heading paths shorter than 1 element (e.g., a chunk with no
-    heading at all) don't participate — we have nothing useful to
-    group on.
+    Heading paths shorter than 1 element don't participate.
+    Pre-filtered with :func:`_gate_for_warnings` (#161): each chunk
+    in a candidate pair must clear ``relevance_floor`` and rank ≤
+    ``max_warning_rank``; ``None`` on either disables that gate.
     """
+    gated = _gate_for_warnings(
+        chunks, relevance_floor=relevance_floor, max_warning_rank=max_warning_rank
+    )
     bad = {"deprecated", "archived", "superseded"}
     by_path: dict[tuple[str, ...], set[UUID]] = defaultdict(set)
-    for c in chunks:
+    for c in gated:
         if c.status in bad or not c.heading_path:
             continue
         by_path[c.heading_path].add(c.document_id)
