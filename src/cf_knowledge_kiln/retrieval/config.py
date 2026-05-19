@@ -38,15 +38,17 @@ DEFAULT_STATUS_WEIGHTS: dict[str, float] = {
 
 DEFAULT_STALE_AFTER_DAYS: int = 365
 
-# Weak-evidence floor for the RRF fused score. Top-1 in BOTH arms with
-# default k=60 yields ~0.0328 (= 2/61); top-1 in ONE arm only is ~0.0164.
-# Threshold 0.015 catches "no match in either arm" (true weak evidence)
-# without false-failing single-arm hits on clean queries — measured against
-# the docs/_eval corpus on Nomic Embed v1.5. Tuned for the RRF k=60 scale
-# (ADR-0009); the pre-#160 value of 0.5 was a holdover from before fusion
-# and tripped on every real result. Override per deployment via
+# Weak-evidence floor for the fused score, on the normalized [0, 1]
+# scale emitted by the hybrid SQL (#164). The SQL rescales the raw
+# ``SUM(1/(k+rnk))`` by ``(k+1)/2``, so a both-arm rank-1 hit lands at
+# ``1.0`` and a single-arm rank-1 hit at ``0.5``. ``0.46`` is the
+# proportional re-baseline of the pre-#164 raw-scale ``0.015`` floor
+# (``0.015 * 30.5 ~= 0.46``), so the same fraction of chunks trip
+# weak-evidence as before #164 — measured against the docs/_eval corpus
+# on Nomic Embed v1.5 — but the constant is interpretable as "below
+# ~92% of single-arm rank-1." Override per deployment via
 # `retrieval.weak_evidence_score_threshold` in `config/security.yaml`.
-DEFAULT_WEAK_EVIDENCE_SCORE_THRESHOLD: float = 0.015
+DEFAULT_WEAK_EVIDENCE_SCORE_THRESHOLD: float = 0.46
 
 # Per-query rank cutoff for the per-chunk security warning emitters
 # (#161). Only chunks at rank ≤ this cutoff count toward

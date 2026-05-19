@@ -163,19 +163,19 @@ class TestRelevanceAwareWarningKnobs:
     def test_explicit_relevance_floor_and_threshold_diverge_cleanly(self) -> None:
         """An operator can demand a STRICTER floor on warnings vs. weak-evidence."""
         config = RetrievalConfig(
-            weak_evidence_score_threshold=0.015,
-            relevance_floor=0.0225,  # 1.5x
+            weak_evidence_score_threshold=0.46,
+            relevance_floor=0.69,  # 1.5x
         )
-        assert config.weak_evidence_score_threshold == 0.015
-        assert config.effective_relevance_floor == 0.0225
+        assert config.weak_evidence_score_threshold == 0.46
+        assert config.effective_relevance_floor == 0.69
 
     def test_loads_relevance_floor_and_max_warning_rank_from_yaml(self, tmp_path: Path) -> None:
         path = _write(
             tmp_path / "security.yaml",
-            ("retrieval:\n  relevance_floor: 0.0225\n  max_warning_rank: 5\n"),
+            ("retrieval:\n  relevance_floor: 0.69\n  max_warning_rank: 5\n"),
         )
         config = load_retrieval_config(path)
-        assert config.relevance_floor == 0.0225
+        assert config.relevance_floor == 0.69
         assert config.max_warning_rank == 5
 
     def test_max_warning_rank_below_one_rejected(self, tmp_path: Path) -> None:

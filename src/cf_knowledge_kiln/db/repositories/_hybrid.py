@@ -13,8 +13,11 @@ The CTE shape is:
   is honored and irrelevant rows never enter the candidate pool.
 * **fts** — top-K chunk ids by ``ts_rank_cd(to_tsvector, plainto_tsquery)``,
   same predicates pushed in.
-* **fused** — ``SUM(1.0 / (k + rnk))`` per chunk over the UNION ALL of
-  the two arms, i.e., Reciprocal Rank Fusion.
+* **fused** — ``SUM(1.0 / (k + rnk)) * (k + 1) / 2`` per chunk over the
+  UNION ALL of the two arms, i.e., Reciprocal Rank Fusion with the
+  output rescaled to ``[0, 1]`` (#164). A both-arm rank-1 hit normalizes
+  to ``1.0``; a single-arm rank-1 hit to ``0.5``. Ordering is preserved
+  (the scale factor is a positive constant per query). See ADR-0009.
 * final SELECT — join fused back to documents + chunks for the row shape.
 """
 
@@ -94,10 +97,17 @@ def build_hybrid_select(
     """Compose the full vector+FTS CTE and return a final SELECT statement."""
     vec_cte = _vector_arm(query_embedding, dimensions, predicates, top_per_arm)
     fts_cte = _fts_arm(query_text, predicates, top_per_arm)
+    # #164: rescale ``SUM(1/(k+rnk))`` by ``(k+1)/2`` so the fused score
+    # lands in ``[0, 1]`` with both-arm rank-1 = 1.0. Ordering is
+    # unchanged (positive constant per query), but the score is now
+    # interpretable as "fraction of perfect-hit" — which lets the
+    # downstream ``WEAK_EVIDENCE_SCORE_THRESHOLD`` (#160) and the
+    # ``derive_confidence`` ``high`` cutoff at 0.8 (#164) actually fire.
+    rrf_scale = (rrf_k + 1) / 2.0
     fused = (
         select(
             literal_column("u.chunk_id").label("chunk_id"),
-            func.sum(1.0 / (rrf_k + literal_column("u.rnk"))).label("rrf_score"),
+            (func.sum(1.0 / (rrf_k + literal_column("u.rnk"))) * rrf_scale).label("rrf_score"),
         )
         .select_from(union_all(select(vec_cte), select(fts_cte)).alias("u"))
         .group_by(literal_column("u.chunk_id"))
@@ -112,13 +122,29 @@ def build_hybrid_select(
     )
 
 
-def build_fts_only_select(*, query_text: str, predicates: Sequence[Any], limit: int) -> Any:
-    """FTS-only fallback (used when no embedding provider is configured)."""
+def build_fts_only_select(
+    *,
+    query_text: str,
+    predicates: Sequence[Any],
+    limit: int,
+    rrf_k: int,
+) -> Any:
+    """FTS-only fallback (used when no embedding provider is configured).
+
+    Applies the same ``(rrf_k + 1) / 2`` scale factor as
+    :func:`build_hybrid_select` (#164). This is a pure unit conversion,
+    not a renormalization of ``ts_rank_cd`` (which is unbounded): it
+    keeps the weak-evidence threshold semantically equivalent across
+    both paths. Pre-#164 the engine compared ``ts_rank_cd`` against the
+    raw-scale ``0.015`` floor; post-#164 it compares ``ts_rank_cd * 30.5``
+    against the normalized ``0.46`` floor — exact same gate.
+    """
     tsv = func.to_tsvector("english", DocumentChunk.content)
     tsq = func.plainto_tsquery("english", query_text)
     ts_rank = func.ts_rank_cd(tsv, tsq)
+    scale = (rrf_k + 1) / 2.0
     return (
-        _select_search_row_columns(ts_rank.label("rrf_score"))
+        _select_search_row_columns((ts_rank * scale).label("rrf_score"))
         .join(Document, Document.id == DocumentChunk.document_id)
         .where(tsv.op("@@")(tsq))
         .where(*predicates)

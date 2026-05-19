@@ -43,12 +43,15 @@ retrieval:
     superseded: 0.05
 
   # Fused-score floor below which a query trips `weak_evidence` and
-  # `requires_human_review`. Calibrated for RRF k=60: top-1 in BOTH
-  # arms is ~0.0328; single-arm hits land at ~0.0164; the 0.015 floor
-  # catches the "neither arm matched" case without false-failing
-  # single-arm-but-correct results. Raise for stricter gating; lower
-  # if your provider's score distribution differs from Nomic Embed.
-  weak_evidence_score_threshold: 0.015
+  # `requires_human_review`. The hybrid SQL emits a score normalized
+  # to [0, 1] (#164): both-arm rank-1 hits land at 1.0, single-arm
+  # rank-1 hits at 0.5. `0.46` catches "neither arm matched cleanly"
+  # without false-failing single-arm-but-correct results — it's the
+  # proportional re-baseline of the pre-#164 raw-scale 0.015 floor
+  # (0.015 × 30.5), measured against docs/_eval on Nomic Embed v1.5.
+  # Raise for stricter gating; lower if your provider's score
+  # distribution differs.
+  weak_evidence_score_threshold: 0.46
 
   # Relevance-aware warning emission (#161). The per-chunk security
   # warnings — `sensitive_content`, `prompt_injection_pattern`, and
@@ -70,5 +73,5 @@ retrieval:
   # The high-relevance security guarantee is preserved: a sensitive
   # chunk at rank 1 with a both-arm RRF score still trips. See
   # docs/security.md for the policy framing.
-  # relevance_floor: 0.0225   # 1.5x weak_evidence_score_threshold
+  # relevance_floor: 0.69   # 1.5x weak_evidence_score_threshold
   max_warning_rank: 3

@@ -145,6 +145,14 @@ def derive_confidence(
     * presence of a downgrading warning drops one level
     * else: top ≥ 0.8 → ``high``; otherwise ``medium``
 
+    Scores are on the normalized ``[0, 1]`` scale emitted by the hybrid
+    SQL (#164): a both-arm rank-1 hit lands at ``1.0``, a single-arm
+    rank-1 hit at ``0.5``. ``0.8`` therefore corresponds to "both arms
+    contributed, both near the top," which is the cardinal-scale intent
+    of ``high``. Pre-#164 the raw fused score maxed at ``2/(k+1) ≈
+    0.0328`` so this cutoff was structurally unreachable and every
+    clean hit collapsed to ``medium``.
+
     ``weak_evidence_threshold`` overrides the module-level constant;
     the engine passes ``RetrievalConfig.weak_evidence_score_threshold``
     so a YAML-configured value actually takes effect. ``None`` falls

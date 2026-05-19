@@ -96,7 +96,7 @@ class TestDeriveConfidence:
         assert derive_confidence([], warnings=[]) == "none"
 
     def test_top_below_threshold_is_low(self) -> None:
-        # RRF-scale score — below the 0.015 default threshold.
+        # Normalized score — below the 0.46 default weak-evidence floor.
         chunks = [_chunk(score=0.01)]
         assert derive_confidence(chunks, warnings=[]) == "low"
 
@@ -109,6 +109,28 @@ class TestDeriveConfidence:
     def test_top_above_threshold_no_warnings_is_high(self) -> None:
         chunks = [_chunk(score=0.95)]
         assert derive_confidence(chunks, warnings=[]) == "high"
+
+    def test_high_bucket_reachable_on_clean_top_hit(self) -> None:
+        """#164 — the ``high`` cutoff fires on a normalized both-arm hit.
+
+        Pre-normalization the RRF sum maxed out at ``2/(k+1) ≈ 0.0328``
+        so the ``score >= 0.8`` cutoff in :func:`derive_confidence` was
+        structurally unreachable and every clean hit collapsed to
+        ``medium``. Post-normalization a clean both-arm top-1 lands at
+        ``~1.0`` and a marginal both-arm hit at ``~0.85`` should clear
+        the bar.
+        """
+        chunks = [_chunk(score=0.85)]
+        assert derive_confidence(chunks, warnings=[]) == "high"
+
+    def test_medium_band_between_floor_and_high(self) -> None:
+        """Single-arm top-1 normalizes to ``~0.5`` — solidly ``medium``.
+
+        Verifies the band ``[weak_evidence_floor, 0.8)`` resolves to
+        ``medium`` rather than collapsing toward either edge.
+        """
+        chunks = [_chunk(score=0.5)]
+        assert derive_confidence(chunks, warnings=[]) == "medium"
 
 
 class TestAssembleContextPack:
