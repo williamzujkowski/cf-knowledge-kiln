@@ -217,12 +217,18 @@ class ChunksRepository(BaseRepository):
         query_text: str,
         filters: RetrievalFilters,
         limit: int = 100,
+        rrf_k: int = 60,
     ) -> Sequence[SearchRow]:
         """FTS-only fallback for when no embedding provider is wired.
 
         Same row shape as :meth:`hybrid_search`; ``score`` is
-        ``ts_rank_cd`` (unbounded but positive, so the boost
-        multipliers in retrieval/ranking apply without renormalization).
+        ``ts_rank_cd * (rrf_k + 1) / 2`` so the weak-evidence threshold
+        emits identically across both paths (#164). The scale factor is
+        a unit conversion, not a normalization — ``ts_rank_cd`` itself
+        is unbounded but typically lands in ``[0, ~1]`` for the small
+        queries this fallback serves. ``rrf_k`` is exposed for symmetry
+        with :meth:`hybrid_search`; operators should pass the same value
+        to both.
         """
         from cf_knowledge_kiln.retrieval.filters import build_predicates
 
@@ -230,6 +236,7 @@ class ChunksRepository(BaseRepository):
             query_text=query_text,
             predicates=build_predicates(filters),
             limit=limit,
+            rrf_k=rrf_k,
         )
         result = await self._session.execute(stmt)
         return [row_to_search_row(row) for row in result.mappings()]

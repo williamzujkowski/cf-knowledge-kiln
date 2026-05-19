@@ -235,17 +235,21 @@ class TestPromptInjectionWarnings:
     def test_rank_1_flagged_chunk_trips_under_gate(self) -> None:
         """#161: rank-1 flagged chunk still trips. Security guarantee preserved."""
         chunks = [
-            _mk(score=0.5, has_prompt_injection=True),
-            _mk(score=0.4),
-            _mk(score=0.3),
+            _mk(score=0.9, has_prompt_injection=True),
+            _mk(score=0.8),
+            _mk(score=0.7),
         ]
-        [warning] = prompt_injection_warnings(chunks, max_warning_rank=3, relevance_floor=0.015)
+        [warning] = prompt_injection_warnings(
+            chunks, max_warning_rank=3, relevance_floor=WEAK_EVIDENCE_SCORE_THRESHOLD
+        )
         assert warning.type == "prompt_injection_pattern"
 
     def test_relevance_floor_drops_low_score_flagged_chunk(self) -> None:
         """#161: a flagged chunk below the relevance floor is dropped even at rank 1."""
         chunks = [_mk(score=0.005, has_prompt_injection=True)]
-        assert prompt_injection_warnings(chunks, relevance_floor=0.015) == []
+        assert (
+            prompt_injection_warnings(chunks, relevance_floor=WEAK_EVIDENCE_SCORE_THRESHOLD) == []
+        )
 
 
 class TestSensitiveContentWarnings:
@@ -276,19 +280,23 @@ class TestSensitiveContentWarnings:
         assert warnings == []
 
     def test_rank_1_flagged_chunk_trips_under_gate(self) -> None:
-        """#161: flagged chunk at rank 1 with score 0.5 DOES trip."""
+        """#161: flagged chunk at rank 1 above the floor DOES trip."""
         chunks = [
-            _mk(score=0.5, has_sensitive_content=True),
-            _mk(score=0.4),
-            _mk(score=0.3),
+            _mk(score=0.9, has_sensitive_content=True),
+            _mk(score=0.8),
+            _mk(score=0.7),
         ]
-        [warning] = sensitive_content_warnings(chunks, max_warning_rank=3, relevance_floor=0.015)
+        [warning] = sensitive_content_warnings(
+            chunks, max_warning_rank=3, relevance_floor=WEAK_EVIDENCE_SCORE_THRESHOLD
+        )
         assert warning.type == "sensitive_content"
 
     def test_relevance_floor_drops_low_score_flagged_chunk(self) -> None:
         """#161: a flagged chunk at rank 1 BELOW the relevance floor does not trip."""
         chunks = [_mk(score=0.005, has_sensitive_content=True)]
-        assert sensitive_content_warnings(chunks, relevance_floor=0.015) == []
+        assert (
+            sensitive_content_warnings(chunks, relevance_floor=WEAK_EVIDENCE_SCORE_THRESHOLD) == []
+        )
 
     def test_none_gates_preserve_legacy_behavior(self) -> None:
         """Both gates default to None → every flagged chunk in input trips."""
@@ -308,7 +316,7 @@ class TestWeakEvidenceWarning:
         assert "No matching" in w.message
 
     def test_below_threshold_emits_warning(self) -> None:
-        # RRF-scale score — see WEAK_EVIDENCE_SCORE_THRESHOLD docstring.
+        # Normalized-scale score (#164) — far below the 0.46 default floor.
         [w] = weak_evidence_warning([_mk(score=0.005)])
         assert w.type == "weak_evidence"
 
@@ -368,26 +376,33 @@ class TestDetectConflicts:
         """#161: rank 1 + rank 2 with shared heading + both above floor → conflict."""
         a, b = uuid4(), uuid4()
         chunks = [
-            _mk(document_id=a, score=0.5, heading_path=("X",)),
-            _mk(document_id=b, score=0.4, heading_path=("X",)),
-            _mk(score=0.3),
-            _mk(score=0.2),
+            _mk(document_id=a, score=0.9, heading_path=("X",)),
+            _mk(document_id=b, score=0.8, heading_path=("X",)),
+            _mk(score=0.7),
+            _mk(score=0.6),
         ]
-        [conflict] = detect_conflicts(chunks, max_warning_rank=3, relevance_floor=0.015)
+        [conflict] = detect_conflicts(
+            chunks, max_warning_rank=3, relevance_floor=WEAK_EVIDENCE_SCORE_THRESHOLD
+        )
         assert set(conflict.source_ids) == {a, b}
 
     def test_rank_5_and_6_pair_does_not_trip_under_rank_gate(self) -> None:
         """#161: same conflict pair at rank 5 + 6 → gated out by max_warning_rank=3."""
         a, b = uuid4(), uuid4()
         chunks = [
-            _mk(score=0.5),  # 1
-            _mk(score=0.4),  # 2
-            _mk(score=0.3),  # 3
-            _mk(score=0.2),  # 4
-            _mk(document_id=a, score=0.15, heading_path=("X",)),  # 5
-            _mk(document_id=b, score=0.1, heading_path=("X",)),  # 6
+            _mk(score=0.95),  # 1 — all above floor so rank gate is the active gate
+            _mk(score=0.9),  # 2
+            _mk(score=0.85),  # 3
+            _mk(score=0.8),  # 4
+            _mk(document_id=a, score=0.75, heading_path=("X",)),  # 5
+            _mk(document_id=b, score=0.7, heading_path=("X",)),  # 6
         ]
-        assert detect_conflicts(chunks, max_warning_rank=3, relevance_floor=0.015) == []
+        assert (
+            detect_conflicts(
+                chunks, max_warning_rank=3, relevance_floor=WEAK_EVIDENCE_SCORE_THRESHOLD
+            )
+            == []
+        )
 
     def test_relevance_floor_drops_one_side_of_pair(self) -> None:
         """#161: if only ONE chunk in the pair clears the floor, no conflict.
@@ -398,10 +413,15 @@ class TestDetectConflicts:
         """
         a, b = uuid4(), uuid4()
         chunks = [
-            _mk(document_id=a, score=0.5, heading_path=("X",)),
+            _mk(document_id=a, score=0.9, heading_path=("X",)),
             _mk(document_id=b, score=0.005, heading_path=("X",)),  # below floor
         ]
-        assert detect_conflicts(chunks, max_warning_rank=3, relevance_floor=0.015) == []
+        assert (
+            detect_conflicts(
+                chunks, max_warning_rank=3, relevance_floor=WEAK_EVIDENCE_SCORE_THRESHOLD
+            )
+            == []
+        )
 
     def test_none_gates_preserve_legacy_behavior(self) -> None:
         """No gating args → conflict regardless of rank or score (pre-#161)."""

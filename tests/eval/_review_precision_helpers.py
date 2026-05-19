@@ -46,14 +46,19 @@ _BUCKET_CORRECT_GRADE_FLOOR = 2
 # Ratcheted 0.5 → 0.75 after the consensus-grading pass replaced the
 # initial strawman grades with the median of 5 independent judges
 # scoring the actual Nomic Embed v1.5 top-3 chunks per case. Measured
-# bootstrap after grading + #162's relevance-aware emission:
-#   high  : empty (RRF scores never reach the 0.8 high-confidence cap)
+# bootstrap before #164's score normalization:
+#   high  : empty (RRF scores never reached the 0.8 high-confidence cap)
 #   medium: 7/8 = 0.875
 #   low   : 3/3 = 1.000
 #   none  : 1/1 = 1.000
-# 0.75 catches a regression that flips a second case in any populated
-# bucket without false-failing on the existing 1-case slack in medium.
-# Future: extend the corpus to lift medium to ≥ 0.9 and ratchet again.
+#
+# Post-#164: scores are normalized to [0, 1] so the 0.8 high cutoff
+# actually fires for clean both-arm hits. The bucket distribution will
+# shift on the next real-embedding run — some cases that previously
+# landed in ``medium`` will now land in ``high``. The 0.75 floor is
+# conservative enough to survive that redistribution (one case of
+# slack per populated bucket); re-run KILN_EVAL_REAL_EMBEDDINGS=1 to
+# re-measure and tighten if room appears. See issue #166.
 _PER_BUCKET_PRECISION_FLOOR = 0.75
 
 

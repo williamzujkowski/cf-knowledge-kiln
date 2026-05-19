@@ -25,15 +25,21 @@ from cf_knowledge_kiln.retrieval.types import Conflict, Warning
 DEFAULT_RRF_K: int = 60
 """Standard RRF constant per the Cormack et al. paper; tuneable later."""
 
-WEAK_EVIDENCE_SCORE_THRESHOLD: float = 0.015
+WEAK_EVIDENCE_SCORE_THRESHOLD: float = 0.46
 """A chunk below this fused+boosted score is considered weak evidence.
 
 Module-level constant retained as the default; the value is also exposed
 on :class:`RetrievalConfig.weak_evidence_score_threshold` so deployments
 can tune it from ``config/security.yaml``. The threshold is calibrated
-for the RRF k=60 fused score scale (top-1 in both arms is ≈ 0.0328);
-under MockEmbeddingProvider scores collapse near zero and tests patch
-this constant down to 1e-4 to keep the calibration signal meaningful.
+for the normalized fused score (#164): the SQL emits
+``SUM(1/(k+rnk)) * (k+1)/2`` so a both-arm rank-1 hit normalizes to
+``1.0`` and a single-arm rank-1 hit to ``0.5``. ``0.46`` is the
+proportional re-baseline of the pre-#164 ``0.015`` raw-scale threshold
+(``0.015 * 30.5 ~= 0.46``), so the same fraction of chunks trip
+weak-evidence as before but the constant is interpretable as "below
+~92% of single-arm rank-1." Under MockEmbeddingProvider scores still
+collapse near zero and tests patch this constant down to 1e-4 to keep
+the calibration signal meaningful.
 """
 
 
