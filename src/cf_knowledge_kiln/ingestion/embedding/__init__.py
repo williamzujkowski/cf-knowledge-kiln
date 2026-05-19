@@ -110,8 +110,21 @@ class MockEmbeddingProvider:
         return [x / norm for x in floats]
 
 
+# Re-export the local-inference provider so callers can write
+# ``from cf_knowledge_kiln.ingestion.embedding import
+# LocalSentenceTransformersProvider`` without reaching into the
+# submodule. The subpath import (``.local``) also still works.
+# Phase 4's ``LocalEmbeddingProvider`` symbol is preserved as a
+# symbol-level alias by ``local.py``; we re-export both.
+from cf_knowledge_kiln.ingestion.embedding.local import (  # noqa: E402
+    LocalEmbeddingProvider,
+    LocalSentenceTransformersProvider,
+)
+
 __all__ = [
     "DEFAULT_DIMENSIONS",
     "EmbeddingProvider",
+    "LocalEmbeddingProvider",
+    "LocalSentenceTransformersProvider",
     "MockEmbeddingProvider",
 ]

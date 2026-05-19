@@ -161,6 +161,15 @@ class ReviewCase:
     optional ``expected_reason`` is narrative (it's not checked against
     the actual warning types fired) — kept so a future tightening of
     the test can add per-reason precision strata without a YAML rewrite.
+
+    ``relevance`` (added for #108 item 2) is an optional per-chunk
+    relevance grade map: ``{citation -> grade 0..3}``. Used only by
+    the confidence-calibration test that runs under
+    ``KILN_EVAL_REAL_EMBEDDINGS=1``. Cases without grades still load
+    and run under the binary precision test unchanged. Citation keys
+    follow the ``repo/path#H1/H2/...`` convention so the same key
+    survives reingest (chunk IDs change every run; the citation
+    tuple is stable).
     """
 
     case_id: str
@@ -168,6 +177,7 @@ class ReviewCase:
     filters: dict[str, Any]
     expected_review: bool
     expected_reason: str | None = None
+    relevance: dict[str, int] = field(default_factory=dict)
     notes: str | None = None
 
 
@@ -226,14 +236,46 @@ def _parse_review_case(entry: dict[str, Any], path: Path, idx: int) -> ReviewCas
             f"{path}: case '{entry['case_id']}' expected_reason "
             f"{reason!r} not in {sorted(REVIEW_REASONS)}"
         )
+    relevance = _parse_relevance(entry.get("relevance"), path, str(entry["case_id"]))
     return ReviewCase(
         case_id=str(entry["case_id"]),
         query=str(entry["query"]),
         filters=filters_raw,
         expected_review=bool(entry["expected_review"]),
         expected_reason=reason,
+        relevance=relevance,
         notes=entry.get("notes"),
     )
+
+
+def _parse_relevance(raw: Any, path: Path, case_id: str) -> dict[str, int]:
+    """Parse + validate the optional ``relevance`` field on a review case.
+
+    Returns ``{}`` when the field is absent (backward-compatible with
+    the binary-only schema). When present, every key must be a string
+    citation and every value an int in ``[0, 3]``. ``bool`` is rejected
+    even though Python treats it as a subclass of ``int`` — YAML's
+    ``true``/``false`` would otherwise silently mean ``1``/``0``, a
+    silent-failure mode AGENTS.md forbids.
+    """
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise GoldenSetError(f"{path}: case '{case_id}' relevance must be a mapping")
+    out: dict[str, int] = {}
+    for key, value in raw.items():
+        if not isinstance(key, str):
+            raise GoldenSetError(
+                f"{path}: case '{case_id}' relevance keys must be strings, "
+                f"got {type(key).__name__} ({key!r})"
+            )
+        if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 3:
+            raise GoldenSetError(
+                f"{path}: case '{case_id}' relevance[{key!r}] "
+                f"grade must be an int in [0, 3], got {value!r}"
+            )
+        out[key] = value
+    return out
 
 
 __all__ = [

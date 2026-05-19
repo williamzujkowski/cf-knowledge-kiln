@@ -14,11 +14,22 @@ prompt-injection pattern, weak evidence, empty result, plus six clean
 controls). The pre-existing ``docs/`` corpus stays clean — these
 fixtures live in their own subtree so production ingest can opt out
 via the ``exclude: - 'docs/_eval/**'`` rule.
+
+Two embedding modes are supported (#108 item 2):
+
+* Default (``MockEmbeddingProvider``) — the vector arm is degenerate;
+  exercises the FTS + RRF + decision-branch logic only.
+* ``KILN_EVAL_REAL_EMBEDDINGS=1`` — swaps in the local
+  sentence-transformers provider (Nomic Embed v1.5, 768d). The
+  per-bucket confidence-calibration test runs only in this mode and
+  consumes the ``relevance`` grades on each :class:`ReviewCase`.
 """
 
 from __future__ import annotations
 
 import asyncio
+import os
+from collections import defaultdict
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -28,12 +39,93 @@ from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async
 from cf_knowledge_kiln.config import Settings
 from cf_knowledge_kiln.db.connection import Database
 from cf_knowledge_kiln.eval import ReviewCase, load_review_set
-from cf_knowledge_kiln.ingestion.embedding import MockEmbeddingProvider
+from cf_knowledge_kiln.ingestion.embedding import EmbeddingProvider, MockEmbeddingProvider
 from cf_knowledge_kiln.ingestion.pipeline import run_source
 from cf_knowledge_kiln.ingestion.sources import LocalSource
 from cf_knowledge_kiln.retrieval import HybridRetriever, RetrievalFilters, load_retrieval_config
+from cf_knowledge_kiln.retrieval.types import ContextPackResponse
 
 pytestmark = [pytest.mark.integration, pytest.mark.eval]
+
+
+# ─── Real-embedding env-gate (#108 item 2) ─────────────────────────
+
+_REAL_EMBEDDINGS_ENV = "KILN_EVAL_REAL_EMBEDDINGS"
+_EMBEDDING_DEVICE_ENV = "KILN_EMBEDDING_DEVICE"
+
+# Pinned for the confidence-calibration tier. PR A is landing
+# ``LocalSentenceTransformersProvider`` against this exact model +
+# dimension pair (Nomic AI, US-origin per AGENTS.md model registry).
+_REAL_EMBEDDING_MODEL = "nomic-ai/nomic-embed-text-v1.5"
+_REAL_EMBEDDING_DIMENSIONS = 768
+
+# Top-1 relevance grade that counts as "labeled-correct" under the
+# per-bucket precision scorer. Grade ≥ 2 means "useful, partial" or
+# better per the rubric in review_precision.yaml.
+_BUCKET_CORRECT_GRADE_FLOOR = 2
+
+# Per-confidence-bucket precision floor (#108 item 2). The aggregate
+# binary-precision floor is :data:`REVIEW_PRECISION_FLOOR`; this is
+# the stricter per-stratum gate enforced only under real embeddings.
+_PER_BUCKET_PRECISION_FLOOR = 0.9
+
+
+def _real_embeddings_requested() -> bool:
+    """Return True if the operator asked for real embeddings.
+
+    Read once per fixture/test rather than cached at import time so a
+    monkeypatch in a unit test can flip the gate without restarting
+    the process.
+    """
+    return os.environ.get(_REAL_EMBEDDINGS_ENV) == "1"
+
+
+def _build_embedding_provider() -> EmbeddingProvider:
+    """Return the embedding provider for the current run mode.
+
+    Under :data:`_REAL_EMBEDDINGS_ENV` we import the local
+    sentence-transformers adapter lazily so the heavy ``embeddings``
+    extra is only required when the operator opts in. If the import
+    fails the test skips with a pointer to the install command — we
+    do not silently fall back to mock, because that would mask the
+    real-vs-mock signal the calibration test exists to measure.
+    """
+    if not _real_embeddings_requested():
+        return MockEmbeddingProvider()
+    # Eagerly probe BOTH the symbol re-export (PR #149) and the
+    # optional `sentence-transformers` extra. The provider class
+    # itself loads the model lazily on first encode, so a bare
+    # construction wouldn't surface a missing extra until ingest
+    # had already started. Probing here skips early with a precise
+    # pointer at the missing piece — never a silent mock fallback,
+    # because that would mask the real-vs-mock signal the
+    # calibration test exists to measure.
+    try:
+        from cf_knowledge_kiln.ingestion.embedding import (
+            LocalSentenceTransformersProvider,
+        )
+    except ImportError as exc:
+        pytest.skip(
+            f"{_REAL_EMBEDDINGS_ENV}=1 requested but the "
+            f"LocalSentenceTransformersProvider symbol is not "
+            f"re-exported from cf_knowledge_kiln.ingestion.embedding "
+            f"(import error: {exc})."
+        )
+    try:
+        import sentence_transformers  # noqa: F401 — presence probe
+    except ImportError as exc:
+        pytest.skip(
+            f"{_REAL_EMBEDDINGS_ENV}=1 requested but the "
+            f"'real-embeddings' extra is not installed: {exc}. "
+            "Install with: pip install -e '.[real-embeddings]'"
+        )
+    device = os.environ.get(_EMBEDDING_DEVICE_ENV, "cpu")
+    # NB: PR #149 renamed the constructor kwarg from `model` → `model_name`.
+    return LocalSentenceTransformersProvider(
+        model_name=_REAL_EMBEDDING_MODEL,
+        dimensions=_REAL_EMBEDDING_DIMENSIONS,
+        device=device,
+    )
 
 
 REVIEW_PRECISION_FLOOR = 0.83
@@ -81,10 +173,19 @@ def review_corpus_seeded(database_url: str) -> Iterator[None]:
     Function-scoped because the autouse truncate fixture wipes the DB
     before each test. The corpus is small (~18 files, ~50 chunks)
     so the cost is acceptable.
+
+    Embedding provider is chosen per :func:`_build_embedding_provider`
+    (mock by default, Nomic Embed v1.5 under
+    ``KILN_EVAL_REAL_EMBEDDINGS=1``). The ingest-time and query-time
+    providers MUST match — embeddings written by mock cannot be
+    queried by Nomic and vice-versa, so this fixture builds the same
+    provider the retriever fixture uses.
     """
     # Import lazily so collection-time doesn't drag the integration
     # conftest helpers in when the eval tier is skipped (no DB).
     from tests.eval.conftest import _PROMPT_INJECTION_PHRASES, _sensitive_patterns
+
+    provider = _build_embedding_provider()
 
     async def _seed() -> None:
         eng: AsyncEngine = create_async_engine(database_url)
@@ -100,12 +201,13 @@ def review_corpus_seeded(database_url: str) -> Iterator[None]:
                         include=["*.md"],
                     ),
                     settings=_eval_settings(),
-                    embedding_provider=MockEmbeddingProvider(),
+                    embedding_provider=provider,
                     prompt_injection_phrases=_PROMPT_INJECTION_PHRASES,
                     sensitive_patterns=_sensitive_patterns(),
                 )
                 await session.commit()
         finally:
+            await provider.aclose()
             await eng.dispose()
 
     asyncio.run(_seed())
@@ -133,23 +235,29 @@ def review_retriever(
     real embeddings — is the proper fix and re-baselines the
     threshold; this eval focuses on the non-vector decision branches
     (conflicting / deprecated / sensitive / injection / empty).
+
+    Under ``KILN_EVAL_REAL_EMBEDDINGS=1`` the threshold patch is
+    SKIPPED — production thresholds apply to real-embedding scores.
     """
-    monkeypatch.setattr(
-        "cf_knowledge_kiln.retrieval.ranking.WEAK_EVIDENCE_SCORE_THRESHOLD",
-        1e-4,
-    )
+    if not _real_embeddings_requested():
+        monkeypatch.setattr(
+            "cf_knowledge_kiln.retrieval.ranking.WEAK_EVIDENCE_SCORE_THRESHOLD",
+            1e-4,
+        )
     settings = _eval_settings()
     db = Database(database_url, pool_size=settings.pg_pool_size)
     config = load_retrieval_config(settings.security_config_path)
+    provider = _build_embedding_provider()
     retriever = HybridRetriever(
         db=db,
-        embedding_provider=MockEmbeddingProvider(),
+        embedding_provider=provider,
         config=config,
         ef_search=settings.hnsw_ef_search,
     )
     try:
         yield retriever
     finally:
+        asyncio.run(provider.aclose())
         asyncio.run(db.dispose())
 
 
@@ -167,6 +275,40 @@ async def _run_one(retriever: HybridRetriever, case: ReviewCase) -> bool:
         max_tokens=3000,
     )
     return pack.requires_human_review
+
+
+async def _run_one_pack(retriever: HybridRetriever, case: ReviewCase) -> ContextPackResponse:
+    return await retriever.context_pack(
+        case.query,
+        filters=RetrievalFilters(**case.filters),
+        task="review_precision_eval",
+        max_chunks=8,
+        max_tokens=3000,
+    )
+
+
+def _citation_key(chunk: object) -> str:
+    """Build the citation key the YAML's ``relevance`` map uses.
+
+    Format: ``"<repo>/<path>#<H1>/<H2>/..."`` — matches the
+    convention documented in
+    ``tests/eval/golden/review_precision.yaml``. Empty heading_path
+    means "document anywhere" and the key is just ``repo/path``.
+
+    Accepts any object exposing ``repo``, ``path``, and
+    ``heading_path`` (i.e. :class:`EvidenceChunk` from the agent
+    pack). Returns ``""`` if the chunk is missing repo/path — that
+    chunk will never match a grade and the calibration scorer will
+    treat it as ungraded.
+    """
+    repo = getattr(chunk, "repo", None) or ""
+    path = getattr(chunk, "path", None) or ""
+    if not repo or not path:
+        return ""
+    heading = getattr(chunk, "heading_path", None) or []
+    if heading:
+        return f"{repo}/{path}#{'/'.join(heading)}"
+    return f"{repo}/{path}"
 
 
 def test_review_set_loads(review_cases: list[ReviewCase]) -> None:
@@ -221,3 +363,94 @@ def test_review_decisions_meet_precision_floor(
     report = "\n".join(report_lines)
 
     assert precision >= REVIEW_PRECISION_FLOOR, f"{report}\nfloor: {REVIEW_PRECISION_FLOOR:.2f}"
+
+
+def _bucket_correct(case: ReviewCase, pack: ContextPackResponse) -> bool:
+    """Was the pack labeled-correct for this case?
+
+    Two paths to "correct":
+
+    * The case is a positive (``expected_review=true``) and the pack
+      actually tripped ``requires_human_review`` — the calibration
+      scorer treats a correctly-tripped review-required case as a
+      positive evidence event, the same way the binary scorer does.
+    * The case is a negative (``expected_review=false``), the pack
+      has at least one evidence chunk, and the top-1 chunk's citation
+      maps to a relevance grade ≥ :data:`_BUCKET_CORRECT_GRADE_FLOOR`
+      in the case's ``relevance`` map.
+
+    A negative case without a top-1 grade (because the strawman
+    grades didn't anticipate that chunk) is reported as ungraded —
+    the test surfaces ungraded counts in the assertion message so
+    a human spot-check can fill the gaps.
+    """
+    if case.expected_review:
+        return pack.requires_human_review
+    if not pack.evidence:
+        return False
+    top1 = pack.evidence[0]
+    grade = case.relevance.get(_citation_key(top1))
+    if grade is None:
+        return False
+    return grade >= _BUCKET_CORRECT_GRADE_FLOOR
+
+
+def test_confidence_buckets_meet_per_bucket_precision(
+    review_retriever: HybridRetriever,
+    review_cases: list[ReviewCase],
+) -> None:
+    """Per-bucket precision on real embeddings (#108 item 2).
+
+    Skips unless ``KILN_EVAL_REAL_EMBEDDINGS=1`` — the calibration
+    signal requires a real vector arm. Under mock the bucket
+    distribution is degenerate (every score collapses to ``low``)
+    so the gate would pass trivially without exercising the
+    confidence ladder.
+
+    Drives all 12 cases through ``context_pack``, groups results by
+    ``pack.confidence``, and asserts each populated bucket meets
+    :data:`_PER_BUCKET_PRECISION_FLOOR` (≥ 0.9). "Correct" is
+    defined by :func:`_bucket_correct`: tripped-review for positive
+    cases, or top-1 chunk graded ≥ 2 for negative cases.
+
+    Ungraded results (top-1 not in the strawman map) count against
+    the bucket — they are surfaced in the assertion message so
+    successive spot-check passes can extend the grade map without
+    re-running the suite blindly.
+    """
+    if not _real_embeddings_requested():
+        pytest.skip(
+            f"set {_REAL_EMBEDDINGS_ENV}=1 to run confidence-bucket calibration "
+            "(requires the 'embeddings' extra and a real embedding provider)"
+        )
+
+    async def _sweep() -> list[tuple[ReviewCase, ContextPackResponse]]:
+        return [(c, await _run_one_pack(review_retriever, c)) for c in review_cases]
+
+    results = asyncio.run(_sweep())
+    buckets: dict[str, list[tuple[ReviewCase, ContextPackResponse, bool]]] = defaultdict(list)
+    for case, pack in results:
+        correct = _bucket_correct(case, pack)
+        buckets[pack.confidence or "none"].append((case, pack, correct))
+
+    report_lines = ["per-bucket calibration:"]
+    failures: list[str] = []
+    for bucket in ("high", "medium", "low", "none"):
+        entries = buckets.get(bucket, [])
+        if not entries:
+            report_lines.append(f"  {bucket:6s}: (empty)")
+            continue
+        correct = sum(1 for _, _, c in entries if c)
+        precision = correct / len(entries)
+        report_lines.append(f"  {bucket:6s}: {correct}/{len(entries)} = {precision:.3f}")
+        for case, pack, ok in entries:
+            top_key = _citation_key(pack.evidence[0]) if pack.evidence else "(no evidence)"
+            marker = "ok " if ok else "FAIL"
+            report_lines.append(f"      [{marker}] {case.case_id:30s} top1={top_key!r}")
+        if precision < _PER_BUCKET_PRECISION_FLOOR:
+            failures.append(
+                f"bucket {bucket!r} precision {precision:.3f} < floor {_PER_BUCKET_PRECISION_FLOOR}"
+            )
+
+    report = "\n".join(report_lines)
+    assert not failures, f"{report}\n" + "\n".join(failures)
