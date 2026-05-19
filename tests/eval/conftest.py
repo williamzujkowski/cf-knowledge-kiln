@@ -188,6 +188,14 @@ def _build_retriever(database_url: str) -> tuple[HybridRetriever, Database]:
     settings = _eval_settings()
     db = Database(database_url, pool_size=settings.pg_pool_size)
     config = load_retrieval_config(settings.security_config_path)
+    # #161: under MockEmbeddingProvider the RRF fused score collapses
+    # near zero — far below the production 0.015 relevance floor. The
+    # journey suite's adversarial tests need the per-chunk warnings to
+    # fire so we relax the floor for the mock path. The rank gate
+    # (max_warning_rank=3 default) still applies, which is what the
+    # journey suite is actually exercising. Under real embeddings the
+    # floor reads from config and stays strict.
+    config = config.model_copy(update={"relevance_floor": 1e-4})
     retriever = HybridRetriever(
         db=db,
         embedding_provider=MockEmbeddingProvider(),

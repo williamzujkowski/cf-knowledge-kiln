@@ -45,6 +45,53 @@ injection payloads (intentional or accidental).
 Full anti-injection rules live in
 [`config/security.example.yaml`](../config/security.example.yaml).
 
+### Relevance-aware warning emission (#161)
+
+The per-chunk `sensitive_content`, `prompt_injection_pattern`, and
+`conflicting_sources` warnings — and therefore the
+`requires_human_review` decision that consumes them — are emitted on
+a **per-query** basis, not "any flagged chunk in the top-K". A chunk
+that surfaces at rank 7 with a marginal fused score on a query that
+shares a few keywords with an adversarial fixture is cosine noise,
+not a security signal; emitting the warning anyway craters precision
+on clean queries.
+
+Two knobs gate the per-chunk emitters (see
+`retrieval.relevance_floor` and `retrieval.max_warning_rank` in
+[`config/security.example.yaml`](../config/security.example.yaml)):
+
+- **`max_warning_rank`** — only the top-N chunks (1-indexed, default
+  `3`) are eligible to trip these warnings.
+- **`relevance_floor`** — the chunk's fused score must clear this
+  floor. Default tracks `weak_evidence_score_threshold` so an
+  operator who tunes one moves both. Set explicitly to demand a
+  stricter relevance gate on warnings than on the weak-evidence
+  short-circuit (e.g. 1.5x the weak-evidence floor to require a
+  clear both-arm RRF hit before emitting).
+
+The security guarantee is unchanged on the high-relevance path: a
+sensitive or prompt-injection chunk that lands at rank 1 with a
+both-arm RRF score still trips. The change is on the low-relevance
+tail — flagged chunks the vector arm pulled in via semantic
+similarity to an unrelated phrase no longer fire on every clean
+query that happens to share their term neighborhood. The per-chunk
+flags themselves still attach at ingest; only emission is
+relevance-aware.
+
+Caveats:
+
+- `stale_source` and `deprecated_source` are not relevance-gated.
+  They are document-property warnings on chunks the engine returned,
+  and surfacing them is informational regardless of rank — they do
+  not on their own trip `requires_human_review`.
+- `weak_evidence` is score-based but operates on the *best* chunk in
+  the result set, not per-chunk flags, so the new gates do not
+  change its behavior.
+- The query-side `query_normalized` warning (raised when an inbound
+  query contained operator markers) is independent of rank — that
+  gate protects the system from a query attempting to exfiltrate
+  adversarial content, not the result set from being flagged.
+
 ## Secret hygiene
 
 - `gitleaks` runs in pre-commit and CI.

@@ -104,11 +104,26 @@ def _build_embedding_provider() -> EmbeddingProvider:
             "Install with: pip install -e '.[real-embeddings]'"
         )
     device = os.environ.get(_EMBEDDING_DEVICE_ENV, "cpu")
+
+    # `trust_remote_code=True` is required for Nomic Embed v1.5 —
+    # the model ships custom modeling code on HF (`nomic-bert-2048`),
+    # and newer `transformers` (≥ 4.51) refuses to load it without
+    # the flag. The eval fixture is the right scope for this: it
+    # injects a custom factory rather than baking the flag into the
+    # production default factory. Production callers construct the
+    # provider through `build_provider_from_settings`, which is
+    # operator-controlled config.
+    def _factory(name: str, device: str | None = None) -> object:
+        from sentence_transformers import SentenceTransformer
+
+        return SentenceTransformer(name, device=device, trust_remote_code=True)
+
     # NB: PR #149 renamed the constructor kwarg from `model` → `model_name`.
     return LocalSentenceTransformersProvider(
         model_name=_REAL_EMBEDDING_MODEL,
         dimensions=_REAL_EMBEDDING_DIMENSIONS,
         device=device,
+        model_factory=_factory,
     )
 
 

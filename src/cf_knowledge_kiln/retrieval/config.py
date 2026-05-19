@@ -48,6 +48,16 @@ DEFAULT_STALE_AFTER_DAYS: int = 365
 # `retrieval.weak_evidence_score_threshold` in `config/security.yaml`.
 DEFAULT_WEAK_EVIDENCE_SCORE_THRESHOLD: float = 0.015
 
+# Per-query rank cutoff for the per-chunk security warning emitters
+# (#161). Only chunks at rank ≤ this cutoff count toward
+# ``sensitive_content``, ``prompt_injection_pattern``, and
+# ``conflicting_sources`` warnings. A chunk that landed at rank 7 via
+# cosine noise no longer trips review on a clean query that happens to
+# share a few keywords with an adversarial fixture; the high-relevance
+# signal — a sensitive chunk at rank 1 with a both-arm RRF score —
+# still trips. See ``docs/security.md`` for the policy framing.
+DEFAULT_MAX_WARNING_RANK: int = 3
+
 
 class RetrievalConfig(BaseModel):
     """Ranking parameters loaded from ``config/security.yaml``.
@@ -63,6 +73,27 @@ class RetrievalConfig(BaseModel):
         Documents not reviewed within this many days are flagged
         ``stale_source`` and lose freshness boost. ``None`` disables
         the check entirely.
+    weak_evidence_score_threshold:
+        Fused-score floor below which the result set trips
+        ``weak_evidence`` + ``requires_human_review``. Calibrated for
+        RRF k=60 (#160).
+    relevance_floor:
+        Score floor below which a chunk is treated as cosine-noise
+        for the per-chunk security warning emitters
+        (``sensitive_content``, ``prompt_injection_pattern``,
+        ``conflicting_sources``). ``None`` (the default) means "use
+        :attr:`weak_evidence_score_threshold`" — the common case is
+        that operators tune one knob and both gates move together. Set
+        explicitly when you want a STRICTER relevance gate on warnings
+        than on the weak-evidence short-circuit (e.g. 1.5x the
+        weak-evidence floor to demand a clear both-arm hit before
+        emitting). (#161)
+    max_warning_rank:
+        Per-query rank cutoff for the per-chunk security warning
+        emitters. Only chunks at rank ≤ this value are eligible to
+        trip ``sensitive_content``, ``prompt_injection_pattern``, or
+        ``conflicting_sources``. Default 3 keeps a tight head-of-list
+        gate. (#161)
     """
 
     model_config = ConfigDict(extra="ignore", frozen=True)
@@ -72,6 +103,22 @@ class RetrievalConfig(BaseModel):
     weak_evidence_score_threshold: float = Field(
         default=DEFAULT_WEAK_EVIDENCE_SCORE_THRESHOLD, gt=0.0
     )
+    relevance_floor: float | None = Field(default=None, gt=0.0)
+    max_warning_rank: int = Field(default=DEFAULT_MAX_WARNING_RANK, ge=1)
+
+    @property
+    def effective_relevance_floor(self) -> float:
+        """Resolve :attr:`relevance_floor` against the weak-evidence default.
+
+        ``None`` means "track the weak-evidence threshold" so an
+        operator who tunes ``weak_evidence_score_threshold`` only also
+        moves the warning gate without having to set a second knob.
+        Callers should use this property rather than reading
+        ``relevance_floor`` directly.
+        """
+        if self.relevance_floor is None:
+            return self.weak_evidence_score_threshold
+        return self.relevance_floor
 
     @field_validator("status_weights")
     @classmethod
@@ -135,6 +182,10 @@ def load_retrieval_config(path: str | Path | None) -> RetrievalConfig:
         payload["stale_after_days"] = freshness["stale_after_days"]
     if "weak_evidence_score_threshold" in retrieval:
         payload["weak_evidence_score_threshold"] = retrieval["weak_evidence_score_threshold"]
+    if "relevance_floor" in retrieval:
+        payload["relevance_floor"] = retrieval["relevance_floor"]
+    if "max_warning_rank" in retrieval:
+        payload["max_warning_rank"] = retrieval["max_warning_rank"]
     try:
         return RetrievalConfig.model_validate(payload)
     except ValidationError as exc:
@@ -142,6 +193,7 @@ def load_retrieval_config(path: str | Path | None) -> RetrievalConfig:
 
 
 __all__ = [
+    "DEFAULT_MAX_WARNING_RANK",
     "DEFAULT_STALE_AFTER_DAYS",
     "DEFAULT_STATUS_WEIGHTS",
     "DEFAULT_WEAK_EVIDENCE_SCORE_THRESHOLD",

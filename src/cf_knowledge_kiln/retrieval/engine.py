@@ -163,6 +163,8 @@ class HybridRetriever:
             today=date.today(),
             stale_after_days=self._config.stale_after_days,
             weak_evidence_threshold=self._config.weak_evidence_score_threshold,
+            relevance_floor=self._config.effective_relevance_floor,
+            max_warning_rank=self._config.max_warning_rank,
         )
         if removed_phrases:
             warnings.append(_query_normalized_warning(removed_phrases))
@@ -224,8 +226,14 @@ class HybridRetriever:
             today=date.today(),
             stale_after_days=self._config.stale_after_days,
             weak_evidence_threshold=self._config.weak_evidence_score_threshold,
+            relevance_floor=self._config.effective_relevance_floor,
+            max_warning_rank=self._config.max_warning_rank,
         )
-        conflicts = detect_conflicts(trimmed)
+        conflicts = detect_conflicts(
+            trimmed,
+            relevance_floor=self._config.effective_relevance_floor,
+            max_warning_rank=self._config.max_warning_rank,
+        )
         warnings.extend(_conflict_warnings(conflicts))
         if removed_phrases:
             warnings.append(_query_normalized_warning(removed_phrases))
@@ -323,13 +331,33 @@ def _collect_warnings(
     today: date,
     stale_after_days: int | None,
     weak_evidence_threshold: float | None = None,
+    relevance_floor: float | None = None,
+    max_warning_rank: int | None = None,
 ) -> list[Warning]:
-    """Concatenate the standard slice-2 warning set."""
+    """Concatenate the standard slice-2 warning set.
+
+    ``relevance_floor`` / ``max_warning_rank`` propagate to the
+    per-chunk security emitters only (#161); stale, deprecated, and
+    weak-evidence are deliberately unaffected — they're either
+    document-property warnings or operate on the best chunk overall.
+    """
     warnings: list[Warning] = []
     warnings.extend(stale_warnings(chunks, today=today, stale_after_days=stale_after_days))
     warnings.extend(deprecated_warnings(chunks))
-    warnings.extend(prompt_injection_warnings(chunks))
-    warnings.extend(sensitive_content_warnings(chunks))
+    warnings.extend(
+        prompt_injection_warnings(
+            chunks,
+            relevance_floor=relevance_floor,
+            max_warning_rank=max_warning_rank,
+        )
+    )
+    warnings.extend(
+        sensitive_content_warnings(
+            chunks,
+            relevance_floor=relevance_floor,
+            max_warning_rank=max_warning_rank,
+        )
+    )
     warnings.extend(weak_evidence_warning(chunks, threshold=weak_evidence_threshold))
     return warnings
 
