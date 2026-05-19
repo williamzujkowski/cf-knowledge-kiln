@@ -36,7 +36,7 @@ models:
   #   name: nomic-ai/nomic-embed-text-v1.5   # default; Snowflake/snowflake-arctic-embed-m is an alternative
   #   dimensions: 768                         # arctic-embed-m is also 768
   #   batch_size: 32
-  #   device: cpu                             # cpu | cuda | mps; KILN_EMBEDDING_DEVICE overrides
+  #   device: cpu                             # cpu | cuda | mps; precedence: yaml > KILN_EMBEDDING_DEVICE env > cpu
   #   enabled: true
   #   notes: |
   #     Generic wrapper. Requires the `real-embeddings` extra:

@@ -189,10 +189,15 @@ class LocalSentenceTransformersProvider:
         return [list(map(float, v)) for v in result]
 
 
-# Back-compat alias. Existing callers (and merged Phase 4 tests) import
-# ``LocalEmbeddingProvider``; the new canonical name is more descriptive
-# but both refer to the same class. Removing the alias requires a
-# follow-up PR + a deprecation cycle.
+# Symbol-level alias only. The Phase 4 ``LocalEmbeddingProvider`` was
+# constructed with keyword-only ``LocalEmbeddingProvider(*, model=...,
+# dimensions=...)``; the new canonical class takes positional
+# ``LocalSentenceTransformersProvider(model_name, dimensions, ...)`` —
+# the first arg was renamed and is no longer keyword-only.
+# **External callers using the old ``model=`` keyword will break at
+# runtime with TypeError.** All in-repo callers were updated in this
+# PR; there is no in-tree deprecation cycle. Removing the alias is a
+# future cleanup once any downstream consumers have migrated.
 LocalEmbeddingProvider = LocalSentenceTransformersProvider
 
 
