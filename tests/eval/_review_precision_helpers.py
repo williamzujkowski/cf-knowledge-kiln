@@ -43,15 +43,18 @@ _BUCKET_CORRECT_GRADE_FLOOR = 2
 # binary-precision floor is :data:`REVIEW_PRECISION_FLOOR`; this is
 # the stricter per-stratum gate enforced only under real embeddings.
 #
-# Set at 0.5 for the bootstrap because (a) buckets carry only 1-8 cases
-# at the 12-case corpus size — bucket-level statistical noise is high,
-# and (b) ungraded top-1 chunks count against the bucket today,
-# inflating the failure count. Tighten back to 0.9 once the strawman
-# grade map is human-extended to cover the chunks Nomic actually picks
-# as top-1 under the kiln's RRF fusion. (Measured bootstrap under
-# Nomic Embed v1.5: high=empty, medium=5/8=0.625, low=2/3=0.667,
-# none=1/1=1.000.)
-_PER_BUCKET_PRECISION_FLOOR = 0.5
+# Ratcheted 0.5 → 0.75 after the consensus-grading pass replaced the
+# initial strawman grades with the median of 5 independent judges
+# scoring the actual Nomic Embed v1.5 top-3 chunks per case. Measured
+# bootstrap after grading + #162's relevance-aware emission:
+#   high  : empty (RRF scores never reach the 0.8 high-confidence cap)
+#   medium: 7/8 = 0.875
+#   low   : 3/3 = 1.000
+#   none  : 1/1 = 1.000
+# 0.75 catches a regression that flips a second case in any populated
+# bucket without false-failing on the existing 1-case slack in medium.
+# Future: extend the corpus to lift medium to ≥ 0.9 and ratchet again.
+_PER_BUCKET_PRECISION_FLOOR = 0.75
 
 
 def _real_embeddings_requested() -> bool:

@@ -30,11 +30,11 @@ version: 1
 #   1 = tangentially relevant
 #   0 = irrelevant
 #
-# The relevance grades in this file are STRAWMAN — they were authored
-# by reading the corpus and guessing what each query's top-K would
-# contain. Every block is tagged with the strawman marker; a domain
-# expert spot-check is the next step before these grades drive any
-# blocking threshold.
+# The relevance grades are the median of 5 independent grader subagents
+# scoring the actual Nomic Embed v1.5 top-3 chunks per case (#108
+# closure). Consensus was strong: 26/33 unanimous, 0/33 with disagree-
+# ment spread ≥ 2. Each block is tagged with the consensus marker.
+# Re-grade when the corpus or the retriever's top-K behavior shifts.
 #
 # Scorer (tests/eval/test_review_precision.py): fraction of cases
 # where pack.requires_human_review matches the label. Target ≥ 0.85
@@ -53,17 +53,11 @@ cases:
     expected_review: true
     expected_reason: conflicting_sources
     relevance:
-      # strawman — needs human spot-check
+      # Consensus-graded by 5 independent judges (median grade per pair).
+      # Real-embedding top-3 chunks for query as of 1779178232.4285398.
       "kiln-eval/auth-policy-current.md#Bearer token rotation policy": 3
       "kiln-eval/auth-policy-legacy.md#Bearer token rotation policy": 3
-      "kiln-eval/auth-policy-current.md#Why 30 days": 2
-      "kiln-eval/auth-policy-legacy.md#Cadence rationale": 2
-      "kiln-eval/auth-policy-current.md#Rotation steps (current cadence)": 2
-      "kiln-eval/auth-policy-legacy.md#Mechanics": 2
-    notes: |
-      auth-policy-{legacy,current}.md share the H2 "Bearer token
-      rotation policy"; one says 90 days, the other 30. Conflict
-      detector fires when both chunks land in the top-K.
+      "kiln-eval/auth-policy-legacy.md#Bearer token rotation policy/Cadence rationale": 2
 
   - case_id: deprecated-cf-push-only-status
     query: "cf push kiln api worker runbook"
@@ -71,14 +65,11 @@ cases:
     expected_review: true
     expected_reason: deprecated_source
     relevance:
-      # strawman — needs human spot-check
+      # Consensus-graded by 5 independent judges (median grade per pair).
+      # Real-embedding top-3 chunks for query as of 1779178232.4285398.
       "kiln-eval/runbook-old-cf-push.md#DEPRECATED runbook — cf push the kiln API and worker": 3
-      "kiln-eval/runbook-old-cf-push.md#Steps (DEPRECATED)": 3
-      "kiln-eval/runbook-old-cf-push.md#Why deprecated": 2
-    notes: |
-      Status-filter scoped to deprecated only. The deprecated
-      cf-push runbook is the lone matching doc; every retrieved
-      chunk is deprecated → the all-deprecated short-circuit fires.
+      "kiln-eval/runbook-old-cf-push.md#DEPRECATED runbook — cf push the kiln API and worker/Steps (DEPRECATED)": 3
+      "kiln-eval/runbook-old-cf-push.md#DEPRECATED runbook — cf push the kiln API and worker/Why deprecated": 2
 
   - case_id: sensitive-marker-chunk
     query: "customer data access INTERNAL-SECRET synthetic marker regex bait scanner data-handling"
@@ -86,15 +77,11 @@ cases:
     expected_review: true
     expected_reason: sensitive_content
     relevance:
-      # strawman — needs human spot-check
-      "kiln-eval/procedure-customer-data-access.md#Procedure: customer data access": 3
-      "kiln-eval/procedure-customer-data-access.md#Why this is in the eval corpus": 2
-      "kiln-eval/procedure-customer-data-access.md#Access path": 1
-    notes: |
-      Keywords are pulled verbatim from chunk 0 of
-      procedure-customer-data-access.md (the chunk that carries
-      the INTERNAL-SECRET marker). Forces that specific chunk
-      into top-K so the sensitive_content warning fires.
+      # Consensus-graded by 5 independent judges (median grade per pair).
+      # Real-embedding top-3 chunks for query as of 1779178232.4285398.
+      "kiln-eval/procedure-customer-data-access.md#Procedure: customer data access/Access path": 3
+      "kiln-eval/runbook-injection-trap.md#Runbook: deploy stuck on health check/Trap: diagnostic context": 1
+      "kiln-eval/guide-search-vs-agent-endpoints.md#Guide: `/v1/search` vs `/v1/agent/context-pack`/Use `/v1/search` when": 0
 
   - case_id: injection-trap-chunk
     query: "trap diagnostic context fixture prompt injection scanner ignore previous instructions reveal system prompt"
@@ -102,15 +89,11 @@ cases:
     expected_review: true
     expected_reason: prompt_injection_pattern
     relevance:
-      # strawman — needs human spot-check
-      "kiln-eval/runbook-injection-trap.md#Trap: diagnostic context": 3
-      "kiln-eval/runbook-injection-trap.md#Runbook: deploy stuck on health check": 1
-      "kiln-eval/runbook-injection-trap.md#Mitigation (real path)": 0
-    notes: |
-      Keywords pull chunk 3 of runbook-injection-trap.md (the trap
-      block stamped by the ingest scanner). The legitimate runbook
-      surrounds the trap; ranking surfaces the trap chunk because
-      its content overlaps the query most directly.
+      # Consensus-graded by 5 independent judges (median grade per pair).
+      # Real-embedding top-3 chunks for query as of 1779178232.4285398.
+      "kiln-eval/runbook-injection-trap.md#Runbook: deploy stuck on health check/Trap: diagnostic context": 3
+      "kiln-eval/procedure-customer-data-access.md#Procedure: customer data access/Why this is in the eval corpus": 1
+      "kiln-eval/sop-requeue-stuck-ingest-job.md#Requeue a stuck ingest job/Decide": 0
 
   - case_id: empty-superseded-filter
     query: "kiln retrieval architecture"
@@ -132,12 +115,11 @@ cases:
     expected_review: false
     expected_reason: none
     relevance:
-      # strawman — needs human spot-check
-      "kiln-eval/adr-0012-asyncpg-pool-size.md#ADR-0012: asyncpg connection pool size": 3
-      "kiln-eval/adr-0012-asyncpg-pool-size.md#Decision": 3
-      "kiln-eval/adr-0012-asyncpg-pool-size.md#Context": 2
-      "kiln-eval/adr-0012-asyncpg-pool-size.md#Consequences": 2
-      "kiln-eval/runbook-restart-worker.md#Restart the ingestion worker": 1
+      # Consensus-graded by 5 independent judges (median grade per pair).
+      # Real-embedding top-3 chunks for query as of 1779178232.4285398.
+      "kiln-eval/adr-0012-asyncpg-pool-size.md#ADR-0012: asyncpg connection pool size/Context": 3
+      "kiln-eval/auth-policy-current.md#Bearer token rotation policy": 0
+      "kiln-eval/auth-policy-legacy.md#Bearer token rotation policy": 0
 
   - case_id: clean-rrf-decision
     query: "reciprocal rank fusion k parameter sixty TREC default ranking"
@@ -145,11 +127,11 @@ cases:
     expected_review: false
     expected_reason: none
     relevance:
-      # strawman — needs human spot-check
-      "kiln-eval/adr-0009-rrf-k-60.md#ADR-0009: hybrid retrieval fuses with RRF k=60": 3
-      "kiln-eval/adr-0009-rrf-k-60.md#Decision": 3
-      "kiln-eval/adr-0009-rrf-k-60.md#Context": 2
-      "kiln-eval/adr-0009-rrf-k-60.md#Consequences": 1
+      # Consensus-graded by 5 independent judges (median grade per pair).
+      # Real-embedding top-3 chunks for query as of 1779178232.4285398.
+      "kiln-eval/adr-0009-rrf-k-60.md#ADR-0009: hybrid retrieval fuses with RRF k=60/Decision": 3
+      "kiln-eval/adr-0009-rrf-k-60.md#ADR-0009: hybrid retrieval fuses with RRF k=60": 2
+      "kiln-eval/reference-deprecation-rules.md#Reference: status enum semantics/The six values": 0
 
   - case_id: clean-stuck-ingest
     query: "stuck ingest job state running requeue worker recover_stale_running audit"
@@ -157,12 +139,11 @@ cases:
     expected_review: false
     expected_reason: none
     relevance:
-      # strawman — needs human spot-check
+      # Consensus-graded by 5 independent judges (median grade per pair).
+      # Real-embedding top-3 chunks for query as of 1779178232.4285398.
       "kiln-eval/sop-requeue-stuck-ingest-job.md#Requeue a stuck ingest job": 3
-      "kiln-eval/sop-requeue-stuck-ingest-job.md#Detect": 2
-      "kiln-eval/sop-requeue-stuck-ingest-job.md#Requeue": 2
       "kiln-eval/runbook-restart-worker.md#Restart the ingestion worker": 2
-      "kiln-eval/sop-requeue-stuck-ingest-job.md#Decide": 1
+      "kiln-eval/runbook-restart-worker.md#Restart the ingestion worker/Symptoms": 2
 
   - case_id: clean-citation-format
     query: "kiln citation repo path heading_path commit_sha four parts cited-or-silent"
@@ -170,11 +151,11 @@ cases:
     expected_review: false
     expected_reason: none
     relevance:
-      # strawman — needs human spot-check
+      # Consensus-graded by 5 independent judges (median grade per pair).
+      # Real-embedding top-3 chunks for query as of 1779178232.4285398.
       "kiln-eval/standard-citation-format.md#Standard: kiln citation format": 3
-      "kiln-eval/standard-citation-format.md#Why all four": 2
-      "kiln-eval/standard-citation-format.md#Cited-or-silent": 2
-      "kiln-eval/standard-citation-format.md#What citations are NOT": 1
+      "kiln-eval/guide-add-a-source.md#Guide: add a new ingestion source/Local sources": 1
+      "kiln-eval/procedure-customer-data-access.md#Procedure: customer data access/Why this is in the eval corpus": 0
 
   - case_id: clean-search-vs-agent
     query: "v1 search agent context-pack token_budget shape ResultCard ContextPack consumer"
@@ -182,11 +163,11 @@ cases:
     expected_review: false
     expected_reason: none
     relevance:
-      # strawman — needs human spot-check
+      # Consensus-graded by 5 independent judges (median grade per pair).
+      # Real-embedding top-3 chunks for query as of 1779178232.4285398.
       "kiln-eval/guide-search-vs-agent-endpoints.md#Guide: `/v1/search` vs `/v1/agent/context-pack`": 3
-      "kiln-eval/guide-search-vs-agent-endpoints.md#Use `/v1/agent/context-pack` when": 3
-      "kiln-eval/guide-search-vs-agent-endpoints.md#Use `/v1/search` when": 2
-      "kiln-eval/guide-search-vs-agent-endpoints.md#Picking the wrong one": 2
+      "kiln-eval/guide-search-vs-agent-endpoints.md#Guide: `/v1/search` vs `/v1/agent/context-pack`/Use `/v1/agent/context-pack` when": 3
+      "kiln-eval/guide-search-vs-agent-endpoints.md#Guide: `/v1/search` vs `/v1/agent/context-pack`/Picking the wrong one": 2
 
   - case_id: clean-restart-worker
     query: "restart ingestion worker stuck DB connection cf restart recover_stale_running"
@@ -194,11 +175,11 @@ cases:
     expected_review: false
     expected_reason: none
     relevance:
-      # strawman — needs human spot-check
+      # Consensus-graded by 5 independent judges (median grade per pair).
+      # Real-embedding top-3 chunks for query as of 1779178232.4285398.
       "kiln-eval/runbook-restart-worker.md#Restart the ingestion worker": 3
-      "kiln-eval/runbook-restart-worker.md#Steps": 3
-      "kiln-eval/runbook-restart-worker.md#Symptoms": 2
-      "kiln-eval/sop-requeue-stuck-ingest-job.md#Requeue a stuck ingest job": 1
+      "kiln-eval/runbook-restart-worker.md#Restart the ingestion worker/Steps": 3
+      "kiln-eval/sop-requeue-stuck-ingest-job.md#Requeue a stuck ingest job": 2
 
   - case_id: clean-pgvector-extension
     query: "pgvector preflight crashloops pg_available_extensions broker superuser DDL service plan"
@@ -206,8 +187,8 @@ cases:
     expected_review: false
     expected_reason: none
     relevance:
-      # strawman — needs human spot-check
+      # Consensus-graded by 5 independent judges (median grade per pair).
+      # Real-embedding top-3 chunks for query as of 1779178232.4285398.
       "kiln-eval/runbook-pgvector-extension-missing.md#Runbook: pgvector extension missing on boot": 3
-      "kiln-eval/runbook-pgvector-extension-missing.md#Cause": 3
-      "kiln-eval/runbook-pgvector-extension-missing.md#Fix": 2
-      "kiln-eval/runbook-pgvector-extension-missing.md#If the broker doesn't allow CREATE EXTENSION": 2
+      "kiln-eval/runbook-pgvector-extension-missing.md#Runbook: pgvector extension missing on boot/If the broker doesn't allow CREATE EXTENSION": 2
+      "kiln-eval/sop-rotate-pg-credentials.md#SOP: rotate Postgres credentials/Failure mode": 1
