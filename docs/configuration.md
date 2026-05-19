@@ -68,6 +68,19 @@ finished first. See
 helper, and `tests/unit/test_ingestion_pipeline_batched_embed.py`
 for the order-preservation test.
 
+**Per-batch failure granularity (issue #151):** when an ingest run
+hits a transient provider failure on one batch, the batches that
+succeeded persist — their vectors are written to the embeddings
+table and counted in `summary.embeddings_created`. Only the failed
+batches' chunks are accounted as `summary.embeddings_failed`, and
+each failure is logged once with structured fields (`start_offset`,
+`batch_size`, `exc_class`, `exc_message`) so operators can find the
+offending batch without grepping a full traceback. The run only
+fails outright when EVERY batch failed — at that point there is no
+partial-success work worth committing, so the loud-failure
+semantics still hold. Before #151 a single bad batch would discard
+every sibling batch's successful work.
+
 ## YAML config files
 
 These live under `config/` and are loaded at boot. The `.example`
