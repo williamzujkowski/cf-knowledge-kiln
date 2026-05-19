@@ -38,6 +38,16 @@ DEFAULT_STATUS_WEIGHTS: dict[str, float] = {
 
 DEFAULT_STALE_AFTER_DAYS: int = 365
 
+# Weak-evidence floor for the RRF fused score. Top-1 in BOTH arms with
+# default k=60 yields ~0.0328 (= 2/61); top-1 in ONE arm only is ~0.0164.
+# Threshold 0.015 catches "no match in either arm" (true weak evidence)
+# without false-failing single-arm hits on clean queries — measured against
+# the docs/_eval corpus on Nomic Embed v1.5. Tuned for the RRF k=60 scale
+# (ADR-0009); the pre-#160 value of 0.5 was a holdover from before fusion
+# and tripped on every real result. Override per deployment via
+# `retrieval.weak_evidence_score_threshold` in `config/security.yaml`.
+DEFAULT_WEAK_EVIDENCE_SCORE_THRESHOLD: float = 0.015
+
 
 class RetrievalConfig(BaseModel):
     """Ranking parameters loaded from ``config/security.yaml``.
@@ -59,6 +69,9 @@ class RetrievalConfig(BaseModel):
 
     status_weights: dict[str, float] = Field(default_factory=lambda: dict(DEFAULT_STATUS_WEIGHTS))
     stale_after_days: int | None = DEFAULT_STALE_AFTER_DAYS
+    weak_evidence_score_threshold: float = Field(
+        default=DEFAULT_WEAK_EVIDENCE_SCORE_THRESHOLD, gt=0.0
+    )
 
     @field_validator("status_weights")
     @classmethod
@@ -120,6 +133,8 @@ def load_retrieval_config(path: str | Path | None) -> RetrievalConfig:
     freshness = raw.get("freshness") or {}
     if "stale_after_days" in freshness:
         payload["stale_after_days"] = freshness["stale_after_days"]
+    if "weak_evidence_score_threshold" in retrieval:
+        payload["weak_evidence_score_threshold"] = retrieval["weak_evidence_score_threshold"]
     try:
         return RetrievalConfig.model_validate(payload)
     except ValidationError as exc:
@@ -129,6 +144,7 @@ def load_retrieval_config(path: str | Path | None) -> RetrievalConfig:
 __all__ = [
     "DEFAULT_STALE_AFTER_DAYS",
     "DEFAULT_STATUS_WEIGHTS",
+    "DEFAULT_WEAK_EVIDENCE_SCORE_THRESHOLD",
     "RetrievalConfig",
     "RetrievalConfigError",
     "load_retrieval_config",

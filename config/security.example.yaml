@@ -41,3 +41,11 @@ retrieval:
     deprecated: 0.2
     archived: 0.1
     superseded: 0.05
+
+  # Fused-score floor below which a query trips `weak_evidence` and
+  # `requires_human_review`. Calibrated for RRF k=60: top-1 in BOTH
+  # arms is ~0.0328; single-arm hits land at ~0.0164; the 0.015 floor
+  # catches the "neither arm matched" case without false-failing
+  # single-arm-but-correct results. Raise for stricter gating; lower
+  # if your provider's score distribution differs from Nomic Embed.
+  weak_evidence_score_threshold: 0.015
