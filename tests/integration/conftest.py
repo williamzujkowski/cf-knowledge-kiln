@@ -31,12 +31,10 @@ from collections.abc import AsyncIterator, Iterator
 
 import pytest
 import pytest_asyncio
-from alembic import command
-from alembic.config import Config
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-from cf_knowledge_kiln.config import get_settings
+from tests.integration._migration_isolation import apply_migrations_with_isolation
 
 DEFAULT_TEST_DSN = "postgresql+asyncpg://kiln:kiln@localhost:5432/kiln"  # pragma: allowlist secret
 
@@ -71,30 +69,25 @@ def _apply_migrations(database_url: str) -> Iterator[None]:
     real pgvector-missing errors surface so the acceptance check
     ("refuses cleanly when pgvector is unavailable") is exercised.
 
-    Restores the pre-fixture value of ``KILN_DATABASE_URL`` (or unsets
-    it if it wasn't set) on teardown so a follow-on unit-test run in
-    the same pytest invocation can't accidentally observe the test DB.
+    Env-var + logger isolation lives in
+    :func:`tests.integration._migration_isolation.apply_migrations_with_isolation`
+    (a non-conftest module so the regression guard in
+    ``test_env_isolation.py`` can import it without triggering the
+    pytest plugin double-registration on ``tests.integration.conftest``).
     """
-    cfg = Config("alembic.ini")
-    saved = os.environ.get("KILN_DATABASE_URL")
-    os.environ["KILN_DATABASE_URL"] = database_url
-    get_settings.cache_clear()
     try:
-        command.upgrade(cfg, "head")
+        with apply_migrations_with_isolation(database_url):
+            yield
     except Exception as exc:
+        # The helper only raises if the upgrade itself fails (it runs
+        # before its inner yield). Session-scoped autouse fixtures
+        # don't see test-failure exceptions, so any exception here
+        # is the migration-failed case.
         pytest.skip(
             f"Integration tests require a reachable pgvector Postgres at "
             f"{database_url}. Migration failed with: {exc}",
             allow_module_level=True,
         )
-    try:
-        yield
-    finally:
-        if saved is None:
-            os.environ.pop("KILN_DATABASE_URL", None)
-        else:
-            os.environ["KILN_DATABASE_URL"] = saved
-        get_settings.cache_clear()
 
 
 @pytest_asyncio.fixture
