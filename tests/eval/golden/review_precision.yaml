@@ -30,11 +30,11 @@ version: 1
 #   1 = tangentially relevant
 #   0 = irrelevant
 #
-# The relevance grades in this file are STRAWMAN — they were authored
-# by reading the corpus and guessing what each query's top-K would
-# contain. Every block is tagged with the strawman marker; a domain
-# expert spot-check is the next step before these grades drive any
-# blocking threshold.
+# The relevance grades are the median of 5 independent grader subagents
+# scoring the actual Nomic Embed v1.5 top-3 chunks per case (#108
+# closure). Consensus was strong: 26/33 unanimous, 0/33 with disagree-
+# ment spread ≥ 2. Each block is tagged with the consensus marker.
+# Re-grade when the corpus or the retriever's top-K behavior shifts.
 #
 # Scorer (tests/eval/test_review_precision.py): fraction of cases
 # where pack.requires_human_review matches the label. Target ≥ 0.85
