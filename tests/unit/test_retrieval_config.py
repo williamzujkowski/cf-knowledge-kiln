@@ -74,6 +74,24 @@ freshness:
         assert config.status_weights == DEFAULT_STATUS_WEIGHTS
         assert config.stale_after_days == DEFAULT_STALE_AFTER_DAYS
 
+    def test_loads_weak_evidence_score_threshold(self, tmp_path: Path) -> None:
+        """#160 — operators can override the threshold via security.yaml."""
+        path = _write(
+            tmp_path / "security.yaml",
+            "retrieval:\n  weak_evidence_score_threshold: 0.03\n",
+        )
+        config = load_retrieval_config(path)
+        assert config.weak_evidence_score_threshold == 0.03
+
+    def test_weak_evidence_score_threshold_rejects_zero(self, tmp_path: Path) -> None:
+        """A zero floor would mark every result as weak; pydantic gt=0 rejects."""
+        path = _write(
+            tmp_path / "security.yaml",
+            "retrieval:\n  weak_evidence_score_threshold: 0.0\n",
+        )
+        with pytest.raises(RetrievalConfigError):
+            load_retrieval_config(path)
+
     def test_malformed_yaml_raises(self, tmp_path: Path) -> None:
         bad = _write(tmp_path / "security.yaml", ":\n  -not: valid: yaml\n")
         with pytest.raises(RetrievalConfigError, match="malformed YAML"):

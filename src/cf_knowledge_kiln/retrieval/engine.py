@@ -159,7 +159,10 @@ class HybridRetriever:
         boosted.sort(key=lambda c: c.score, reverse=True)
         trimmed = boosted[:max_results]
         warnings = _collect_warnings(
-            trimmed, today=date.today(), stale_after_days=self._config.stale_after_days
+            trimmed,
+            today=date.today(),
+            stale_after_days=self._config.stale_after_days,
+            weak_evidence_threshold=self._config.weak_evidence_score_threshold,
         )
         if removed_phrases:
             warnings.append(_query_normalized_warning(removed_phrases))
@@ -217,7 +220,10 @@ class HybridRetriever:
         trimmed = boosted[:max_chunks]
         trimmed_ids = {c.chunk_id for c in trimmed}
         warnings = _collect_warnings(
-            trimmed, today=date.today(), stale_after_days=self._config.stale_after_days
+            trimmed,
+            today=date.today(),
+            stale_after_days=self._config.stale_after_days,
+            weak_evidence_threshold=self._config.weak_evidence_score_threshold,
         )
         conflicts = detect_conflicts(trimmed)
         warnings.extend(_conflict_warnings(conflicts))
@@ -232,7 +238,12 @@ class HybridRetriever:
             related_sources=[],
         )
         return assemble_context_pack(
-            inputs, task=task, query=query, max_chunks=max_chunks, max_tokens=max_tokens
+            inputs,
+            task=task,
+            query=query,
+            max_chunks=max_chunks,
+            max_tokens=max_tokens,
+            weak_evidence_threshold=self._config.weak_evidence_score_threshold,
         )
 
     async def _fetch_candidates(
@@ -307,7 +318,11 @@ def _row_to_ranked_chunk(row: SearchRow) -> RankedChunk:
 
 
 def _collect_warnings(
-    chunks: list[RankedChunk], *, today: date, stale_after_days: int | None
+    chunks: list[RankedChunk],
+    *,
+    today: date,
+    stale_after_days: int | None,
+    weak_evidence_threshold: float | None = None,
 ) -> list[Warning]:
     """Concatenate the standard slice-2 warning set."""
     warnings: list[Warning] = []
@@ -315,7 +330,7 @@ def _collect_warnings(
     warnings.extend(deprecated_warnings(chunks))
     warnings.extend(prompt_injection_warnings(chunks))
     warnings.extend(sensitive_content_warnings(chunks))
-    warnings.extend(weak_evidence_warning(chunks))
+    warnings.extend(weak_evidence_warning(chunks, threshold=weak_evidence_threshold))
     return warnings
 
 

@@ -96,7 +96,7 @@ class TestDeriveConfidence:
         assert derive_confidence([], warnings=[]) == "none"
 
     def test_top_below_threshold_is_low(self) -> None:
-        # RRF-scale score — below the 0.02 default threshold.
+        # RRF-scale score — below the 0.015 default threshold.
         chunks = [_chunk(score=0.01)]
         assert derive_confidence(chunks, warnings=[]) == "low"
 

@@ -307,7 +307,7 @@ class TestRequiresHumanReview:
         assert requires_human_review([_mk(score=0.9)], [w], []) is True
 
     def test_weak_evidence_requires_review(self) -> None:
-        # RRF-scale score — well below the 0.02 default threshold.
+        # RRF-scale score — well below the 0.015 default threshold.
         chunks = [_mk(score=0.005)]
         assert requires_human_review(chunks, [], []) is True
 
