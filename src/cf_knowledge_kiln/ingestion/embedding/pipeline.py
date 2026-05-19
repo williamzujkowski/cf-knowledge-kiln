@@ -62,10 +62,15 @@ async def embed_touched_documents(
     batches are in flight at once. Defaults match
     :class:`cf_knowledge_kiln.config.Settings`.
 
-    Failures on the embedding step are recorded against the affected
-    chunks but don't abort the run — partial embedding coverage is
-    still useful for retrieval, and bouncing the whole run wastes the
-    chunk-pass work that already succeeded.
+    Per-batch failure granularity (#151): a transient provider error
+    on one batch no longer discards the sibling batches' successful
+    vectors. Successful batches are persisted; the failed batch's
+    chunks are accounted as ``embeddings_failed`` and the per-batch
+    exception is logged with ``start_offset``, ``batch_size``,
+    ``exc_class``, ``exc_message`` for forensics. The function only
+    raises (propagating the exception) when EVERY batch failed — at
+    that point there is no partial success worth committing and the
+    caller's "loud failure" semantics still hold.
     """
     if not doc_ids:
         return
@@ -77,25 +82,53 @@ async def embed_touched_documents(
     )
     if not to_embed:
         return
-    try:
-        vectors = await embed_chunks_concurrently(
-            texts=[c.content for c in to_embed],
-            provider=provider,
-            batch_size=batch_size,
-            concurrency=concurrency,
-        )
-    except Exception as exc:
-        summary.errors.append(f"embedding fan-out failed: {exc}")
-        summary.embeddings_failed += len(to_embed)
-        logger.warning("embedding fan-out failed (%d chunks): %s", len(to_embed), exc)
-        return
+    result = await embed_chunks_concurrently(
+        texts=[c.content for c in to_embed],
+        provider=provider,
+        batch_size=batch_size,
+        concurrency=concurrency,
+    )
+    _record_batch_failures(result.failures, summary=summary)
+    if result.failures and all(v is None for v in result.vectors):
+        # Every batch failed: re-raise the first exception so the run's
+        # "loud failure" semantics hold for hopeless cases. The summary
+        # already has the per-batch error breadcrumbs from above.
+        _, _, first_exc = result.failures[0]
+        raise first_exc
     await _write_embeddings(
         chunks=to_embed,
-        vectors=vectors,
+        vectors=result.vectors,
         repo=embeds_repo,
         provider=provider,
         summary=summary,
     )
+
+
+def _record_batch_failures(
+    failures: list[tuple[int, int, BaseException]],
+    *,
+    summary: IngestionSummary,
+) -> None:
+    """Log per-batch forensics and account each failed chunk in the summary.
+
+    One structured log line per failed batch (start_offset, batch_size,
+    exc_class, exc_message — no full traceback, by design: production
+    logs stay readable). The summary picks up ``embeddings_failed`` per
+    chunk in the failed batch plus a per-batch error string.
+    """
+    for start, size, exc in failures:
+        summary.embeddings_failed += size
+        msg = f"embedding batch failed (offset={start}, size={size}): {exc}"
+        summary.errors.append(msg)
+        logger.warning(
+            "embedding batch failed",
+            extra={
+                "start_offset": start,
+                "batch_size": size,
+                "exc_class": type(exc).__name__,
+                "exc_message": str(exc),
+            },
+        )
 
 
 async def _gather_chunks_needing_embed(
@@ -137,12 +170,19 @@ async def _gather_chunks_needing_embed(
 async def _write_embeddings(
     *,
     chunks: list[DocumentChunk],
-    vectors: list[list[float]],
+    vectors: list[list[float] | None],
     repo: EmbeddingsRepository,
     provider: EmbeddingProvider,
     summary: IngestionSummary,
 ) -> None:
-    """Upsert ``(chunk, vector)`` pairs. Order-paired 1:1 with ``chunks``."""
+    """Upsert ``(chunk, vector)`` pairs. Order-paired 1:1 with ``chunks``.
+
+    ``vectors`` may contain ``None`` entries for chunks whose batch
+    failed (#151). Those slots are skipped here — the failure was
+    already accounted in ``embeddings_failed`` by
+    :func:`_record_batch_failures`. Only non-None slots produce an
+    upsert + ``embeddings_created`` increment.
+    """
     if len(vectors) != len(chunks):
         # The fan-out helper already enforces this, but defend the
         # write path too — the embeddings table treats chunk_id as
@@ -153,6 +193,9 @@ async def _write_embeddings(
         summary.embeddings_failed += len(chunks)
         return
     for chunk, vector in zip(chunks, vectors, strict=True):
+        if vector is None:
+            # Already accounted as a per-batch failure upstream.
+            continue
         await repo.upsert(
             chunk_id=chunk.id,
             embedding=vector,

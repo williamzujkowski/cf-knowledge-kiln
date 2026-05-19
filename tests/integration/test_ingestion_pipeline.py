@@ -65,6 +65,25 @@ class _WrongLengthMockProvider(MockEmbeddingProvider):
         return await super().embed(truncated)
 
 
+class _FlakyOnceMockProvider(MockEmbeddingProvider):
+    """Mock provider that fails on the first call, then succeeds (#151).
+
+    Combined with ``batch_size=1`` this simulates "one batch in a
+    fan-out hits a transient error" — the other batches still
+    persist their vectors. Matches the partial-success contract.
+    """
+
+    def __init__(self, **kwargs: object) -> None:
+        super().__init__(**kwargs)  # type: ignore[arg-type]
+        self.calls: list[list[str]] = []
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        self.calls.append(list(texts))
+        if len(self.calls) == 1:
+            raise RuntimeError("simulated transient outage on first batch")
+        return await super().embed(texts)
+
+
 pytestmark = pytest.mark.integration
 
 
@@ -300,6 +319,43 @@ async def test_pipeline_records_vector_count_mismatch(
     assert summary.embeddings_created == 0
     assert summary.embeddings_failed > 0
     assert any("vectors for" in e for e in summary.errors)
+
+
+async def test_pipeline_partial_success_when_one_batch_fails(
+    session: AsyncSession, fixture_corpus: Path
+) -> None:
+    """Issue #151: a failing batch doesn't discard sibling batches' embeddings.
+
+    With ``ingest_embed_batch_size=1`` every chunk is its own batch.
+    ``_FlakyOnceMockProvider`` raises on the first call and succeeds
+    afterwards — so exactly one chunk is accounted as
+    ``embeddings_failed`` and every other chunk persists its vector.
+    Before #151 the whole run would have lost every embedding.
+    """
+    provider = _FlakyOnceMockProvider()
+    settings = Settings(
+        ingest_max_file_bytes=1_048_576,
+        ingest_max_files=100,
+        ingest_max_repo_bytes=10 * 1_048_576,
+        ingest_embed_batch_size=1,
+        ingest_embed_concurrency=4,
+    )
+    src = LocalSource(name="fixtures", type="local", path=str(fixture_corpus), include=["**/*.md"])
+    summary = await run_source(session, source=src, settings=settings, embedding_provider=provider)
+    await session.commit()
+    assert summary.chunks_created > 1, "fixture must produce >1 chunk for this test"
+    assert summary.embeddings_failed == 1
+    assert summary.embeddings_created == summary.chunks_created - 1
+    # Per-batch breadcrumb is recorded with offset + size for forensics.
+    assert any("embedding batch failed" in e and "offset=" in e for e in summary.errors)
+    # And the persisted embeddings show up in the DB — sibling-batch
+    # success is durable, not just an in-memory accounting trick.
+    embeddings = (await session.execute(select(ChunkEmbedding))).scalars().all()
+    assert len(embeddings) == summary.embeddings_created
+    runs = (await session.execute(select(IngestionRun))).scalars().all()
+    # Status is "partial" because errors were recorded, but partial
+    # success means the run still committed real work.
+    assert runs[0].status == "partial"
 
 
 async def test_pipeline_handles_document_with_zero_chunks(

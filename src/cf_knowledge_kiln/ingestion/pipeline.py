@@ -470,14 +470,22 @@ async def run_source(
         )
 
     if embedding_provider is not None:
-        await embed_touched_documents(
-            session,
-            doc_ids=touched_doc_ids,
-            provider=embedding_provider,
-            summary=summary,
-            batch_size=settings.ingest_embed_batch_size,
-            concurrency=settings.ingest_embed_concurrency,
-        )
+        try:
+            await embed_touched_documents(
+                session,
+                doc_ids=touched_doc_ids,
+                provider=embedding_provider,
+                summary=summary,
+                batch_size=settings.ingest_embed_batch_size,
+                concurrency=settings.ingest_embed_concurrency,
+            )
+        except Exception as exc:
+            # #151: the embed pass raises only when EVERY batch failed,
+            # which means no partial-success work is at risk. Record it
+            # as a run-level failure so the ingestion_runs row reflects
+            # the hopeless case while the per-batch breadcrumbs already
+            # added to summary.errors stay intact for forensics.
+            summary.errors.append(f"embedding pass failed (all batches): {exc}")
 
     await session.execute(
         _runs_update(

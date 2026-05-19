@@ -1,4 +1,4 @@
-"""Batched concurrent embedding fan-out (PR C, prep for #108 item 2).
+"""Batched concurrent embedding fan-out (PR C, #108 item 2 prep).
 
 A single helper, :func:`embed_chunks_concurrently`, takes a list of
 texts and returns one vector per text — in input order — by:
@@ -12,19 +12,33 @@ texts and returns one vector per text — in input order — by:
 Order preservation: batches carry their input-slice indices so the
 final list can be reassembled regardless of completion order. A
 provider that returns the wrong number of vectors for a batch is a
-loud :class:`ValueError` — silent vector drift is worse than a
-failed ingest.
+loud :class:`ValueError` raised inside the batch coroutine; the
+gather collects it as a per-batch failure rather than tearing down
+sibling batches.
+
+Per-batch failure granularity (#151): the helper uses
+``asyncio.gather(return_exceptions=True)`` so a single failing batch
+does not discard the other batches' successful vectors. The caller
+receives a :class:`BatchResults` with two slots:
+
+* ``vectors`` — one entry per input text; ``None`` for chunks whose
+  batch raised. The caller decides how to account those (typically:
+  upsert the non-None vectors, increment ``embeddings_failed`` for
+  the None ones).
+* ``failures`` — ``(start_offset, batch_size, exc)`` tuples so the
+  caller can log per-batch forensics without re-running the gather.
 
 This helper is provider-agnostic. It works with :class:`MockEmbeddingProvider`,
-``OpenAICompatibleEmbeddingProvider``, and the in-flight
-``LocalSentenceTransformersProvider`` equally — they all honor the
-same ``embed(list[str]) -> list[list[float]]`` contract.
+``OpenAICompatibleEmbeddingProvider``, and ``LocalSentenceTransformersProvider``
+equally — they all honor the same ``embed(list[str]) -> list[list[float]]``
+contract.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -33,32 +47,47 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class BatchResults:
+    """Outcome of a concurrent embedding fan-out.
+
+    ``vectors`` is order-aligned with the input texts: ``vectors[i]``
+    is the embedding for ``texts[i]``, or ``None`` if the batch that
+    contained ``texts[i]`` raised. ``failures`` carries one entry per
+    failed batch so the caller can log per-batch forensics.
+    """
+
+    vectors: list[list[float] | None]
+    failures: list[tuple[int, int, BaseException]] = field(default_factory=list)
+
+
 async def embed_chunks_concurrently(
     *,
     texts: list[str],
     provider: EmbeddingProvider,
     batch_size: int,
     concurrency: int,
-) -> list[list[float]]:
-    """Embed ``texts`` in batched, concurrent fan-out.
+) -> BatchResults:
+    """Embed ``texts`` in batched, concurrent fan-out (partial success).
 
-    Returns one vector per input text, in input order. Provider is
-    called ``ceil(len(texts) / batch_size)`` times across the run;
-    at most ``concurrency`` of those calls are in flight at once.
+    Returns a :class:`BatchResults` whose ``vectors`` list is aligned
+    1:1 with the input — successful slots hold the vector, slots whose
+    batch raised hold ``None``. Per-batch exceptions are reported in
+    ``failures`` rather than propagated; callers decide whether a
+    partial run is acceptable.
 
     :raises ValueError: when ``batch_size`` or ``concurrency`` is
-        non-positive, or when the provider returns the wrong number
-        of vectors for a batch.
+        non-positive. Per-batch provider errors are returned, not raised.
     """
     if batch_size <= 0:
         raise ValueError(f"batch_size must be positive, got {batch_size}")
     if concurrency <= 0:
         raise ValueError(f"concurrency must be positive, got {concurrency}")
     if not texts:
-        return []
+        return BatchResults(vectors=[])
 
-    # Pre-slice into (start_index, batch_texts) pairs so the gather
-    # step can write straight into the output array by absolute
+    # Pre-slice into (start_index, batch_texts) pairs so each batch
+    # coroutine can write straight into the output array by absolute
     # position — no post-sort needed.
     batches: list[tuple[int, list[str]]] = [
         (i, texts[i : i + batch_size]) for i in range(0, len(texts), batch_size)
@@ -77,15 +106,33 @@ async def embed_chunks_concurrently(
         for offset, vector in enumerate(vectors):
             out[start + offset] = vector
 
-    await asyncio.gather(*(_run_one(start, btxts) for start, btxts in batches))
+    # return_exceptions=True so a failing batch doesn't cancel siblings;
+    # we walk the result list afterwards to surface each per-batch error.
+    results = await asyncio.gather(
+        *(_run_one(start, btxts) for start, btxts in batches),
+        return_exceptions=True,
+    )
+    failures = _collect_failures(batches, results, out)
+    return BatchResults(vectors=out, failures=failures)
 
-    # Final defensive check: every slot must be filled. Reachable only
-    # if a provider returned a "wrong" count that happened to match
-    # something other than its batch — but we already enforce that
-    # above. Belt-and-suspenders for the load-bearing order invariant.
-    if any(v is None for v in out):
-        raise ValueError("embed_chunks_concurrently left holes in the output")
-    return [v for v in out if v is not None]
+
+def _collect_failures(
+    batches: list[tuple[int, list[str]]],
+    results: list[BaseException | None],
+    out: list[list[float] | None],
+) -> list[tuple[int, int, BaseException]]:
+    """Pull exceptions off a ``gather(return_exceptions=True)`` result.
+
+    Mutates ``out`` to ensure failed batches' slots are ``None`` (defends
+    against a provider that wrote partial state before raising).
+    """
+    failures: list[tuple[int, int, BaseException]] = []
+    for (start, btxts), result in zip(batches, results, strict=True):
+        if isinstance(result, BaseException):
+            failures.append((start, len(btxts), result))
+            for offset in range(len(btxts)):
+                out[start + offset] = None
+    return failures
 
 
-__all__ = ["embed_chunks_concurrently"]
+__all__ = ["BatchResults", "embed_chunks_concurrently"]
