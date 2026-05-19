@@ -6,25 +6,25 @@
   <meta name="color-scheme" content="light dark">
   <title>{% block title %}cf-knowledge-kiln{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', path='kiln.css') }}">
-  <!-- Fraunces (display + body) + JetBrains Mono (paths/scores). Preconnect for latency. -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <!-- #120: preload the Latin-subset Fraunces variable woff2 so the
-       display font is in flight before the CSS arrives. The v38 URL is
-       content-stable; Google occasionally bumps versions and the preload
-       turns into a wasted fetch when that happens. Track #131 / vendor
-       under /static/fonts/ for a no-CDN future. -->
+  <!-- Fraunces (display + body) + JetBrains Mono (paths/scores).
+       #144: self-hosted under /static/vendor/ so the runtime CSP can
+       stay at `font-src 'self'; style-src 'self'` with no third-party
+       allowlist. The @font-face rules live in static/kiln/_fonts.css. -->
+  <!-- #120 / #144: preload the Latin-subset Fraunces variable woff2 so
+       the display font is in flight before the CSS arrives. Now points
+       at the vendored copy, so it can't go stale when upstream bumps
+       the version hash in the gstatic URL. -->
   <link rel="preload"
         as="font"
         type="font/woff2"
         crossorigin
-        href="https://fonts.gstatic.com/s/fraunces/v38/6NU78FyLNQOQZAnv9bYEvDiIdE9Ea92uemAk_WBq8U_9v0c2Wa0KxC9TeA.woff2">
-  <link rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,300..700,0..100&family=JetBrains+Mono:wght@400;500&display=swap">
-  <!-- HTMX 2.0 via CDN. No build step; SRI hash pinned. `defer` lets
-       the parser finish before HTMX initializes — first paint isn't
-       blocked on the network fetch. -->
-  <script defer src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous"></script> <!-- pragma: allowlist secret -->
+        href="{{ url_for('static', path='vendor/fraunces-v38-latin-variable.woff2') }}">
+  <!-- HTMX 2.0 self-hosted (#144). No build step; SRI hash pinned. The
+       integrity attribute still validates even though the asset is
+       same-origin — defense in depth against a compromised static
+       mount. `defer` lets the parser finish before HTMX initializes
+       so first paint isn't blocked on the network fetch. -->
+  <script defer src="{{ url_for('static', path='vendor/htmx-2.0.4.min.js') }}" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous"></script> <!-- pragma: allowlist secret -->
   <!-- #131 application lifecycle JS (htmx hooks, preview drawer,
        cheatsheet close, data-action delegation). Loaded BEFORE the
        other scripts so its event listeners register first — both

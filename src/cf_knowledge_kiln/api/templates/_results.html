@@ -34,10 +34,14 @@
           data-repo="{{ r.repo or '' }}"
           data-path="{{ r.path or '' }}"
           data-heading-path="{{ r.heading_path_str or '' }}"
-          {# #124 staggered reveal: --i drives animation-delay so each
-             card appears 40ms after the previous. Capped at 12 to keep
-             the last few cards from waiting half a second. #}
-          style="--i: {{ loop.index0 if loop.index0 < 12 else 11 }}">
+          {# #124 staggered reveal: data-i drives animation-delay so
+             each card appears 40ms after the previous. Capped at 11
+             so the last card waits ≤440ms. #144 moved this from
+             inline `style="--i: N"` to a `data-i` attribute so a
+             strict CSP (`style-src 'self'`, no `unsafe-inline`)
+             doesn't block the page. The animation-delay rules live
+             in static/kiln/_motion.css as 12 attribute selectors. #}
+          data-i="{{ loop.index0 if loop.index0 < 12 else 11 }}">
         <span class="result-index" aria-hidden="true">{{ '%02d' % loop.index }}</span>
         <div class="result-body">
           <header class="result-header">
