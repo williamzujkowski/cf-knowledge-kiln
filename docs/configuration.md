@@ -27,6 +27,8 @@ the manifest.
 | `KILN_GENERATOR_BASE_URL`             | —                        | Override.                                                          |
 | `KILN_INGEST_CONCURRENCY`             | `4`                      | Worker concurrency.                                                |
 | `KILN_INGEST_MAX_FILE_BYTES`          | `1048576`                | Files larger than this are skipped with `too_large`.               |
+| `KILN_INGEST_EMBED_BATCH_SIZE`        | `32`                     | Chunks per `provider.embed()` call during the ingestion embed pass.|
+| `KILN_INGEST_EMBED_CONCURRENCY`       | `4`                      | Max embed batches in flight in parallel. Capped by a semaphore.    |
 | `KILN_DEFAULT_MAX_CHUNKS`             | `8`                      | Default retrieval result count.                                    |
 | `KILN_DEFAULT_MAX_TOKENS`             | `3000`                   | Default agent token budget.                                        |
 | `KILN_DEFAULT_STATUS_PREFERENCE`      | `active,approved`        | Comma-separated.                                                   |
@@ -35,6 +37,36 @@ the manifest.
 | `KILN_BEARER_TOKEN`                   | —                        | Required when `KILN_AUTH_MODE=bearer`.                             |
 | `KILN_OTEL_EXPORTER_OTLP_ENDPOINT`    | —                        | If set, enables OTLP exporter.                                     |
 | `KILN_OTEL_SERVICE_NAME`              | `cf-knowledge-kiln`      | OpenTelemetry service.name.                                        |
+
+## Embedding fan-out (`KILN_INGEST_EMBED_*`)
+
+The ingestion pipeline batches chunks into groups of
+`KILN_INGEST_EMBED_BATCH_SIZE` and runs up to
+`KILN_INGEST_EMBED_CONCURRENCY` batches in parallel against the
+configured embedding provider. Defaults: `32` and `4`.
+
+Tuning guidance:
+
+* `LocalSentenceTransformersProvider` (CPU): the model owns its own
+  thread pool via `OMP_NUM_THREADS`. Total worker threads is roughly
+  `OMP_NUM_THREADS × KILN_INGEST_EMBED_CONCURRENCY`. The defaults
+  assume `OMP_NUM_THREADS=2` and `KILN_INGEST_EMBED_CONCURRENCY=4` —
+  so 8 worker threads, which is reasonable on a 4-to-8-core box.
+  Going wider on either dimension oversubscribes the CPU and the
+  batches start blocking each other.
+* `OpenAICompatibleEmbeddingProvider`: each batch is one HTTP
+  request, so concurrency is really "in-flight HTTP requests".
+  The provider's own per-request rate limit dominates; if you see
+  429s, lower `KILN_INGEST_EMBED_CONCURRENCY`.
+* `MockEmbeddingProvider`: deterministic, no I/O. The defaults are
+  fine; raising concurrency past `4` gains nothing.
+
+The fan-out preserves output order — chunk `N` always gets the
+vector that came back for input `N`, regardless of which batch
+finished first. See
+`src/cf_knowledge_kiln/ingestion/embedding/batched.py` for the
+helper, and `tests/unit/test_ingestion_pipeline_batched_embed.py`
+for the order-preservation test.
 
 ## YAML config files
 

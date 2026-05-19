@@ -57,6 +57,16 @@ class Settings(BaseSettings):
     ingest_max_files: int = 10_000
     ingest_max_repo_bytes: int = 100 * 1_048_576
     ingest_poll_interval_seconds: float = 5.0
+    # Embedding fan-out tuning (PR C, prep for #108 item 2). The
+    # ingestion pipeline batches chunks into groups of
+    # ``ingest_embed_batch_size`` and runs up to
+    # ``ingest_embed_concurrency`` batches in parallel against the
+    # configured embedding provider. Defaults sized for a
+    # CPU-backed local provider: 32 keeps the per-call latency
+    # bounded, 4 keeps total worker threads reasonable when
+    # OMP_NUM_THREADS=2.
+    ingest_embed_batch_size: int = 32
+    ingest_embed_concurrency: int = 4
 
     # Retrieval defaults.
     default_max_chunks: int = 8
