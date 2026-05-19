@@ -95,6 +95,35 @@
     --oxblood-stripe: rgba(255, 85, 85, 0.06);
   }
 }
+/* ─── Self-hosted webfonts (#144) ──────────────────────────────────
+   Vendored under /static/vendor/ so the runtime CSP can stay at
+   `font-src 'self'; style-src 'self'` with no third-party allowlist.
+   Latin subsets only — unicode-range matches the slice shipped at the
+   gstatic origin so the browser still skips downloads when the page
+   doesn't render those code points. */
+
+@font-face {
+  font-family: 'Fraunces';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url('../vendor/fraunces-v38-latin-variable.woff2') format('woff2-variations'),
+       url('../vendor/fraunces-v38-latin-variable.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+                 U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+                 U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400 500;
+  font-display: swap;
+  src: url('../vendor/jetbrains-mono-v24-latin-400.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+                 U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+                 U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
 /* ─── Reset & page ─────────────────────────────────────────────── */
 
 *,
@@ -770,11 +799,14 @@ input:focus-visible,
   border-block-start: 1px solid var(--rule);
   position: relative;
   /* #124 staggered reveal — each card fades + rises in sequence based
-     on the --i custom property set inline by the template (capped at
-     11 so the last card waits ≤440ms). Cubic easing reads as paper-
-     settling rather than spring-y. Disabled under reduced-motion. */
+     on the `data-i` attribute set by the template (capped at 11 so the
+     last card waits ≤440ms). Cubic easing reads as paper-settling
+     rather than spring-y. #144: the per-card delay is now driven by
+     12 attribute selectors in _motion.css rather than an inline
+     `style="--i: N"` so a strict CSP (`style-src 'self'`, no
+     `unsafe-inline`) doesn't block the page. Disabled under
+     reduced-motion. */
   animation: kiln-card-rise 360ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
-  animation-delay: calc(var(--i, 0) * 40ms);
 }
 
 .result-card:last-child {
@@ -1757,6 +1789,26 @@ a.source-link:focus-visible {
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+
+/* #124 staggered card reveal — animation-delay was previously a single
+   `calc(var(--i) * 40ms)` rule driven by an inline `style="--i: N"`
+   attribute on each .result-card. #144 dropped the inline style so a
+   strict CSP can run without `unsafe-inline`; the per-position delay
+   is now expressed as 12 attribute selectors against `data-i`. The
+   template caps loop.index0 at 11, so values 12+ never appear in the
+   DOM and any extra cards inherit the default 0ms delay. */
+.result-card[data-i="0"]  { animation-delay:   0ms; }
+.result-card[data-i="1"]  { animation-delay:  40ms; }
+.result-card[data-i="2"]  { animation-delay:  80ms; }
+.result-card[data-i="3"]  { animation-delay: 120ms; }
+.result-card[data-i="4"]  { animation-delay: 160ms; }
+.result-card[data-i="5"]  { animation-delay: 200ms; }
+.result-card[data-i="6"]  { animation-delay: 240ms; }
+.result-card[data-i="7"]  { animation-delay: 280ms; }
+.result-card[data-i="8"]  { animation-delay: 320ms; }
+.result-card[data-i="9"]  { animation-delay: 360ms; }
+.result-card[data-i="10"] { animation-delay: 400ms; }
+.result-card[data-i="11"] { animation-delay: 440ms; }
 
 @media (prefers-reduced-motion: reduce) {
   *,

@@ -49,11 +49,14 @@
   border-block-start: 1px solid var(--rule);
   position: relative;
   /* #124 staggered reveal — each card fades + rises in sequence based
-     on the --i custom property set inline by the template (capped at
-     11 so the last card waits ≤440ms). Cubic easing reads as paper-
-     settling rather than spring-y. Disabled under reduced-motion. */
+     on the `data-i` attribute set by the template (capped at 11 so the
+     last card waits ≤440ms). Cubic easing reads as paper-settling
+     rather than spring-y. #144: the per-card delay is now driven by
+     12 attribute selectors in _motion.css rather than an inline
+     `style="--i: N"` so a strict CSP (`style-src 'self'`, no
+     `unsafe-inline`) doesn't block the page. Disabled under
+     reduced-motion. */
   animation: kiln-card-rise 360ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
-  animation-delay: calc(var(--i, 0) * 40ms);
 }
 
 .result-card:last-child {

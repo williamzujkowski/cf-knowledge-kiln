@@ -24,7 +24,8 @@ repos:
             tests/fixtures/.*|
             plans/.*|
             .*\.lock|
-            \.git/.*
+            \.git/.*|
+            src/cf_knowledge_kiln/api/static/vendor/.*
           )$
 
   # ─── Generic hygiene ────────────────────────────────────────────────
@@ -32,7 +33,11 @@ repos:
     rev: v5.0.0
     hooks:
       - id: trailing-whitespace
+        # Vendored third-party assets are byte-for-byte upstream; an
+        # appended newline breaks the SRI hash on htmx.
+        exclude: ^src/cf_knowledge_kiln/api/static/vendor/.*
       - id: end-of-file-fixer
+        exclude: ^src/cf_knowledge_kiln/api/static/vendor/.*
       - id: check-yaml
         args: [--allow-multiple-documents]
       - id: check-json

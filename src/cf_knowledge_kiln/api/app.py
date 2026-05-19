@@ -28,6 +28,7 @@ from fastapi.staticfiles import StaticFiles
 
 from cf_knowledge_kiln import __version__
 from cf_knowledge_kiln.api.auth import configure_auth
+from cf_knowledge_kiln.api.csp import install_csp_middleware
 from cf_knowledge_kiln.api.health import router as health_router
 from cf_knowledge_kiln.api.preview import router as preview_router
 from cf_knowledge_kiln.api.rate_limit import TokenBucketLimiter
@@ -94,6 +95,11 @@ def create_app() -> FastAPI:
     # wraps every endpoint. configure_auth raises at startup for
     # obviously-wrong configs (none-in-prod, bearer-without-token).
     configure_auth(app, settings)
+    # #144: strict CSP. Installed after auth so the header is added on
+    # every response — including 401 / 429 bodies a browser will still
+    # render. Rate-limit is a per-route Depends, not an ASGI
+    # middleware, so there's nothing else to sequence against.
+    install_csp_middleware(app)
     app.include_router(health_router)
     app.include_router(retrieval_router)
     app.include_router(web_router)

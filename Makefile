@@ -92,6 +92,7 @@ cf-push: ## Push to Cloud Foundry using ./manifest.yml.
 build-css: ## Concatenate the static/kiln/*.css partials into static/kiln.css.
 	@printf '/* GENERATED FILE — DO NOT EDIT.\n   Source: src/cf_knowledge_kiln/api/static/kiln/_*.css\n   Regenerate with `make build-css`; `make verify-css` blocks drift in CI. */\n\n' > src/cf_knowledge_kiln/api/static/kiln.css
 	@cat src/cf_knowledge_kiln/api/static/kiln/_tokens.css \
+	     src/cf_knowledge_kiln/api/static/kiln/_fonts.css \
 	     src/cf_knowledge_kiln/api/static/kiln/_base.css \
 	     src/cf_knowledge_kiln/api/static/kiln/_search.css \
 	     src/cf_knowledge_kiln/api/static/kiln/_results.css \

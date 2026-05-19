@@ -859,24 +859,48 @@ def test_search_page_has_status_region_with_aria_live(client: TestClient) -> Non
 
 
 def test_search_page_preloads_fraunces_font(client: TestClient) -> None:
-    """The display font is preloaded so first-paint is not blocked on it."""
+    """The display font is preloaded so first-paint is not blocked on it.
+
+    #144: the preload target moved from the gstatic origin to the
+    vendored woff2 under /static/vendor/. The CSP can stay at
+    `font-src 'self'` because the asset is now same-origin.
+    """
     response = client.get("/")
     body = response.text
     assert 'rel="preload"' in body
     assert 'as="font"' in body
     assert "fraunces" in body.lower()
+    # The preload points at the vendored copy, not gstatic.
+    assert "vendor/fraunces-v38-latin-variable.woff2" in body
+    # And the page MUST NOT reference the legacy CDN origins, otherwise
+    # a strict CSP would block the request.
+    assert "fonts.googleapis.com" not in body
+    assert "fonts.gstatic.com" not in body
+    assert "unpkg.com" not in body
 
 
 def test_search_page_htmx_script_is_deferred(client: TestClient) -> None:
-    """HTMX loads with `defer` so it doesn't block parsing."""
+    """HTMX loads with `defer` so it doesn't block parsing.
+
+    #144: HTMX is now self-hosted under /static/vendor/, so we assert
+    against the vendored path rather than the unpkg.com origin.
+    """
     response = client.get("/")
     body = response.text
-    # The HTMX script tag includes defer.
-    htmx_tag = [
-        line for line in body.splitlines() if "unpkg.com/htmx.org" in line and "<script" in line
-    ]
-    assert htmx_tag, "HTMX script tag not found in base.html"
-    assert "defer" in htmx_tag[0]
+    # The HTMX script tag references the vendored asset + carries defer.
+    assert "vendor/htmx-2.0.4.min.js" in body
+    # The `<script defer ... src=... integrity=... crossorigin=...>`
+    # tag spans multiple lines, so a single-line filter isn't enough.
+    idx = body.index("vendor/htmx-2.0.4.min.js")
+    # Look back for the opening `<script` to capture the whole tag start.
+    start = body.rfind("<script", 0, idx)
+    end = body.index(">", idx) + 1
+    htmx_tag = body[start:end]
+    assert "defer" in htmx_tag, htmx_tag
+    # Integrity hash must still be carried — same-origin SRI is defense
+    # in depth against a compromised static mount.
+    assert "integrity=" in htmx_tag
+    assert 'crossorigin="anonymous"' in htmx_tag
 
 
 def test_search_post_with_keyup_source_header_skips_telemetry(
@@ -1347,12 +1371,21 @@ def test_no_results_widen_button_actually_widens(
 def test_result_cards_carry_stagger_index_style(
     client: TestClient, session: AsyncSession, small_corpus: Path
 ) -> None:
-    """#124 staggered reveal — each card has `style="--i: N"` for animation-delay."""
+    """#124 staggered reveal — each card carries `data-i="N"` for animation-delay.
+
+    #144 moved the stagger index off an inline `style="--i: N"`
+    attribute onto `data-i="N"` so a strict CSP (no `unsafe-inline`
+    on style-src) doesn't block the page. The animation-delay is
+    now driven by 12 attribute selectors in static/kiln/_motion.css.
+    """
     asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
     response = client.post("/search", data={"query": "widgets", "status": ["active"]})
     body = response.text
-    # First (and only matching) card carries --i: 0.
-    assert "--i: 0" in body
+    # First (and only matching) card carries data-i="0".
+    assert 'data-i="0"' in body
+    # Nothing in the rendered fragment should be using inline style any
+    # longer — that's the whole point of the CSP rollout.
+    assert "style=" not in body, "inline style= attribute leaked into result card markup"
 
 
 def test_dark_palette_tokens_present_in_css(client: TestClient) -> None:
