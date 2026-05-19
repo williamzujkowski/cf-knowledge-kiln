@@ -19,12 +19,31 @@ version: 1
 #         | weak_evidence
 #         | empty_result
 #         | none
+#       relevance:                           # optional, #108 item 2
+#         "<repo>/<path>#<H1>/<H2>/...": <0..3>
 #       notes: <free text>                   # optional context
+#
+# Multi-relevance rubric (added for #108 item 2, confidence calibration):
+#
+#   3 = perfect answer to the query
+#   2 = useful, partial
+#   1 = tangentially relevant
+#   0 = irrelevant
+#
+# The relevance grades in this file are STRAWMAN — they were authored
+# by reading the corpus and guessing what each query's top-K would
+# contain. Every block is tagged with the strawman marker; a domain
+# expert spot-check is the next step before these grades drive any
+# blocking threshold.
 #
 # Scorer (tests/eval/test_review_precision.py): fraction of cases
 # where pack.requires_human_review matches the label. Target ≥ 0.85
 # in production; under MockEmbeddingProvider the floor is lower —
 # see the test for the bootstrap value + the re-baseline plan.
+#
+# A second scorer (test_confidence_buckets_meet_per_bucket_precision)
+# runs only under KILN_EVAL_REAL_EMBEDDINGS=1 and uses the relevance
+# grades to assert per-confidence-bucket precision ≥ 0.9.
 cases:
   # ─── Should require human review (5) ─────────────────────────
 
@@ -33,6 +52,14 @@ cases:
     filters: {status: [active]}
     expected_review: true
     expected_reason: conflicting_sources
+    relevance:
+      # strawman — needs human spot-check
+      "kiln-eval/auth-policy-current.md#Bearer token rotation policy": 3
+      "kiln-eval/auth-policy-legacy.md#Bearer token rotation policy": 3
+      "kiln-eval/auth-policy-current.md#Why 30 days": 2
+      "kiln-eval/auth-policy-legacy.md#Cadence rationale": 2
+      "kiln-eval/auth-policy-current.md#Rotation steps (current cadence)": 2
+      "kiln-eval/auth-policy-legacy.md#Mechanics": 2
     notes: |
       auth-policy-{legacy,current}.md share the H2 "Bearer token
       rotation policy"; one says 90 days, the other 30. Conflict
@@ -43,6 +70,11 @@ cases:
     filters: {status: [deprecated]}
     expected_review: true
     expected_reason: deprecated_source
+    relevance:
+      # strawman — needs human spot-check
+      "kiln-eval/runbook-old-cf-push.md#DEPRECATED runbook — cf push the kiln API and worker": 3
+      "kiln-eval/runbook-old-cf-push.md#Steps (DEPRECATED)": 3
+      "kiln-eval/runbook-old-cf-push.md#Why deprecated": 2
     notes: |
       Status-filter scoped to deprecated only. The deprecated
       cf-push runbook is the lone matching doc; every retrieved
@@ -53,6 +85,11 @@ cases:
     filters: {status: [active]}
     expected_review: true
     expected_reason: sensitive_content
+    relevance:
+      # strawman — needs human spot-check
+      "kiln-eval/procedure-customer-data-access.md#Procedure: customer data access": 3
+      "kiln-eval/procedure-customer-data-access.md#Why this is in the eval corpus": 2
+      "kiln-eval/procedure-customer-data-access.md#Access path": 1
     notes: |
       Keywords are pulled verbatim from chunk 0 of
       procedure-customer-data-access.md (the chunk that carries
@@ -64,6 +101,11 @@ cases:
     filters: {status: [active]}
     expected_review: true
     expected_reason: prompt_injection_pattern
+    relevance:
+      # strawman — needs human spot-check
+      "kiln-eval/runbook-injection-trap.md#Trap: diagnostic context": 3
+      "kiln-eval/runbook-injection-trap.md#Runbook: deploy stuck on health check": 1
+      "kiln-eval/runbook-injection-trap.md#Mitigation (real path)": 0
     notes: |
       Keywords pull chunk 3 of runbook-injection-trap.md (the trap
       block stamped by the ingest scanner). The legitimate runbook
@@ -75,6 +117,8 @@ cases:
     filters: {status: [superseded]}
     expected_review: true
     expected_reason: empty_result
+    # No relevance grades — no doc in the corpus carries
+    # `status: superseded`, so there are no chunks to grade.
     notes: |
       No doc in the corpus carries `status: superseded`, so the
       filter excludes everything. Empty result → the
@@ -87,39 +131,83 @@ cases:
     filters: {status: [active, approved]}
     expected_review: false
     expected_reason: none
+    relevance:
+      # strawman — needs human spot-check
+      "kiln-eval/adr-0012-asyncpg-pool-size.md#ADR-0012: asyncpg connection pool size": 3
+      "kiln-eval/adr-0012-asyncpg-pool-size.md#Decision": 3
+      "kiln-eval/adr-0012-asyncpg-pool-size.md#Context": 2
+      "kiln-eval/adr-0012-asyncpg-pool-size.md#Consequences": 2
+      "kiln-eval/runbook-restart-worker.md#Restart the ingestion worker": 1
 
   - case_id: clean-rrf-decision
     query: "reciprocal rank fusion k parameter sixty TREC default ranking"
     filters: {status: [active, approved]}
     expected_review: false
     expected_reason: none
+    relevance:
+      # strawman — needs human spot-check
+      "kiln-eval/adr-0009-rrf-k-60.md#ADR-0009: hybrid retrieval fuses with RRF k=60": 3
+      "kiln-eval/adr-0009-rrf-k-60.md#Decision": 3
+      "kiln-eval/adr-0009-rrf-k-60.md#Context": 2
+      "kiln-eval/adr-0009-rrf-k-60.md#Consequences": 1
 
   - case_id: clean-stuck-ingest
     query: "stuck ingest job state running requeue worker recover_stale_running audit"
     filters: {status: [active, approved]}
     expected_review: false
     expected_reason: none
+    relevance:
+      # strawman — needs human spot-check
+      "kiln-eval/sop-requeue-stuck-ingest-job.md#Requeue a stuck ingest job": 3
+      "kiln-eval/sop-requeue-stuck-ingest-job.md#Detect": 2
+      "kiln-eval/sop-requeue-stuck-ingest-job.md#Requeue": 2
+      "kiln-eval/runbook-restart-worker.md#Restart the ingestion worker": 2
+      "kiln-eval/sop-requeue-stuck-ingest-job.md#Decide": 1
 
   - case_id: clean-citation-format
     query: "kiln citation repo path heading_path commit_sha four parts cited-or-silent"
     filters: {status: [active, approved]}
     expected_review: false
     expected_reason: none
+    relevance:
+      # strawman — needs human spot-check
+      "kiln-eval/standard-citation-format.md#Standard: kiln citation format": 3
+      "kiln-eval/standard-citation-format.md#Why all four": 2
+      "kiln-eval/standard-citation-format.md#Cited-or-silent": 2
+      "kiln-eval/standard-citation-format.md#What citations are NOT": 1
 
   - case_id: clean-search-vs-agent
     query: "v1 search agent context-pack token_budget shape ResultCard ContextPack consumer"
     filters: {status: [active, approved]}
     expected_review: false
     expected_reason: none
+    relevance:
+      # strawman — needs human spot-check
+      "kiln-eval/guide-search-vs-agent-endpoints.md#Guide: `/v1/search` vs `/v1/agent/context-pack`": 3
+      "kiln-eval/guide-search-vs-agent-endpoints.md#Use `/v1/agent/context-pack` when": 3
+      "kiln-eval/guide-search-vs-agent-endpoints.md#Use `/v1/search` when": 2
+      "kiln-eval/guide-search-vs-agent-endpoints.md#Picking the wrong one": 2
 
   - case_id: clean-restart-worker
     query: "restart ingestion worker stuck DB connection cf restart recover_stale_running"
     filters: {status: [active, approved]}
     expected_review: false
     expected_reason: none
+    relevance:
+      # strawman — needs human spot-check
+      "kiln-eval/runbook-restart-worker.md#Restart the ingestion worker": 3
+      "kiln-eval/runbook-restart-worker.md#Steps": 3
+      "kiln-eval/runbook-restart-worker.md#Symptoms": 2
+      "kiln-eval/sop-requeue-stuck-ingest-job.md#Requeue a stuck ingest job": 1
 
   - case_id: clean-pgvector-extension
     query: "pgvector preflight crashloops pg_available_extensions broker superuser DDL service plan"
     filters: {status: [active, approved]}
     expected_review: false
     expected_reason: none
+    relevance:
+      # strawman — needs human spot-check
+      "kiln-eval/runbook-pgvector-extension-missing.md#Runbook: pgvector extension missing on boot": 3
+      "kiln-eval/runbook-pgvector-extension-missing.md#Cause": 3
+      "kiln-eval/runbook-pgvector-extension-missing.md#Fix": 2
+      "kiln-eval/runbook-pgvector-extension-missing.md#If the broker doesn't allow CREATE EXTENSION": 2

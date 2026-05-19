@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from cf_knowledge_kiln.eval.dataset import GoldenSetError, load_golden_set
+from cf_knowledge_kiln.eval.dataset import GoldenSetError, load_golden_set, load_review_set
 
 
 def _write(tmp_path: Path, body: str) -> Path:
@@ -164,3 +164,154 @@ class TestLoadGoldenSet:
         )
         with pytest.raises(GoldenSetError, match="heading_path"):
             load_golden_set(path)
+
+
+# ─── Review-set loader (#108 item 2 — multi-relevance schema) ─────────
+
+
+def _write_review(tmp_path: Path, body: str) -> Path:
+    p = tmp_path / "review.yaml"
+    p.write_text(textwrap.dedent(body))
+    return p
+
+
+class TestLoadReviewSetRelevance:
+    """The optional ``relevance`` field on :class:`ReviewCase` (#108 item 2).
+
+    Backward compatibility: cases without ``relevance:`` continue to
+    parse cleanly with an empty dict default. Validation: grades must
+    be ints in ``[0, 3]`` and keys must be strings; anything else
+    raises :class:`GoldenSetError` with the case_id attributed.
+    """
+
+    def test_parses_case_without_relevance(self, tmp_path: Path) -> None:
+        path = _write_review(
+            tmp_path,
+            """\
+            cases:
+              - case_id: c1
+                query: q
+                expected_review: false
+            """,
+        )
+        cases = load_review_set(path)
+        assert len(cases) == 1
+        assert cases[0].relevance == {}
+
+    def test_parses_case_with_relevance(self, tmp_path: Path) -> None:
+        path = _write_review(
+            tmp_path,
+            """\
+            cases:
+              - case_id: c1
+                query: q
+                expected_review: false
+                relevance:
+                  "kiln-eval/foo.md#H1": 3
+                  "kiln-eval/foo.md#H2": 2
+                  "kiln-eval/bar.md#H1": 0
+            """,
+        )
+        cases = load_review_set(path)
+        assert cases[0].relevance == {
+            "kiln-eval/foo.md#H1": 3,
+            "kiln-eval/foo.md#H2": 2,
+            "kiln-eval/bar.md#H1": 0,
+        }
+
+    def test_rejects_non_mapping_relevance(self, tmp_path: Path) -> None:
+        path = _write_review(
+            tmp_path,
+            """\
+            cases:
+              - case_id: c1
+                query: q
+                expected_review: false
+                relevance:
+                  - "not"
+                  - "a-mapping"
+            """,
+        )
+        with pytest.raises(GoldenSetError, match="case 'c1' relevance must be a mapping"):
+            load_review_set(path)
+
+    def test_rejects_relevance_grade_out_of_range(self, tmp_path: Path) -> None:
+        path = _write_review(
+            tmp_path,
+            """\
+            cases:
+              - case_id: c1
+                query: q
+                expected_review: false
+                relevance:
+                  "kiln-eval/foo.md#H1": 4
+            """,
+        )
+        with pytest.raises(GoldenSetError, match="grade must be an int in"):
+            load_review_set(path)
+
+    def test_rejects_negative_grade(self, tmp_path: Path) -> None:
+        path = _write_review(
+            tmp_path,
+            """\
+            cases:
+              - case_id: c1
+                query: q
+                expected_review: false
+                relevance:
+                  "kiln-eval/foo.md#H1": -1
+            """,
+        )
+        with pytest.raises(GoldenSetError, match="grade must be an int in"):
+            load_review_set(path)
+
+    def test_rejects_non_int_grade(self, tmp_path: Path) -> None:
+        path = _write_review(
+            tmp_path,
+            """\
+            cases:
+              - case_id: c1
+                query: q
+                expected_review: false
+                relevance:
+                  "kiln-eval/foo.md#H1": "high"
+            """,
+        )
+        with pytest.raises(GoldenSetError, match="grade must be an int in"):
+            load_review_set(path)
+
+    def test_rejects_bool_grade(self, tmp_path: Path) -> None:
+        """``True``/``False`` are ints in Python; the loader must reject them.
+
+        YAML parses ``true``/``false`` as bools. Accepting a bool here
+        would let ``relevance: {key: true}`` silently mean grade=1,
+        which is exactly the silent failure mode the codebase forbids.
+        """
+        path = _write_review(
+            tmp_path,
+            """\
+            cases:
+              - case_id: c1
+                query: q
+                expected_review: false
+                relevance:
+                  "kiln-eval/foo.md#H1": true
+            """,
+        )
+        with pytest.raises(GoldenSetError, match="grade must be an int in"):
+            load_review_set(path)
+
+    def test_rejects_non_string_key(self, tmp_path: Path) -> None:
+        path = _write_review(
+            tmp_path,
+            """\
+            cases:
+              - case_id: c1
+                query: q
+                expected_review: false
+                relevance:
+                  123: 2
+            """,
+        )
+        with pytest.raises(GoldenSetError, match="relevance keys must be strings"):
+            load_review_set(path)
