@@ -24,6 +24,21 @@ def test_hnsw_ef_search_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
     assert Settings().hnsw_ef_search == 300
 
 
+def test_ingest_embed_fanout_defaults() -> None:
+    """PR C: batch/concurrency defaults sized for CPU-backed providers."""
+    settings = Settings()
+    assert settings.ingest_embed_batch_size == 32
+    assert settings.ingest_embed_concurrency == 4
+
+
+def test_ingest_embed_fanout_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("KILN_INGEST_EMBED_BATCH_SIZE", "16")
+    monkeypatch.setenv("KILN_INGEST_EMBED_CONCURRENCY", "8")
+    settings = Settings()
+    assert settings.ingest_embed_batch_size == 16
+    assert settings.ingest_embed_concurrency == 8
+
+
 def test_status_preference_list_parses_csv() -> None:
     settings = Settings(default_status_preference="active, approved , draft")
     assert settings.status_preference_list == ["active", "approved", "draft"]

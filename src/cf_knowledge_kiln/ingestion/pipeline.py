@@ -475,6 +475,8 @@ async def run_source(
             doc_ids=touched_doc_ids,
             provider=embedding_provider,
             summary=summary,
+            batch_size=settings.ingest_embed_batch_size,
+            concurrency=settings.ingest_embed_concurrency,
         )
 
     await session.execute(
