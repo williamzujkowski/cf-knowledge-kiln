@@ -17,9 +17,13 @@
 models:
   embedding:
     provider: local                       # local | local-sentence-transformers | openai-compatible | mock
-    name: nomic-embed-text-v1.5
+    name: nomic-ai/nomic-embed-text-v1.5   # full HuggingFace org/model id — bare names won't resolve
     dimensions: 768
     enabled: true
+    trust_remote_code: true                # Nomic ships custom modeling code (nomic-bert-2048);
+                                           # transformers >= 4.51 refuses to load it without this.
+                                           # Defaults to false — opt in ONLY for models that need it,
+                                           # since it executes code downloaded from the model hub.
     notes: |
       Apache 2.0 license. US-origin. Subject to provenance/license
       review per ADR-0005.
@@ -37,6 +41,7 @@ models:
   #   dimensions: 768                         # arctic-embed-m is also 768
   #   batch_size: 32
   #   device: cpu                             # cpu | cuda | mps; precedence: yaml > KILN_EMBEDDING_DEVICE env > cpu
+  #   trust_remote_code: true                 # required for Nomic; OMIT (false) for arctic-embed-m
   #   enabled: true
   #   notes: |
   #     Generic wrapper. Requires the `real-embeddings` extra:

@@ -56,14 +56,22 @@ class _FakeEncoder:
 
 
 def _factory(dimensions: int) -> tuple[Any, list[str]]:
-    """Return (factory, calls) so tests can assert the model name passed."""
+    """Return (factory, calls) so tests can assert the model name passed.
+
+    ``make`` accepts ``**kwargs`` so the injectable model-factory
+    contract can grow new keywords (e.g. ``trust_remote_code``) without
+    breaking every test double — a test double should be liberal in
+    what it accepts.
+    """
     calls: list[str] = []
 
-    def make(name: str, device: str | None = None) -> _FakeEncoder:
+    def make(name: str, device: str | None = None, **kwargs: Any) -> _FakeEncoder:
         calls.append(name)
-        # Stash device on the encoder so tests can introspect it.
+        # Stash device + any other factory kwargs on the encoder so
+        # tests can introspect them.
         enc = _FakeEncoder(dimensions)
         enc.device = device  # type: ignore[attr-defined]
+        enc.factory_kwargs = kwargs  # type: ignore[attr-defined]
         return enc
 
     return make, calls
@@ -149,7 +157,7 @@ class TestLocalSentenceTransformersProvider:
         provider = LocalSentenceTransformersProvider(
             model_name="x",
             dimensions=4,
-            model_factory=lambda _name, device=None: _BlockingEncoder(),
+            model_factory=lambda _name, **_: _BlockingEncoder(),
         )
         counter = 0
 
@@ -171,7 +179,7 @@ class TestLocalSentenceTransformersProvider:
         provider = LocalSentenceTransformersProvider(
             model_name="x",
             dimensions=8,
-            model_factory=lambda _name, device=None: _WrongDimEncoder(),
+            model_factory=lambda _name, **_: _WrongDimEncoder(),
         )
         with pytest.raises(ValueError, match="dimensions"):
             await provider.embed(["hi"])
@@ -205,7 +213,7 @@ class TestLocalSentenceTransformersProvider:
         """Operators select cpu/cuda/mps via the device argument."""
         seen: dict[str, str | None] = {}
 
-        def make(name: str, device: str | None = None) -> _FakeEncoder:
+        def make(name: str, device: str | None = None, **_: Any) -> _FakeEncoder:
             seen["device"] = device
             return _FakeEncoder(4)
 
@@ -223,7 +231,7 @@ class TestLocalSentenceTransformersProvider:
         monkeypatch.setenv("KILN_EMBEDDING_DEVICE", "cuda")
         seen: dict[str, str | None] = {}
 
-        def make(name: str, device: str | None = None) -> _FakeEncoder:
+        def make(name: str, device: str | None = None, **_: Any) -> _FakeEncoder:
             seen["device"] = device
             return _FakeEncoder(4)
 
@@ -239,7 +247,7 @@ class TestLocalSentenceTransformersProvider:
         monkeypatch.delenv("KILN_EMBEDDING_DEVICE", raising=False)
         seen: dict[str, str | None] = {}
 
-        def make(name: str, device: str | None = None) -> _FakeEncoder:
+        def make(name: str, device: str | None = None, **_: Any) -> _FakeEncoder:
             seen["device"] = device
             return _FakeEncoder(4)
 
@@ -269,6 +277,68 @@ class TestLocalSentenceTransformersProvider:
         )
         assert provider.model == "nomic-ai/nomic-embed-text-v1.5"
         assert provider.dimensions == 8
+
+
+class TestTrustRemoteCode:
+    """``trust_remote_code`` must be config-driven, not hardcoded.
+
+    Nomic Embed v1.5 ships custom modeling code (``nomic-bert-2048``)
+    and needs ``trust_remote_code=True`` to load under modern
+    ``transformers``. Most other sentence-transformers models do not.
+    Hardcoding the flag would couple the adapter to one model family;
+    omitting it (the pre-fix state) makes the configured default model
+    fail to load in production. The flag therefore belongs in config,
+    defaulting to ``False`` so running remote code is an explicit
+    opt-in.
+    """
+
+    async def test_trust_remote_code_forwarded_to_factory(self) -> None:
+        make, _ = _factory(4)
+        provider = LocalSentenceTransformersProvider(
+            model_name="x",
+            dimensions=4,
+            trust_remote_code=True,
+            model_factory=make,
+        )
+        await provider.embed(["one"])
+        encoder = provider._encoder  # test-only introspection
+        assert encoder is not None
+        assert encoder.factory_kwargs["trust_remote_code"] is True
+
+    async def test_trust_remote_code_defaults_to_false(self) -> None:
+        make, _ = _factory(4)
+        provider = LocalSentenceTransformersProvider(
+            model_name="x", dimensions=4, model_factory=make
+        )
+        assert provider.trust_remote_code is False
+        await provider.embed(["one"])
+        encoder = provider._encoder
+        assert encoder is not None
+        assert encoder.factory_kwargs["trust_remote_code"] is False
+
+    def test_default_factory_forwards_trust_remote_code(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``_default_factory`` threads the flag into ``SentenceTransformer``."""
+        import sys
+        import types
+
+        recorded: dict[str, Any] = {}
+
+        class _RecordingST:
+            def __init__(self, name: str, device: str | None = None, **kwargs: Any) -> None:
+                recorded["name"] = name
+                recorded["device"] = device
+                recorded.update(kwargs)
+
+        fake_mod = types.ModuleType("sentence_transformers")
+        fake_mod.SentenceTransformer = _RecordingST  # type: ignore[attr-defined]
+        monkeypatch.setitem(sys.modules, "sentence_transformers", fake_mod)
+
+        from cf_knowledge_kiln.ingestion.embedding.local import _default_factory
+
+        _default_factory("nomic-ai/nomic-embed-text-v1.5", trust_remote_code=True)
+        assert recorded["trust_remote_code"] is True
 
 
 class TestMissingExtraImportError:

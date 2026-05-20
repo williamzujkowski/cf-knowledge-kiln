@@ -37,9 +37,36 @@ Removing a model from this list requires an ADR.
    Llama-community-license — check terms).
 3. Add a row to the **Allowed for MVP** table above.
 4. Update `config/models.example.yaml`.
-5. If swapping the active embedding model, schema-wise we are safe
-   (`chunk_embeddings.dimensions` is per-row), but document the
-   reindex requirement.
+5. If swapping the active embedding model, follow the checklist below.
+
+## Swapping the active embedding model
+
+The adapter (`ingestion/embedding/local.py`) is a generic
+sentence-transformers wrapper — a swap is a `config/models.yaml`
+change, not a code change. The four things that are *per-model* and
+must be set in config:
+
+- **`name`** — the full HuggingFace `org/model` id (a bare name will
+  not resolve).
+- **`dimensions`** — the model's actual output width. The adapter
+  checks the first batch against this and raises loudly on a
+  mismatch, so a wrong value fails fast instead of writing
+  wrong-width vectors.
+- **`trust_remote_code`** — `true` only for models that ship custom
+  modeling code (Nomic Embed v1.5 → `nomic-bert-2048`). Defaults to
+  `false`; it executes code downloaded from the model hub, so it is
+  always an explicit per-model opt-in. A model that does not need it
+  must leave it `false`.
+- **`normalize`** (provider arg; default `true`) — L2-normalizes
+  output so cosine ranking stays correct. Leave `true` unless the
+  model is documented to require raw vectors.
+
+Reindex requirement: `chunk_embeddings.dimensions` is per-row, so
+rows from different models coexist — but the HNSW index created in
+migration `0001` is a *partial* index bound to one dimension
+(`ix_chunk_embeddings_hnsw_768`). Swapping to a model with a
+different width needs a follow-up migration adding a partial index
+for the new dimension, plus a re-embed of the corpus.
 
 ## Why the China-origin exclusion?
 

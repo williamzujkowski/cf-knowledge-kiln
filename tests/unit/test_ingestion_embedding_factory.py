@@ -65,6 +65,39 @@ models:
         assert config.dimensions == 768
         assert config.enabled is True
 
+    def test_trust_remote_code_defaults_false(self, tmp_path: Path) -> None:
+        """Omitting the key means remote code is NOT trusted (secure default)."""
+        path = _write(
+            tmp_path / "models.yaml",
+            """
+models:
+  embedding:
+    provider: mock
+    name: mock-768
+    dimensions: 768
+    enabled: true
+""",
+        )
+        config = load_embedding_config(str(path))
+        assert config.trust_remote_code is False
+
+    def test_trust_remote_code_parsed_from_yaml(self, tmp_path: Path) -> None:
+        """Operators opt into remote code per model via config, not code."""
+        path = _write(
+            tmp_path / "models.yaml",
+            """
+models:
+  embedding:
+    provider: local
+    name: nomic-ai/nomic-embed-text-v1.5
+    dimensions: 768
+    enabled: true
+    trust_remote_code: true
+""",
+        )
+        config = load_embedding_config(str(path))
+        assert config.trust_remote_code is True
+
     def test_openai_compatible_with_env_pointers(self, tmp_path: Path) -> None:
         path = _write(
             tmp_path / "models.yaml",
@@ -206,6 +239,24 @@ models:
         with pytest.raises(EmbeddingConfigError, match="not found"):
             load_embedding_config(str(tmp_path / "nope.yaml"))
 
+    def test_shipped_example_config_loads(self) -> None:
+        """The shipped ``config/models.example.yaml`` must parse cleanly.
+
+        The example file is what operators copy; a broken example
+        config (bare model name, missing trust_remote_code) ships a
+        config that cannot load the model it names. This is the
+        regression guard for that.
+        """
+        example = Path(__file__).resolve().parents[2] / "config" / "models.example.yaml"
+        assert example.exists(), f"missing fixture: {example}"
+        config = load_embedding_config(example)
+        assert config.provider == "local"
+        # Full HuggingFace org/model id — a bare name will not resolve.
+        assert config.name == "nomic-ai/nomic-embed-text-v1.5"
+        assert config.dimensions == 768
+        # Nomic needs custom modeling code; the example must opt in.
+        assert config.trust_remote_code is True
+
     def test_dimensions_must_be_positive(self, tmp_path: Path) -> None:
         path = _write(
             tmp_path / "models.yaml",
@@ -245,6 +296,38 @@ class TestBuildEmbeddingProvider:
         )
         assert isinstance(provider, LocalEmbeddingProvider)
         assert provider.model == "nomic-embed-text-v1.5"
+
+    def test_local_factory_passes_trust_remote_code(self) -> None:
+        """#NNN — the config's trust_remote_code reaches the provider."""
+        config = EmbeddingConfig(
+            provider="local",
+            name="nomic-ai/nomic-embed-text-v1.5",
+            dimensions=768,
+            enabled=True,
+            trust_remote_code=True,
+        )
+        provider = build_embedding_provider(
+            config,
+            _settings(),
+            local_model_factory=lambda _name, **_: object(),
+        )
+        assert isinstance(provider, LocalSentenceTransformersProvider)
+        assert provider.trust_remote_code is True
+
+    def test_local_factory_trust_remote_code_defaults_false(self) -> None:
+        config = EmbeddingConfig(
+            provider="local",
+            name="nomic-ai/nomic-embed-text-v1.5",
+            dimensions=768,
+            enabled=True,
+        )
+        provider = build_embedding_provider(
+            config,
+            _settings(),
+            local_model_factory=lambda _name, **_: object(),
+        )
+        assert isinstance(provider, LocalSentenceTransformersProvider)
+        assert provider.trust_remote_code is False
 
     def test_local_sentence_transformers_alias(self) -> None:
         """``local-sentence-transformers`` is the canonical provider name."""

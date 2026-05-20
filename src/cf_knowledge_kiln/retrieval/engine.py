@@ -64,6 +64,13 @@ class EmbeddingProvider(Protocol):
     layer (architecturally, retrieval should not depend on ingestion).
     Any object matching this Protocol — including ``MockEmbeddingProvider``
     — works here.
+
+    This is a deliberate *subset* of the canonical Protocol: only
+    ``embed`` (plus the metadata attrs) is needed to run a query.
+    ``aclose()`` is intentionally omitted — the retrieval engine
+    borrows a provider, it does not own its lifecycle. Whoever
+    constructed the provider (the API ``lifespan`` or the ingestion
+    worker) is responsible for calling ``aclose()`` on shutdown.
     """
 
     provider: str
