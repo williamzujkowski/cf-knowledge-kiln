@@ -288,11 +288,12 @@ class TestBuildEmbeddingProvider:
             enabled=True,
         )
         # Inject a no-op factory so the test doesn't load real weights.
-        # The factory now receives the device kwarg as well.
+        # The factory receives device + trust_remote_code kwargs; the
+        # double takes **_ so the contract can grow without churn.
         provider = build_embedding_provider(
             config,
             _settings(),
-            local_model_factory=lambda _name, device=None: object(),
+            local_model_factory=lambda _name, **_: object(),
         )
         assert isinstance(provider, LocalEmbeddingProvider)
         assert provider.model == "nomic-embed-text-v1.5"
@@ -340,7 +341,7 @@ class TestBuildEmbeddingProvider:
         provider = build_embedding_provider(
             config,
             _settings(),
-            local_model_factory=lambda _name, device=None: object(),
+            local_model_factory=lambda _name, **_: object(),
         )
         assert isinstance(provider, LocalSentenceTransformersProvider)
         assert provider.model == "nomic-ai/nomic-embed-text-v1.5"
