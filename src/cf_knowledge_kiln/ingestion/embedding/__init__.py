@@ -110,15 +110,21 @@ class MockEmbeddingProvider:
         return [x / norm for x in floats]
 
 
-# Re-export the local-inference provider so callers can write
-# ``from cf_knowledge_kiln.ingestion.embedding import
-# LocalSentenceTransformersProvider`` without reaching into the
-# submodule. The subpath import (``.local``) also still works.
-# Phase 4's ``LocalEmbeddingProvider`` symbol is preserved as a
-# symbol-level alias by ``local.py``; we re-export both.
+# Re-export every concrete provider so callers can write
+# ``from cf_knowledge_kiln.ingestion.embedding import <Provider>``
+# without reaching into a submodule. The subpath imports (``.local``,
+# ``.openai_compatible``) also still work. Phase 4's
+# ``LocalEmbeddingProvider`` symbol is preserved as a symbol-level
+# alias by ``local.py``; we re-export both. All three real providers
+# are surfaced here for symmetry — the factory remains the *selection*
+# entry point, but direct construction (tests, embedded use) should
+# not have to know which submodule a provider lives in.
 from cf_knowledge_kiln.ingestion.embedding.local import (  # noqa: E402
     LocalEmbeddingProvider,
     LocalSentenceTransformersProvider,
+)
+from cf_knowledge_kiln.ingestion.embedding.openai_compatible import (  # noqa: E402
+    OpenAICompatibleEmbeddingProvider,
 )
 
 __all__ = [
@@ -127,4 +133,5 @@ __all__ = [
     "LocalEmbeddingProvider",
     "LocalSentenceTransformersProvider",
     "MockEmbeddingProvider",
+    "OpenAICompatibleEmbeddingProvider",
 ]

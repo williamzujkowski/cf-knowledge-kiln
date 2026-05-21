@@ -94,6 +94,11 @@ class EmbeddingConfig(BaseModel):
     api_key_env: str | None = None
     batch_size: int | None = None
     device: str | None = None
+    # Opt-in (per model, in config) to running custom modeling code
+    # downloaded from a model hub. Required by e.g. Nomic Embed v1.5;
+    # ignored by the mock + openai-compatible providers. Default False
+    # so executing remote code is never silent. See docs/model-providers.md.
+    trust_remote_code: bool = False
     provider_settings: _ProviderSettings = Field(default_factory=_ProviderSettings)
 
 
@@ -126,11 +131,14 @@ def _local_factory(
 
     ``batch_size`` and ``device`` come from YAML when set; otherwise
     the provider's own defaults (and ``$KILN_EMBEDDING_DEVICE``) apply.
+    ``trust_remote_code`` is always forwarded (default ``False``) so a
+    model that needs custom code — Nomic — works purely from config.
     """
     kwargs: dict[str, Any] = {
         "model_name": config.name,
         "dimensions": config.dimensions,
         "model_factory": local_model_factory,
+        "trust_remote_code": config.trust_remote_code,
     }
     if config.batch_size is not None:
         kwargs["batch_size"] = config.batch_size

@@ -50,17 +50,31 @@ DEVICE_ENV_VAR = "KILN_EMBEDDING_DEVICE"
 # Default model factory: imported lazily so the ``real-embeddings``
 # extra is only required at provider-use time, not at import time.
 # The factory accepts an optional ``device`` so callers can pin to
-# ``cpu`` / ``cuda`` / ``mps`` without subclassing this module.
+# ``cpu`` / ``cuda`` / ``mps`` without subclassing this module, plus a
+# keyword-only ``trust_remote_code`` flag. Injected factories (tests)
+# should accept ``**kwargs`` so this contract can grow new keywords
+# without breaking every double.
 ModelFactory = Callable[..., Any]
 
 
-def _default_factory(name: str, device: str | None = None) -> Any:
+def _default_factory(
+    name: str,
+    device: str | None = None,
+    *,
+    trust_remote_code: bool = False,
+) -> Any:
     """Instantiate a real ``SentenceTransformer`` for ``name``.
 
     Raises a clear ``ImportError`` with the install hint when the
     optional ``real-embeddings`` extra hasn't been installed. The error
     message names the install command exactly so operators don't have
     to guess.
+
+    ``trust_remote_code`` is forwarded verbatim. Some models (notably
+    ``nomic-ai/nomic-embed-text-v1.5``, which ships ``nomic-bert-2048``
+    custom code) require it to load under modern ``transformers``;
+    others must not have it. It is config-driven so the adapter stays
+    model-agnostic — see :class:`LocalSentenceTransformersProvider`.
     """
     try:
         from sentence_transformers import SentenceTransformer
@@ -72,7 +86,7 @@ def _default_factory(name: str, device: str | None = None) -> Any:
         ) from exc
     # ``device`` is a SentenceTransformer kwarg; ``None`` lets the
     # library pick (typically CPU if torch can't find an accelerator).
-    return SentenceTransformer(name, device=device)
+    return SentenceTransformer(name, device=device, trust_remote_code=trust_remote_code)
 
 
 class LocalSentenceTransformersProvider:
@@ -107,6 +121,15 @@ class LocalSentenceTransformersProvider:
         L2-normalize the output. Nomic Embed v1.5 documents
         normalize-by-default behavior; left configurable for models
         that prefer raw vectors.
+    trust_remote_code:
+        Forwarded to ``SentenceTransformer``. Required by models that
+        ship custom modeling code (e.g. ``nomic-embed-text-v1.5`` ->
+        ``nomic-bert-2048``); harmless-but-unnecessary for plain
+        sentence-transformers models. Defaults to ``False`` so running
+        code downloaded from a model hub is always an explicit,
+        per-model opt-in via ``config/models.yaml`` — never a silent
+        default. Keeping it in config (not hardcoded) is what lets the
+        active model be swapped without touching this adapter.
     """
 
     provider = PROVIDER_NAME
@@ -120,6 +143,7 @@ class LocalSentenceTransformersProvider:
         *,
         model_factory: ModelFactory | None = None,
         normalize: bool = True,
+        trust_remote_code: bool = False,
     ) -> None:
         if dimensions <= 0:
             raise ValueError(f"dimensions must be positive, got {dimensions}")
@@ -132,6 +156,7 @@ class LocalSentenceTransformersProvider:
         # ignored so an unset-but-present-in-environ variable doesn't
         # mask the cpu default.
         self.device = device or os.environ.get(DEVICE_ENV_VAR) or DEFAULT_DEVICE
+        self.trust_remote_code = trust_remote_code
         self._factory = model_factory or _default_factory
         self._normalize = normalize
         self._encoder: Any | None = None
@@ -173,7 +198,10 @@ class LocalSentenceTransformersProvider:
                 )
                 # Loading is CPU/GPU-heavy; keep the loop free.
                 self._encoder = await asyncio.to_thread(
-                    self._factory, self.model, device=self.device
+                    self._factory,
+                    self.model,
+                    device=self.device,
+                    trust_remote_code=self.trust_remote_code,
                 )
         return self._encoder
 
