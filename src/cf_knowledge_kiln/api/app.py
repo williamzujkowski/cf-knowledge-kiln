@@ -41,6 +41,8 @@ from cf_knowledge_kiln.config import get_settings
 from cf_knowledge_kiln.db import Database, resolve_database_url
 from cf_knowledge_kiln.ingestion.embedding import EmbeddingProvider
 from cf_knowledge_kiln.ingestion.embedding.factory import build_provider_from_settings
+from cf_knowledge_kiln.ingestion.prompt_injection import load_phrases
+from cf_knowledge_kiln.retrieval import load_retrieval_config
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +99,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # just Postgres (#176). A configured-but-broken provider (e.g. a URL
     # typo) builds an object that only fails on use — this surfaces it.
     app.state.embedding_status = await _probe_embedding(embedding_provider)
+    # #183: parse config/security.yaml ONCE at startup. Before this,
+    # every /v1/search + /search request re-read and re-parsed the file
+    # twice (retrieval config + prompt-injection phrases) — synchronous
+    # file I/O on the event loop. The retrieval dependencies now read
+    # these from app.state. A malformed security.yaml now fails the
+    # deploy at startup rather than 500-ing every request.
+    app.state.retrieval_config = load_retrieval_config(settings.security_config_path)
+    app.state.prompt_injection_phrases = load_phrases(settings.security_config_path)
     # #79: in-process per-IP rate limiters. Built once per app so the
     # token buckets persist across requests. Two separate limiters
     # because /search and /feedback have different cost profiles.

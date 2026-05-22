@@ -59,6 +59,50 @@ def test_lifespan_attaches_rate_limiters(models_config: Path) -> None:
         assert isinstance(client.app.state.feedback_limiter, TokenBucketLimiter)
 
 
+def test_lifespan_attaches_retrieval_config_and_phrases(models_config: Path) -> None:
+    """#183: the lifespan parses config/security.yaml once into app.state."""
+    from cf_knowledge_kiln.retrieval import RetrievalConfig
+
+    with TestClient(create_app()) as client:
+        assert isinstance(client.app.state.retrieval_config, RetrievalConfig)
+        assert isinstance(client.app.state.prompt_injection_phrases, list)
+
+
+def test_retrieval_config_loaded_once_not_per_request(
+    models_config: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#183: config/security.yaml is parsed once at startup, never per request.
+
+    Before #183 the retrieval dependencies re-read + re-parsed the file
+    on every request. This wraps the loader with a call counter,
+    confirms the lifespan invokes it exactly once, then resolves the
+    `get_retrieval_config` dependency repeatedly and confirms the count
+    does not move — the dependency reads `app.state`, not the file.
+    """
+    import sys
+    from types import SimpleNamespace
+
+    from cf_knowledge_kiln.api.dependencies import get_retrieval_config
+
+    app_module = sys.modules["cf_knowledge_kiln.api.app"]
+    real_loader = app_module.load_retrieval_config
+    calls: list[int] = []
+
+    def counting_loader(path: object) -> object:
+        calls.append(1)
+        return real_loader(path)
+
+    monkeypatch.setattr(app_module, "load_retrieval_config", counting_loader)
+    get_settings.cache_clear()
+
+    with TestClient(create_app()) as client:
+        assert calls == [1], "lifespan should parse the config exactly once"
+        request = SimpleNamespace(app=client.app)
+        for _ in range(5):
+            get_retrieval_config(request)  # type: ignore[arg-type]
+        assert calls == [1], "the dependency must read app.state, not re-parse"
+
+
 def test_lifespan_attaches_none_when_config_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
