@@ -34,6 +34,7 @@ from cf_knowledge_kiln.api.csp import install_csp_middleware
 from cf_knowledge_kiln.api.health import router as health_router
 from cf_knowledge_kiln.api.preview import router as preview_router
 from cf_knowledge_kiln.api.rate_limit import TokenBucketLimiter
+from cf_knowledge_kiln.api.request_log import install_request_logging
 from cf_knowledge_kiln.api.retrieval import router as retrieval_router
 from cf_knowledge_kiln.api.web import router as web_router
 from cf_knowledge_kiln.config import get_settings
@@ -139,6 +140,10 @@ def create_app() -> FastAPI:
     # render. Rate-limit is a per-route Depends, not an ASGI
     # middleware, so there's nothing else to sequence against.
     install_csp_middleware(app)
+    # #178: per-request observability. Installed last so it is the
+    # outermost middleware — the logged duration covers the whole
+    # request, including auth + CSP.
+    install_request_logging(app)
     app.include_router(health_router)
     app.include_router(retrieval_router)
     app.include_router(web_router)
