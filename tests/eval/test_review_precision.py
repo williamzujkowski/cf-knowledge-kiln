@@ -258,6 +258,10 @@ def test_review_decisions_meet_precision_floor(
             )
             report_lines.append(f"      query: {case.query!r}")
     report = "\n".join(report_lines)
+    # Always surface the measurement, not only on failure — the floor
+    # is meant to be ratcheted as the labeled set grows, and that needs
+    # the current numbers visible on a green run (`pytest -s`).
+    print(f"\n{report}\nfloor: {REVIEW_PRECISION_FLOOR:.2f}")
 
     assert precision >= REVIEW_PRECISION_FLOOR, f"{report}\nfloor: {REVIEW_PRECISION_FLOOR:.2f}"
 
@@ -321,4 +325,8 @@ def test_confidence_buckets_meet_per_bucket_precision(
             )
 
     report = "\n".join(report_lines)
+    # Always surface the per-bucket distribution — calibration work
+    # (extend the corpus, ratchet the floor) needs these numbers on a
+    # green run, not only when the gate trips. See #167.
+    print(f"\n{report}")
     assert not failures, f"{report}\n" + "\n".join(failures)

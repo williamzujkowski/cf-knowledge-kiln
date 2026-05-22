@@ -85,3 +85,4 @@ tests/eval/reports/*
 !tests/eval/reports/.gitkeep
 .claude/
 ci/vars.yml
+.nexus-agents/
