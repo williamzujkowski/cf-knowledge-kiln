@@ -212,6 +212,11 @@ def assemble_context_pack(
     # directive, so surface it: force review + a reason rather than
     # quietly emitting an uncited evidence chunk.
     uncited = sum(1 for c in kept if c.document_id not in inputs.document_refs)
+    # Force review on uncited evidence OR dropped sensitive content,
+    # independent of the warning channel: if a review_reason exists, the
+    # flag must agree (#189). Sensitive drops normally also raise a
+    # `sensitive_content` warning that `requires_human_review` catches —
+    # the explicit `dropped_sensitive` term is defense in depth.
     needs_review = (
         requires_human_review(
             kept,
@@ -220,6 +225,7 @@ def assemble_context_pack(
             weak_evidence_threshold=weak_evidence_threshold,
         )
         or uncited > 0
+        or dropped_sensitive > 0
     )
     reasons = _review_reasons(
         kept,
@@ -251,6 +257,8 @@ def assemble_context_pack(
     # content. `trim_evidence_to_budget`'s `used` (content-only) drives
     # the trim decision; the reported estimate is recounted against the
     # assembled response so an agent budgets against an honest number.
+    # The recount sees the provisional `used_estimate` in the JSON — a
+    # sub-token rounding difference between a 1- and 4-digit number.
     real_estimate = count_tokens(pack.model_dump_json())
     return pack.model_copy(
         update={"token_budget": TokenBudget(requested=max_tokens, used_estimate=real_estimate)}
