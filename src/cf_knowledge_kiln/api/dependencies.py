@@ -68,38 +68,53 @@ def get_embedding_provider(request: Request) -> EmbeddingProvider | None:
     return provider  # type: ignore[no-any-return]
 
 
-def get_retrieval_config(
-    settings: Annotated[Settings, Depends(get_settings)],
-) -> RetrievalConfig:
-    """Load :class:`RetrievalConfig` from ``config/security.yaml``.
+def get_retrieval_config(request: Request) -> RetrievalConfig:
+    """Return the retrieval config, parsed once at app startup (#183).
 
-    The loader returns defaults + a warning when the file is missing —
-    so this dep never raises for a missing config.
+    The lifespan parses ``config/security.yaml`` into
+    ``app.state.retrieval_config`` so the retrieval hot path doesn't
+    re-read + re-parse the file on every request. The fallback re-loads
+    only when state is unset — an app constructed without entering its
+    lifespan, which happens in some bare-app test setups.
     """
-    return load_retrieval_config(settings.security_config_path)
+    config = getattr(request.app.state, "retrieval_config", None)
+    if isinstance(config, RetrievalConfig):
+        return config
+    return load_retrieval_config(get_settings().security_config_path)
+
+
+def get_prompt_injection_phrases(request: Request) -> list[str]:
+    """Return the prompt-injection phrase list, loaded once at startup (#183).
+
+    Same rationale as :func:`get_retrieval_config`: the lifespan loads
+    the list into ``app.state`` so query normalization doesn't re-read
+    ``config/security.yaml`` per request. The fallback covers a
+    no-lifespan bare app.
+    """
+    phrases = getattr(request.app.state, "prompt_injection_phrases", None)
+    if isinstance(phrases, list):
+        return phrases
+    from cf_knowledge_kiln.ingestion.prompt_injection import load_phrases
+
+    return load_phrases(get_settings().security_config_path)
 
 
 def get_hybrid_retriever(
     db: Annotated[Database, Depends(get_db)],
     provider: Annotated[EmbeddingProvider | None, Depends(get_embedding_provider)],
     config: Annotated[RetrievalConfig, Depends(get_retrieval_config)],
+    phrases: Annotated[list[str], Depends(get_prompt_injection_phrases)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> HybridRetriever:
     """Compose a per-request :class:`HybridRetriever`.
 
     The retriever is cheap to construct (no I/O); building per-request
     keeps it stateless and avoids accidentally sharing transaction
-    state across concurrent calls.
-
-    #100: load the prompt-injection phrase list once per request so
-    the engine can normalize the inbound query. ``load_phrases``
-    re-reads the YAML each call — cheap, and means an operator
-    editing config/security.yaml + restaging picks up the new list
-    without a redeploy.
+    state across concurrent calls. Its expensive inputs — the retrieval
+    config and the #100 prompt-injection phrase list — are loaded once
+    at startup and read from ``app.state`` (#183), so only the
+    lightweight object assembly happens per request.
     """
-    from cf_knowledge_kiln.ingestion.prompt_injection import load_phrases
-
-    phrases = load_phrases(settings.security_config_path)
     return HybridRetriever(
         db=db,
         embedding_provider=provider,
@@ -144,6 +159,7 @@ __all__ = [
     "get_embedding_provider",
     "get_feedback_limiter",
     "get_hybrid_retriever",
+    "get_prompt_injection_phrases",
     "get_retrieval_config",
     "get_search_limiter",
     "get_session",
