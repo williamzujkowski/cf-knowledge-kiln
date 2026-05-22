@@ -78,6 +78,12 @@ def test_retrieval_config_loaded_once_not_per_request(
     confirms the lifespan invokes it exactly once, then resolves the
     `get_retrieval_config` dependency repeatedly and confirms the count
     does not move — the dependency reads `app.state`, not the file.
+
+    `load_retrieval_config` is imported by value into BOTH `api.app`
+    (the lifespan) and `api.dependencies` (the fallback / any future
+    per-request regression). Both bindings are patched with the same
+    counter so a partial regression — re-adding a per-request load via
+    the dependencies binding — is caught, not silently missed.
     """
     import sys
     from types import SimpleNamespace
@@ -85,6 +91,7 @@ def test_retrieval_config_loaded_once_not_per_request(
     from cf_knowledge_kiln.api.dependencies import get_retrieval_config
 
     app_module = sys.modules["cf_knowledge_kiln.api.app"]
+    deps_module = sys.modules["cf_knowledge_kiln.api.dependencies"]
     real_loader = app_module.load_retrieval_config
     calls: list[int] = []
 
@@ -93,6 +100,7 @@ def test_retrieval_config_loaded_once_not_per_request(
         return real_loader(path)
 
     monkeypatch.setattr(app_module, "load_retrieval_config", counting_loader)
+    monkeypatch.setattr(deps_module, "load_retrieval_config", counting_loader)
     get_settings.cache_clear()
 
     with TestClient(create_app()) as client:
