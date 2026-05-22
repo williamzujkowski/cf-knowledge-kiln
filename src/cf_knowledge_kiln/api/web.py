@@ -54,6 +54,7 @@ from cf_knowledge_kiln.api.rate_limit import TokenBucketLimiter, client_ip
 from cf_knowledge_kiln.api.views import humanize_warning, log_human_query
 from cf_knowledge_kiln.db.repositories import FeedbackRepository
 from cf_knowledge_kiln.retrieval import HybridRetriever
+from cf_knowledge_kiln.retrieval.types import MAX_QUERY_LENGTH
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +124,17 @@ async def search_partial(
     if not query:
         return templates.TemplateResponse(
             request, "_results.html", {"results": [], "warnings": [], "query": ""}
+        )
+    if len(query) > MAX_QUERY_LENGTH:
+        # The JSON API rejects this at the Pydantic layer; the HTMX form
+        # bypasses SearchRequest, so guard here too — an over-long query
+        # forces unbounded FTS + embedding compute. Same error fragment
+        # the rate-limit + retrieval-failure paths use.
+        return templates.TemplateResponse(
+            request,
+            "_error.html",
+            {"message": f"Query too long — limit is {MAX_QUERY_LENGTH} characters."},
+            status_code=413,
         )
     fs = filters_set is not None
     if fs and not selected_statuses(status):

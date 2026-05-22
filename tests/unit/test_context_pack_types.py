@@ -15,6 +15,8 @@ import pytest
 from pydantic import ValidationError
 
 from cf_knowledge_kiln.retrieval.types import (
+    MAX_QUERY_LENGTH,
+    MAX_TASK_LENGTH,
     ContextPackRequest,
     ContextPackResponse,
     EvidenceChunk,
@@ -47,6 +49,20 @@ class TestContextPackRequest:
     def test_extras_forbidden(self) -> None:
         with pytest.raises(ValidationError):
             ContextPackRequest(task="t", query="q", surprise="oops")  # type: ignore[call-arg]
+
+    def test_query_rejects_over_max_length(self) -> None:
+        """A multi-MB query forces unbounded FTS + embedding compute."""
+        with pytest.raises(ValidationError):
+            ContextPackRequest(task="t", query="x" * (MAX_QUERY_LENGTH + 1))
+
+    def test_task_rejects_over_max_length(self) -> None:
+        with pytest.raises(ValidationError):
+            ContextPackRequest(task="x" * (MAX_TASK_LENGTH + 1), query="q")
+
+    def test_query_and_task_accept_at_max_length(self) -> None:
+        req = ContextPackRequest(task="x" * MAX_TASK_LENGTH, query="y" * MAX_QUERY_LENGTH)
+        assert len(req.task) == MAX_TASK_LENGTH
+        assert len(req.query) == MAX_QUERY_LENGTH
 
 
 class TestEvidenceChunk:
