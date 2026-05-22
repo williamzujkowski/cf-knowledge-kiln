@@ -15,6 +15,11 @@ import pytest
 from pydantic import ValidationError
 
 from cf_knowledge_kiln.retrieval import Conflict, RetrievalFilters, Warning
+from cf_knowledge_kiln.retrieval.types import (
+    MAX_FILTER_ITEMS,
+    MAX_QUERY_LENGTH,
+    SearchRequest,
+)
 
 
 class TestRetrievalFilters:
@@ -23,6 +28,17 @@ class TestRetrievalFilters:
         assert filters.status is None
         assert filters.repo is None
         assert filters.last_reviewed_after is None
+
+    def test_filter_list_rejects_over_limit(self) -> None:
+        """A pathological filter list explodes the SQL IN (...) — refuse it."""
+        with pytest.raises(ValidationError):
+            RetrievalFilters(repo=["r"] * (MAX_FILTER_ITEMS + 1))
+        with pytest.raises(ValidationError):
+            RetrievalFilters(tags=["t"] * (MAX_FILTER_ITEMS + 1))
+
+    def test_filter_list_accepts_at_limit(self) -> None:
+        filters = RetrievalFilters(repo=["r"] * MAX_FILTER_ITEMS)
+        assert filters.repo is not None and len(filters.repo) == MAX_FILTER_ITEMS
 
     def test_status_must_be_in_enum(self) -> None:
         with pytest.raises(ValidationError):
@@ -42,6 +58,30 @@ class TestRetrievalFilters:
     def test_extras_are_forbidden(self) -> None:
         with pytest.raises(ValidationError):
             RetrievalFilters(unknown_field="x")  # type: ignore[call-arg]
+
+
+class TestSearchRequest:
+    def test_minimal_valid(self) -> None:
+        req = SearchRequest(query="how do I deploy")
+        assert req.query == "how do I deploy"
+        assert req.max_results == 10
+
+    def test_empty_query_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            SearchRequest(query="")
+
+    def test_query_rejects_over_max_length(self) -> None:
+        """A multi-MB query forces unbounded FTS + embedding compute."""
+        with pytest.raises(ValidationError):
+            SearchRequest(query="x" * (MAX_QUERY_LENGTH + 1))
+
+    def test_query_accepts_at_max_length(self) -> None:
+        req = SearchRequest(query="x" * MAX_QUERY_LENGTH)
+        assert len(req.query) == MAX_QUERY_LENGTH
+
+    def test_extras_are_forbidden(self) -> None:
+        with pytest.raises(ValidationError):
+            SearchRequest(query="q", surprise="oops")  # type: ignore[call-arg]
 
 
 class TestWarning:

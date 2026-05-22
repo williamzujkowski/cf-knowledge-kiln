@@ -142,6 +142,16 @@ def test_search_post_empty_query_returns_empty_fragment(client: TestClient) -> N
     assert "result-card" not in response.text
 
 
+def test_search_post_over_long_query_returns_error_fragment(client: TestClient) -> None:
+    """An over-long query is refused before retrieval — HTMX form path."""
+    from cf_knowledge_kiln.retrieval.types import MAX_QUERY_LENGTH
+
+    response = client.post("/search", data={"query": "x" * (MAX_QUERY_LENGTH + 1)})
+    assert response.status_code == 413
+    assert "too long" in response.text.lower()
+    assert "result-card" not in response.text
+
+
 def test_search_post_returns_empty_results_message_on_no_match(
     client: TestClient, session: AsyncSession, small_corpus: Path
 ) -> None:

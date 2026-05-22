@@ -51,6 +51,27 @@ Relationship = Literal[
 """RelatedSource relationship kind — matches openapi.yaml RelatedSource."""
 
 
+# ─── Request-input bounds ────────────────────────────────────────────
+#
+# Upper bounds on caller-supplied request fields. Without these a single
+# request can force unbounded work: a multi-MB query string drives
+# unbounded FTS tokenization + embedding compute, and a pathological
+# filter list explodes the SQL ``IN (...)`` clause. The per-request rate
+# limiter does not help — one request is enough. Values are generous for
+# every legitimate caller; embedding models truncate well before
+# MAX_QUERY_LENGTH. Mirrored as ``maxLength`` / ``maxItems`` in
+# openapi/openapi.yaml.
+
+MAX_QUERY_LENGTH = 4096
+"""Max characters in a free-text query (``/v1/search`` + context-pack)."""
+
+MAX_TASK_LENGTH = 2048
+"""Max characters in a context-pack ``task`` description."""
+
+MAX_FILTER_ITEMS = 100
+"""Max item count for any :class:`RetrievalFilters` list field."""
+
+
 class RetrievalFilters(BaseModel):
     """Filters narrowed by the caller before scoring.
 
@@ -61,16 +82,18 @@ class RetrievalFilters(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    status: list[Status] | None = None
-    doc_type: list[str] | None = None
-    repo: list[str] | None = None
-    path_prefix: list[str] | None = None
-    owner: list[str] | None = None
-    system: list[str] | None = None
-    authority: list[str] | None = None
-    sensitivity: list[str] | None = None
-    control_id: list[str] | None = None
-    tags: list[str] | None = None
+    # Every list is capped at MAX_FILTER_ITEMS so a pathological payload
+    # can't explode the SQL ``IN (...)`` clause built in retrieval.filters.
+    status: list[Status] | None = Field(default=None, max_length=MAX_FILTER_ITEMS)
+    doc_type: list[str] | None = Field(default=None, max_length=MAX_FILTER_ITEMS)
+    repo: list[str] | None = Field(default=None, max_length=MAX_FILTER_ITEMS)
+    path_prefix: list[str] | None = Field(default=None, max_length=MAX_FILTER_ITEMS)
+    owner: list[str] | None = Field(default=None, max_length=MAX_FILTER_ITEMS)
+    system: list[str] | None = Field(default=None, max_length=MAX_FILTER_ITEMS)
+    authority: list[str] | None = Field(default=None, max_length=MAX_FILTER_ITEMS)
+    sensitivity: list[str] | None = Field(default=None, max_length=MAX_FILTER_ITEMS)
+    control_id: list[str] | None = Field(default=None, max_length=MAX_FILTER_ITEMS)
+    tags: list[str] | None = Field(default=None, max_length=MAX_FILTER_ITEMS)
     last_reviewed_after: date | None = None
 
 
@@ -93,7 +116,7 @@ class SearchRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    query: str = Field(min_length=1)
+    query: str = Field(min_length=1, max_length=MAX_QUERY_LENGTH)
     filters: RetrievalFilters | None = None
     max_results: int = Field(default=10, ge=1, le=50)
 
@@ -157,8 +180,8 @@ class ContextPackRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    task: str
-    query: str
+    task: str = Field(max_length=MAX_TASK_LENGTH)
+    query: str = Field(max_length=MAX_QUERY_LENGTH)
     filters: RetrievalFilters | None = None
     max_chunks: int = Field(default=8, ge=1, le=50)
     max_tokens: int = Field(default=3000, ge=100, le=32_000)
@@ -239,6 +262,9 @@ class ContextPackResponse(BaseModel):
 
 
 __all__ = [
+    "MAX_FILTER_ITEMS",
+    "MAX_QUERY_LENGTH",
+    "MAX_TASK_LENGTH",
     "Confidence",
     "Conflict",
     "ContextPackRequest",

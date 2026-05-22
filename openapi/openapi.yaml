@@ -208,6 +208,7 @@ components:
         query:
           type: string
           minLength: 1
+          maxLength: 4096
         filters:
           $ref: "#/components/schemas/RetrievalFilters"
         max_results:
@@ -218,46 +219,58 @@ components:
 
     RetrievalFilters:
       type: object
+      # Every list is capped at 100 items so a pathological filter
+      # payload can't explode the SQL IN (...) clause.
       properties:
         status:
           type: array
+          maxItems: 100
           items:
             type: string
             enum: [active, approved, draft, deprecated, archived, superseded]
         doc_type:
           type: array
+          maxItems: 100
           items:
             type: string
         repo:
           type: array
+          maxItems: 100
           items:
             type: string
         path_prefix:
           type: array
+          maxItems: 100
           items:
             type: string
         owner:
           type: array
+          maxItems: 100
           items:
             type: string
         system:
           type: array
+          maxItems: 100
           items:
             type: string
         authority:
           type: array
+          maxItems: 100
           items:
             type: string
         sensitivity:
           type: array
+          maxItems: 100
           items:
             type: string
         control_id:
           type: array
+          maxItems: 100
           items:
             type: string
         tags:
           type: array
+          maxItems: 100
           items:
             type: string
         last_reviewed_after:
@@ -350,9 +363,11 @@ components:
       properties:
         task:
           type: string
+          maxLength: 2048
           description: What the agent is about to do; shapes summarization.
         query:
           type: string
+          maxLength: 4096
         filters:
           $ref: "#/components/schemas/RetrievalFilters"
         max_chunks:
