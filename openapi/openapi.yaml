@@ -183,10 +183,10 @@ components:
           type: object
           additionalProperties:
             type: string
-            enum: [ok, failing]
+            enum: [ok, failing, not_configured]
       examples:
         - status: ready
-          checks: {}
+          checks: {postgres: ok, embedding: ok}
         - status: degraded
           checks:
             postgres: failing

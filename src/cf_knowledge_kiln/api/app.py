@@ -19,6 +19,8 @@ fixes the config.
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -39,7 +41,40 @@ from cf_knowledge_kiln.db import Database, resolve_database_url
 from cf_knowledge_kiln.ingestion.embedding import EmbeddingProvider
 from cf_knowledge_kiln.ingestion.embedding.factory import build_provider_from_settings
 
+logger = logging.getLogger(__name__)
+
 _STATIC_DIR = Path(__file__).parent / "static"
+
+# Upper bound on the one-shot embedding-provider health probe run at
+# startup (#176). Generous enough for a cold local model load; bounded
+# so a hung backend can't stall app startup into a CF crash-loop.
+_EMBEDDING_PROBE_TIMEOUT_SECONDS = 30.0
+
+
+async def _probe_embedding(provider: EmbeddingProvider | None) -> str:
+    """One-shot embedding-provider health check for ``/readyz`` (#176).
+
+    Returns ``"not_configured"`` when no provider is wired (FTS-only is
+    a valid mode), ``"ok"`` when a probe embed succeeds, or ``"failing"``
+    when it raises or times out. Run once at startup; ``/readyz`` reports
+    the cached result rather than re-probing per call — re-probing would
+    load the local model / hit the remote API on every poll. A backend
+    that fails *after* startup is not caught: that is a documented
+    limitation (see #176), acceptable because the common failure is a
+    deploy-time misconfiguration (bad URL, missing model, dim mismatch).
+    """
+    if provider is None:
+        return "not_configured"
+    try:
+        await asyncio.wait_for(
+            provider.embed(["readyz embedding health probe"]),
+            timeout=_EMBEDDING_PROBE_TIMEOUT_SECONDS,
+        )
+    except Exception:
+        logger.exception("embedding provider health probe failed; /readyz will report degraded")
+        return "failing"
+    logger.info("embedding provider health probe ok")
+    return "ok"
 
 
 @asynccontextmanager
@@ -57,6 +92,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     embedding_provider: EmbeddingProvider | None = build_provider_from_settings(settings)
     app.state.db = db
     app.state.embedding_provider = embedding_provider
+    # Probe the provider once so /readyz reflects embedding health, not
+    # just Postgres (#176). A configured-but-broken provider (e.g. a URL
+    # typo) builds an object that only fails on use — this surfaces it.
+    app.state.embedding_status = await _probe_embedding(embedding_provider)
     # #79: in-process per-IP rate limiters. Built once per app so the
     # token buckets persist across requests. Two separate limiters
     # because /search and /feedback have different cost profiles.

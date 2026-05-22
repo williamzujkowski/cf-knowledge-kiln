@@ -1,8 +1,9 @@
 """Liveness, readiness, and version endpoints.
 
 - ``/healthz`` is the cheap liveness probe. It must not touch the DB.
-- ``/readyz`` reports per-dependency status. From Phase 2 it pings
-  Postgres and surfaces ``postgres: ok | failing``.
+- ``/readyz`` reports per-dependency status. It pings Postgres
+  (``postgres: ok | failing``) and reports the embedding provider's
+  startup-probe result (``embedding: ok | failing | not_configured``).
 - ``/version`` reports the package version.
 
 CF health checks point at ``/healthz``; readiness consumers (load
@@ -21,7 +22,14 @@ from cf_knowledge_kiln.db import Database
 
 router = APIRouter(tags=["health"])
 
-CheckValue = Literal["ok", "failing"]
+CheckValue = Literal["ok", "failing", "not_configured"]
+"""Per-dependency check value.
+
+``not_configured`` is informational — it means the dependency is
+deliberately absent (e.g. no embedding provider → FTS-only retrieval),
+which is a valid mode and does NOT degrade readiness. Only ``failing``
+rolls the overall status to ``degraded``."""
+
 ReadyStatus = Literal["ready", "degraded"]
 
 
@@ -67,25 +75,34 @@ async def healthz() -> HealthResponse:
     },
 )
 async def readyz(request: Request, response: Response) -> ReadyResponse:
-    """Return readiness with a Postgres ping.
+    """Return readiness: a Postgres ping + the embedding-provider probe.
 
     ``postgres`` is ``failing`` when the pool is not configured (no URL,
-    no VCAP binding) or when the ``SELECT 1`` round-trip fails. When any
-    check fails the HTTP status code is **503** so CF/gorouter and
-    upstream load balancers route traffic away from the instance; the
-    body still carries the per-check details.
+    no VCAP binding) or when the ``SELECT 1`` round-trip fails.
+
+    ``embedding`` reflects the one-shot provider probe run at startup
+    (#176): ``ok`` (probe embed succeeded), ``failing`` (probe raised —
+    e.g. a bad embedding base-URL builds a provider object that only
+    fails on use), or ``not_configured`` (no embedding config; FTS-only
+    retrieval, a valid mode).
+
+    Only a ``failing`` check rolls the status to ``degraded``;
+    ``not_configured`` does not. When degraded the HTTP status is
+    **503** so CF/gorouter and upstream load balancers route traffic
+    away from the instance; the body still carries the per-check map.
 
     ``/healthz`` (liveness) stays 200 unconditionally — a failing
     liveness causes a restart loop, which isn't what a missing
-    Postgres warrants.
+    dependency warrants.
     """
     db: Database | None = getattr(request.app.state, "db", None)
     if db is None:
         postgres: CheckValue = "failing"
     else:
         postgres = "ok" if await db.ping() else "failing"
-    checks: dict[str, CheckValue] = {"postgres": postgres}
-    overall: ReadyStatus = "ready" if all(v == "ok" for v in checks.values()) else "degraded"
+    embedding: CheckValue = getattr(request.app.state, "embedding_status", "not_configured")
+    checks: dict[str, CheckValue] = {"postgres": postgres, "embedding": embedding}
+    overall: ReadyStatus = "degraded" if any(v == "failing" for v in checks.values()) else "ready"
     if overall == "degraded":
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     return ReadyResponse(status=overall, checks=checks)
