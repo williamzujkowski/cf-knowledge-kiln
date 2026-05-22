@@ -160,6 +160,34 @@ def test_search_persists_rag_query_row(
     assert n == 1
 
 
+def test_search_returns_200_when_telemetry_write_fails(
+    client: TestClient,
+    session: AsyncSession,
+    small_corpus: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#172: a telemetry-write failure must NOT cascade to a 500.
+
+    `_log_rag_query` wraps the `rag_queries` insert in a `begin_nested()`
+    savepoint and swallows failures (HANDOFF trap #21). Simulate the
+    insert raising and confirm the search response still succeeds.
+    """
+    import asyncio
+
+    from cf_knowledge_kiln.db.repositories import QueriesRepository
+
+    asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
+
+    async def _boom(self: object, **kwargs: object) -> object:
+        raise RuntimeError("simulated telemetry DB failure")
+
+    monkeypatch.setattr(QueriesRepository, "create", _boom)
+
+    response = client.post("/v1/search", json={"query": "widgets"})
+    assert response.status_code == 200
+    assert "results" in response.json()
+
+
 # ─── /v1/agent/context-pack ─────────────────────────────────────────
 
 

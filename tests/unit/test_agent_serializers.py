@@ -15,6 +15,8 @@ from __future__ import annotations
 from datetime import date
 from uuid import uuid4
 
+import pytest
+
 from cf_knowledge_kiln.agent.serializers import (
     UNTRUSTED_CONTENT_NOTICE,
     DocumentRef,
@@ -89,6 +91,14 @@ class TestTrimEvidenceToBudget:
         kept, used = trim_evidence_to_budget([], contents=[], max_chunks=5, max_tokens=100)
         assert kept == []
         assert used == 0
+
+    def test_raises_on_contents_chunks_length_mismatch(self) -> None:
+        """#172: misaligned contents/chunks must fail loudly, not silently
+        truncate — the two lists are zipped index-for-index."""
+        chunks = [_chunk() for _ in range(3)]
+        contents = ["only one"]
+        with pytest.raises(ValueError, match="length mismatch"):
+            trim_evidence_to_budget(chunks, contents=contents, max_chunks=5, max_tokens=100)
 
 
 class TestDeriveConfidence:

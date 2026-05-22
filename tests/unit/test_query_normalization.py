@@ -100,3 +100,33 @@ def test_case_variants_all_match(raw: str) -> None:
     cleaned, removed = normalize_query(raw, _PHRASES)
     assert cleaned == ""
     assert removed == ["ignore previous instructions"]
+
+
+class TestQueryNormalizedWarning:
+    """The ``query_normalized`` warning emitted when markers were stripped.
+
+    `_query_normalized_warning` lives in `retrieval.engine` (#100); the
+    warning is the operator-facing half of query normalization, so its
+    formatting is tested alongside `normalize_query`.
+    """
+
+    def test_lists_all_phrases_when_three_or_fewer(self) -> None:
+        from cf_knowledge_kiln.retrieval.engine import _query_normalized_warning
+
+        warning = _query_normalized_warning(["a", "b", "c"])
+        assert warning.type == "query_normalized"
+        assert "'a'" in warning.message
+        assert "'c'" in warning.message
+        # No "(and N more)" suffix at the boundary.
+        assert "more)" not in warning.message
+
+    def test_truncates_to_three_with_suffix_when_over_three(self) -> None:
+        """#172: >3 stripped phrases → first 3 listed + '(and N more)'."""
+        from cf_knowledge_kiln.retrieval.engine import _query_normalized_warning
+
+        warning = _query_normalized_warning(["p1", "p2", "p3", "p4", "p5"])
+        assert "'p1'" in warning.message
+        assert "'p3'" in warning.message
+        # p4/p5 are summarized, not listed verbatim.
+        assert "'p4'" not in warning.message
+        assert "(and 2 more)" in warning.message

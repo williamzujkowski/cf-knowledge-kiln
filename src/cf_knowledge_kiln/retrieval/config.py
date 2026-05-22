@@ -101,7 +101,11 @@ class RetrievalConfig(BaseModel):
     model_config = ConfigDict(extra="ignore", frozen=True)
 
     status_weights: dict[str, float] = Field(default_factory=lambda: dict(DEFAULT_STATUS_WEIGHTS))
-    stale_after_days: int | None = DEFAULT_STALE_AFTER_DAYS
+    # gt=0 (#172): the freshness-factor math divides by stale_after_days,
+    # so 0 is a ZeroDivisionError and a negative value inverts the decay
+    # (older docs would score higher). None is still allowed — it
+    # disables the freshness check entirely.
+    stale_after_days: int | None = Field(default=DEFAULT_STALE_AFTER_DAYS, gt=0)
     weak_evidence_score_threshold: float = Field(
         default=DEFAULT_WEAK_EVIDENCE_SCORE_THRESHOLD, gt=0.0
     )
