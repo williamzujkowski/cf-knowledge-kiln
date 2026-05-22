@@ -43,23 +43,30 @@ _BUCKET_CORRECT_GRADE_FLOOR = 2
 # binary-precision floor is :data:`REVIEW_PRECISION_FLOOR`; this is
 # the stricter per-stratum gate enforced only under real embeddings.
 #
-# Ratcheted 0.5 → 0.75 after the consensus-grading pass replaced the
-# initial strawman grades with the median of 5 independent judges
-# scoring the actual Nomic Embed v1.5 top-3 chunks per case. Measured
-# bootstrap before #164's score normalization:
-#   high  : empty (RRF scores never reached the 0.8 high-confidence cap)
-#   medium: 7/8 = 0.875
-#   low   : 3/3 = 1.000
+# Ratchet history:
+#   0.5 → 0.75  consensus-grading pass (5-judge median replaced strawman
+#               grades); pre-#164 distribution was high=empty,
+#               medium=7/8, low=3/3, none=1/1.
+#   0.75 → 0.8  re-measured post-#164 score normalization (#167). With
+#               fused scores normalized to [0, 1] the 0.8 high-confidence
+#               cutoff is reachable, so the `high` bucket now populates.
+#
+# Measured post-#164 (KILN_EVAL_REAL_EMBEDDINGS=1, Nomic Embed v1.5):
+#   high  : 2/2 = 1.000   (2 cases moved low → high — the normalization win)
+#   medium: 7/8 = 0.875   (unchanged; the one miss is `clean-citation-format`)
+#   low   : 1/1 = 1.000
 #   none  : 1/1 = 1.000
 #
-# Post-#164: scores are normalized to [0, 1] so the 0.8 high cutoff
-# actually fires for clean both-arm hits. The bucket distribution will
-# shift on the next real-embedding run — some cases that previously
-# landed in ``medium`` will now land in ``high``. The 0.75 floor is
-# conservative enough to survive that redistribution (one case of
-# slack per populated bucket); re-run KILN_EVAL_REAL_EMBEDDINGS=1 to
-# re-measure and tighten if room appears. See issue #166.
-_PER_BUCKET_PRECISION_FLOOR = 0.75
+# 0.8 sits just under the weakest populated bucket (medium, 0.875). It
+# trips on any `high`/`low`/`none` regression and on a SECOND `medium`
+# miss (6/8 = 0.75 < 0.8) — the intended ratchet — without false-failing
+# the current green run. Caveat: the buckets are small, so a case
+# drifting across the 0.8 confidence boundary (high ↔ medium) can move
+# the ratio; this eval is opt-in, so treat a trip as "re-inspect
+# calibration," not a hard regression. Extend the corpus to lift the
+# floor further. See #167; re-run KILN_EVAL_REAL_EMBEDDINGS=1 to
+# re-measure (the test prints the distribution on a green run).
+_PER_BUCKET_PRECISION_FLOOR = 0.8
 
 
 def _real_embeddings_requested() -> bool:
