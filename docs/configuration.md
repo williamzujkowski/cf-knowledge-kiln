@@ -82,6 +82,39 @@ partial-success work worth committing, so the loud-failure
 semantics still hold. Before #151 a single bad batch would discard
 every sibling batch's successful work.
 
+## Connection pool sizing (`KILN_PG_POOL_*`)
+
+Each Python process opens up to `KILN_PG_POOL_SIZE +
+KILN_PG_POOL_MAX_OVERFLOW` connections to Postgres — the defaults are
+`5 + 10 = 15` per process. `Database.__init__` logs these at startup
+(`starting Postgres engine: ... (pool_size=5, max_overflow=10)`).
+
+The connection total to budget against the database's
+`max_connections` is **per process, summed across every process**:
+
+```text
+total ≈ KILN_WEB_WORKERS × (pool_size + max_overflow)   # the api app
+      + 1              × (pool_size + max_overflow)      # the worker app
+```
+
+`KILN_WEB_WORKERS` is the uvicorn worker count for the api app
+(default 2; see the env-var table). The worker app runs a single
+process.
+
+**Worked example.** With the defaults and `KILN_WEB_WORKERS=4`:
+`4 × 15 + 1 × 15 = 75` connections. A managed Postgres plan that caps
+`max_connections` at 100 has only ~25 left for migrations, `psql`
+sessions, and monitoring — tight. Raise `KILN_WEB_WORKERS` further and
+the app deadlocks on pool exhaustion under load: it starts cleanly,
+then stalls — a failure mode with no obvious error.
+
+**Recommendation for multi-worker CF deployments.** Lower the
+per-process pool — `KILN_PG_POOL_SIZE=2` keeps each process at
+`2 + 10 = 12` and leaves `max_overflow` as burst headroom. Size it so
+`(KILN_WEB_WORKERS + 1) × (pool_size + max_overflow)` stays a
+comfortable margin under the database's `max_connections`. Confirm the
+plan's `max_connections` with `SHOW max_connections;`.
+
 ## YAML config files
 
 These live under `config/` and are loaded at boot. The `.example`
