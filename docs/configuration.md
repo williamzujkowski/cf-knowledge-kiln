@@ -17,6 +17,7 @@ the manifest.
 | `KILN_ENV`                            | `development`            | One of `development`, `staging`, `production`.                     |
 | `KILN_LOG_LEVEL`                      | `INFO`                   | `DEBUG` / `INFO` / `WARNING` / `ERROR`.                            |
 | `KILN_HTTP_PORT`                      | `8080`                   | Local bind port. CF overrides with `$PORT`.                        |
+| `KILN_WEB_WORKERS`                    | `2`                      | uvicorn worker processes for the API (read by `scripts/start-api.sh`). |
 | `KILN_DATABASE_URL`                   | *(unset in CF)*          | Direct DB URL. In CF, leave unset and bind a Postgres service.     |
 | `KILN_PG_SERVICE_NAME`                | `cf-knowledge-kiln-db`   | Name to look up in `VCAP_SERVICES`.                                |
 | `KILN_PG_POOL_SIZE`                   | `5`                      | Connection pool size.                                              |
@@ -35,8 +36,8 @@ the manifest.
 | `KILN_SOURCE_ALLOWLIST_PATH`          | `config/sources.yaml`    | Path to the source allowlist.                                      |
 | `KILN_AUTH_MODE`                      | `none`                   | `none` (dev only) / `bearer` / `mtls`.                             |
 | `KILN_BEARER_TOKEN`                   | —                        | Required when `KILN_AUTH_MODE=bearer`.                             |
-| `KILN_OTEL_EXPORTER_OTLP_ENDPOINT`    | —                        | If set, enables OTLP exporter.                                     |
-| `KILN_OTEL_SERVICE_NAME`              | `cf-knowledge-kiln`      | OpenTelemetry service.name.                                        |
+| `KILN_OTEL_EXPORTER_OTLP_ENDPOINT`    | —                        | Reserved — accepted but not yet wired; no OTLP exporter is installed. |
+| `KILN_OTEL_SERVICE_NAME`              | `cf-knowledge-kiln`      | Reserved — OpenTelemetry `service.name` for when the exporter lands. |
 
 ## Embedding fan-out (`KILN_INGEST_EMBED_*`)
 

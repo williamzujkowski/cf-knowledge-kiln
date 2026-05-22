@@ -234,6 +234,12 @@ async def serve(
 
     db = Database(url, pool_size=settings.pg_pool_size, max_overflow=settings.pg_pool_max_overflow)
     provider = build_provider_from_settings(settings)
+    # #178: surface the embedding state at startup instead of leaving
+    # it for the first job to discover.
+    if provider is None:
+        logger.info("no embedding provider configured; ingestion will skip the embedding pass")
+    else:
+        logger.info("embedding provider ready: %s (%s)", provider.model, provider.provider)
     phrases = load_phrases(settings.security_config_path)
     sensitive = load_patterns(settings.security_config_path)
     worker = Worker(

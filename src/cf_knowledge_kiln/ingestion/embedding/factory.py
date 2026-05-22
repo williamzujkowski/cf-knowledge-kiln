@@ -230,7 +230,11 @@ def build_embedding_provider(
     real sentence-transformers weights.
     """
     if not config.enabled:
-        raise EmbeddingConfigError(f"embedding model {config.name!r} is disabled in config")
+        raise EmbeddingConfigError(
+            f"embedding model {config.name!r} is disabled in config — "
+            f"remove `enabled: false` from models.yaml to activate it, "
+            f"or select a different model."
+        )
     try:
         factory = _PROVIDER_FACTORIES[config.provider]
     except KeyError as exc:
