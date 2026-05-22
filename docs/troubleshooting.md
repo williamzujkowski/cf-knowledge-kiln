@@ -73,8 +73,10 @@ failed. On startup the worker runs a recovery sweep
 (`_recover_stale_running`) over every `running` job:
 
 - `result_run_id` set **and** the referenced `ingestion_runs` row is
-  `succeeded` → the work finished durably before the crash; the job
-  is marked `succeeded` (not redone).
+  `succeeded` or `partial` → the work finished durably before the
+  crash; the job is marked `succeeded` (not redone). A `partial` run
+  is a real outcome — some batches failed but the committed work
+  stands; see "Slow or failing embedding provider" below.
 - `result_run_id` set but the run is `running`/`failed`, **or**
   `result_run_id` is unset → the work did not finish; the job is
   requeued.
