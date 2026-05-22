@@ -38,6 +38,7 @@ def _chunk(
     document_id=None,
     last_reviewed: date | None = None,
     chunk_metadata=None,
+    has_sensitive_content: bool = False,
 ) -> RankedChunk:
     return RankedChunk(
         chunk_id=uuid4(),
@@ -46,6 +47,7 @@ def _chunk(
         status=status,
         heading_path=heading,
         last_reviewed=last_reviewed,
+        has_sensitive_content=has_sensitive_content,
         chunk_metadata=chunk_metadata or {"text": text},
     )
 
@@ -234,6 +236,61 @@ class TestAssembleContextPack:
         ev = pack.evidence[0]
         assert ev.text == "the actual body"
         assert ev.title == "A Doc"
+
+    def test_token_estimate_counts_the_whole_pack_not_just_content(self) -> None:
+        """#189: used_estimate covers the envelope + notice, not only chunk text.
+
+        An empty-evidence pack has zero chunk content but still ships the
+        untrusted-content notice + JSON envelope — the estimate must
+        reflect that, so an agent budgets against an honest number.
+        """
+        from cf_knowledge_kiln.agent.serializers import UNTRUSTED_CONTENT_NOTICE
+        from cf_knowledge_kiln.ingestion.tokens import count_tokens
+
+        inputs = SerializerInputs(
+            chunks=[],
+            warnings=[],
+            conflicts=[],
+            chunk_text={},
+            document_refs={},
+            related_sources=[],
+        )
+        pack = assemble_context_pack(inputs, task="t", query="q", max_chunks=8, max_tokens=3000)
+        # Old behaviour reported 0 for an empty pack; the estimate now
+        # includes at least the always-present untrusted-content notice.
+        assert pack.token_budget.used_estimate >= count_tokens(UNTRUSTED_CONTENT_NOTICE)
+
+    def test_missing_document_ref_forces_review(self) -> None:
+        """#189: a chunk with no DocumentRef is effectively uncited — the
+        pack must flag review rather than silently emit an uncited chunk."""
+        chunk = _chunk(score=0.9)
+        inputs = SerializerInputs(
+            chunks=[chunk],
+            warnings=[],
+            conflicts=[],
+            chunk_text={chunk.chunk_id: "body"},
+            document_refs={},  # no ref for the chunk
+            related_sources=[],
+        )
+        pack = assemble_context_pack(inputs, task="t", query="q", max_chunks=8, max_tokens=3000)
+        assert pack.requires_human_review is True
+        assert any("missing source citations" in r for r in pack.review_reasons)
+
+    def test_dropped_sensitive_chunk_named_in_review_reasons(self) -> None:
+        """#189: sensitive chunks are stripped from evidence — say so, so the
+        agent knows evidence was removed, not just that a warning fired."""
+        sensitive = _chunk(score=0.9, has_sensitive_content=True)
+        inputs = SerializerInputs(
+            chunks=[sensitive],
+            warnings=[],
+            conflicts=[],
+            chunk_text={sensitive.chunk_id: "body"},
+            document_refs={sensitive.document_id: _ref(document_id=sensitive.document_id)},
+            related_sources=[],
+        )
+        pack = assemble_context_pack(inputs, task="t", query="q", max_chunks=8, max_tokens=3000)
+        assert pack.evidence == []  # the sensitive chunk was dropped
+        assert any("sensitive content were dropped" in r for r in pack.review_reasons)
 
 
 def _ref(*, document_id=None, title: str = "T") -> DocumentRef:

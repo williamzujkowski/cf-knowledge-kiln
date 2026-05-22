@@ -395,7 +395,7 @@ components:
 
     ContextPackResponse:
       type: object
-      required: [context_pack_id, answerable, evidence, token_budget, warnings, requires_human_review]
+      required: [context_pack_id, answerable, evidence, token_budget, warnings, requires_human_review, untrusted_content_notice]
       properties:
         context_pack_id:
           type: string

@@ -128,13 +128,14 @@ class TestContextPackResponse:
             warnings=[],
             token_budget=TokenBudget(requested=3000, used_estimate=0),
             requires_human_review=True,
+            untrusted_content_notice="source evidence only",
         )
         assert pack.evidence == []
         assert pack.warnings == []
         assert pack.conflicts == []
         assert pack.related_sources == []
         assert pack.review_reasons == []
-        assert pack.untrusted_content_notice is None
+        assert pack.untrusted_content_notice == "source evidence only"
 
     def test_evidence_and_warnings_are_required(self) -> None:
         """Hand-spec requires both; Pydantic must too (drift test enforces)."""
@@ -142,6 +143,19 @@ class TestContextPackResponse:
             ContextPackResponse(  # type: ignore[call-arg]
                 context_pack_id=uuid4(),
                 answerable=False,
+                token_budget=TokenBudget(requested=100, used_estimate=0),
+                requires_human_review=True,
+                untrusted_content_notice="n",
+            )
+
+    def test_untrusted_content_notice_is_required(self) -> None:
+        """#188: the notice is a guarantee — omitting it must fail validation."""
+        with pytest.raises(ValidationError):
+            ContextPackResponse(  # type: ignore[call-arg]
+                context_pack_id=uuid4(),
+                answerable=False,
+                evidence=[],
+                warnings=[],
                 token_budget=TokenBudget(requested=100, used_estimate=0),
                 requires_human_review=True,
             )
@@ -156,6 +170,7 @@ class TestContextPackResponse:
                 confidence="meh",  # type: ignore[arg-type]
                 token_budget=TokenBudget(requested=100, used_estimate=10),
                 requires_human_review=False,
+                untrusted_content_notice="n",
             )
 
     def test_extras_forbidden(self) -> None:
@@ -167,5 +182,6 @@ class TestContextPackResponse:
                 warnings=[],
                 token_budget=TokenBudget(requested=100, used_estimate=10),
                 requires_human_review=False,
+                untrusted_content_notice="n",
                 surprise=1,  # type: ignore[call-arg]
             )
