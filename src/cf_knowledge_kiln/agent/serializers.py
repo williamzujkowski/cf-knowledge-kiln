@@ -200,19 +200,41 @@ def assemble_context_pack(
     # warning was already emitted by the engine; the agent caller sees
     # it via inputs.warnings + the requires_human_review trip.
     safe_inputs = [c for c in inputs.chunks if not c.has_sensitive_content]
+    dropped_sensitive = len(inputs.chunks) - len(safe_inputs)
     contents = [inputs.chunk_text.get(c.chunk_id, "") for c in safe_inputs]
     kept, used = trim_evidence_to_budget(
         safe_inputs, contents=contents, max_chunks=max_chunks, max_tokens=max_tokens
     )
     evidence = [_to_evidence_chunk(c, inputs.chunk_text, inputs.document_refs) for c in kept]
-    needs_review = requires_human_review(
+    # #189: a kept chunk with no DocumentRef is effectively uncited —
+    # _to_evidence_chunk fills a "(unknown)" placeholder with null
+    # repo/path/source_url. That conflicts with the "cited or silent"
+    # directive, so surface it: force review + a reason rather than
+    # quietly emitting an uncited evidence chunk.
+    uncited = sum(1 for c in kept if c.document_id not in inputs.document_refs)
+    # Force review on uncited evidence OR dropped sensitive content,
+    # independent of the warning channel: if a review_reason exists, the
+    # flag must agree (#189). Sensitive drops normally also raise a
+    # `sensitive_content` warning that `requires_human_review` catches —
+    # the explicit `dropped_sensitive` term is defense in depth.
+    needs_review = (
+        requires_human_review(
+            kept,
+            inputs.warnings,
+            inputs.conflicts,
+            weak_evidence_threshold=weak_evidence_threshold,
+        )
+        or uncited > 0
+        or dropped_sensitive > 0
+    )
+    reasons = _review_reasons(
         kept,
         inputs.warnings,
         inputs.conflicts,
-        weak_evidence_threshold=weak_evidence_threshold,
+        uncited=uncited,
+        dropped_sensitive=dropped_sensitive,
     )
-    reasons = _review_reasons(kept, inputs.warnings, inputs.conflicts)
-    return ContextPackResponse(
+    pack = ContextPackResponse(
         context_pack_id=uuid4(),
         answerable=bool(kept) and not needs_review,
         confidence=derive_confidence(
@@ -228,6 +250,18 @@ def assemble_context_pack(
         requires_human_review=needs_review,
         review_reasons=reasons,
         untrusted_content_notice=UNTRUSTED_CONTENT_NOTICE,
+    )
+    # #189: used_estimate must reflect the WHOLE pack an agent ingests —
+    # evidence text + per-chunk citation metadata + warnings + the
+    # untrusted-content notice + the JSON envelope — not just chunk
+    # content. `trim_evidence_to_budget`'s `used` (content-only) drives
+    # the trim decision; the reported estimate is recounted against the
+    # assembled response so an agent budgets against an honest number.
+    # The recount sees the provisional `used_estimate` in the JSON — a
+    # sub-token rounding difference between a 1- and 4-digit number.
+    real_estimate = count_tokens(pack.model_dump_json())
+    return pack.model_copy(
+        update={"token_budget": TokenBudget(requested=max_tokens, used_estimate=real_estimate)}
     )
 
 
@@ -264,12 +298,20 @@ def _coerce_date(value: date | None) -> date | None:
 
 
 def _review_reasons(
-    chunks: list[RankedChunk], warnings: list[Warning], conflicts: list[Conflict]
+    chunks: list[RankedChunk],
+    warnings: list[Warning],
+    conflicts: list[Conflict],
+    *,
+    uncited: int = 0,
+    dropped_sensitive: int = 0,
 ) -> list[str]:
     """Human-readable bullets explaining why review is required.
 
     Empty when no review is needed; otherwise one short string per
-    triggering condition (in priority order).
+    triggering condition (in priority order). ``uncited`` and
+    ``dropped_sensitive`` (#189) make two otherwise-opaque conditions
+    explicit: evidence chunks with no source citation, and chunks
+    removed from evidence because they carried sensitive content.
     """
     reasons: list[str] = []
     if conflicts:
@@ -286,6 +328,12 @@ def _review_reasons(
     if chunks and max(c.score for c in chunks) < WEAK_EVIDENCE_SCORE_THRESHOLD:
         reasons.append(
             f"Top score below weak-evidence threshold ({WEAK_EVIDENCE_SCORE_THRESHOLD})."
+        )
+    if uncited:
+        reasons.append(f"{uncited} evidence chunk(s) are missing source citations.")
+    if dropped_sensitive:
+        reasons.append(
+            f"{dropped_sensitive} chunk(s) with sensitive content were dropped from evidence."
         )
     return reasons
 

@@ -258,7 +258,11 @@ class ContextPackResponse(BaseModel):
     token_budget: TokenBudget
     requires_human_review: bool
     review_reasons: list[str] = Field(default_factory=list)
-    untrusted_content_notice: str | None = None
+    # Required, not optional (#188): AGENTS.md makes the untrusted-content
+    # preamble a guarantee for every agent response. A non-optional field
+    # means it cannot be omitted at construction or stripped by
+    # response_model_exclude_none.
+    untrusted_content_notice: str
 
 
 __all__ = [
