@@ -107,6 +107,25 @@ freshness:
         config = load_retrieval_config(path)
         assert config.stale_after_days is None
 
+    def test_rejects_zero_stale_after_days(self, tmp_path: Path) -> None:
+        """#172: stale_after_days=0 makes the freshness math divide by zero."""
+        path = _write(
+            tmp_path / "security.yaml",
+            "freshness:\n  stale_after_days: 0\n",
+        )
+        with pytest.raises(RetrievalConfigError):
+            load_retrieval_config(path)
+
+    def test_rejects_negative_stale_after_days(self, tmp_path: Path) -> None:
+        """#172: a negative window inverts the freshness factor — older docs
+        would score *higher*. Refuse it at config-load time."""
+        path = _write(
+            tmp_path / "security.yaml",
+            "freshness:\n  stale_after_days: -30\n",
+        )
+        with pytest.raises(RetrievalConfigError):
+            load_retrieval_config(path)
+
     def test_rejects_negative_status_weight(self, tmp_path: Path) -> None:
         """A negative weight would invert ranking; refuse at load time."""
         path = _write(
