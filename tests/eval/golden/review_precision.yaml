@@ -34,7 +34,10 @@ version: 1
 # scoring the actual Nomic Embed v1.5 top-3 chunks per case (#108
 # closure). Consensus was strong: 26/33 unanimous, 0/33 with disagree-
 # ment spread ≥ 2. Each block is tagged with the consensus marker.
-# Re-grade when the corpus or the retriever's top-K behavior shifts.
+#
+# Re-grade when the corpus or the retriever's top-K behavior shifts —
+# the procedure is reproducible: see tests/eval/golden/GRADING.md and
+# the tests/eval/regrade_review_precision.py harness (#165).
 #
 # Scorer (tests/eval/test_review_precision.py): fraction of cases
 # where pack.requires_human_review matches the label. Target ≥ 0.85
