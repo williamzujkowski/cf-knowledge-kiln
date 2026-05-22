@@ -11,7 +11,9 @@ Two subcommands:
   run the retriever over every review case, and emit the
   (case, query, top-3 chunk) pairs that need grading — with the rubric
   — to ``tests/eval/reports/grading_worksheet.yaml``. Deterministic
-  given the corpus + model.
+  given the corpus + model. **It TRUNCATEs the target database first**,
+  so point ``KILN_DATABASE_URL`` at a disposable dev database — never
+  a database with data you want to keep.
 * ``aggregate`` — given N per-judge grade files, compute the per-pair
   median grade + consensus stats and print the ``relevance:`` blocks
   ready to paste into ``review_precision.yaml``. Deterministic.
@@ -154,6 +156,11 @@ async def _build_worksheet(database_url: str) -> dict[str, Any]:
 
     eng = create_async_engine(database_url)
     try:
+        print(
+            "worksheet: TRUNCATING all tables, then seeding docs/_eval/ — "
+            "this destroys existing data in the target database.",
+            file=sys.stderr,
+        )
         async with eng.begin() as conn:
             await conn.execute(text(f"TRUNCATE {_TRUNCATE_TABLES} RESTART IDENTITY CASCADE"))
         maker = async_sessionmaker(eng, expire_on_commit=False)
@@ -236,7 +243,10 @@ def _cmd_aggregate(judge_files: list[str]) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("worksheet", help="emit the grading worksheet from the live retriever")
+    sub.add_parser(
+        "worksheet",
+        help="emit the grading worksheet from the live retriever (TRUNCATES the DB first)",
+    )
     agg = sub.add_parser("aggregate", help="median + consensus from per-judge grade files")
     agg.add_argument("judge_files", nargs="+", help="per-judge YAML grade files")
     args = parser.parse_args(argv)
