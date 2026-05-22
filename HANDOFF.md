@@ -1,9 +1,9 @@
 # Handoff notes
 
-**As of:** 2026-05-17 (Phase 9 close-out + #100 backlog burn-down)
-**Status:** Phases 0–9 complete. Every phase epic (#1–#8), the cross-cutting warnings surface (#33), and the #100 journey-eval extension backlog are closed. CI green on `main` (539 unit + 107 integration + 19 eval tests; PRs #88–#107 across the autonomous run).
+**As of:** 2026-05-22 (post-Phase-9 retrieval-quality + hardening run)
+**Status:** Phases 0–9 complete. CI green on `main` — **654 unit + 174 integration + 22 eval tests**. The work since 2026-05-17 has been retrieval-quality calibration, security hardening, and operational polish on top of the finished phases — see [Updates since 2026-05-17](#updates-since-2026-05-17) below.
 
-This file is the "where we are, what's next, what's been decided" briefing. For *how* to work in the repo, read [AGENTS.md](./AGENTS.md). For *what* the project is, read [README.md](./README.md). For *the plan*, read [plans/cf-rag-plan.md](./plans/cf-rag-plan.md).
+This file is the "where we are, what's next, what's been decided" briefing. For *how* to work in the repo, read [AGENTS.md](./AGENTS.md). For *what* the project is, read [README.md](./README.md). For *the plan*, read [plans/cf-rag-plan.md](./plans/cf-rag-plan.md). When something breaks, read [docs/troubleshooting.md](./docs/troubleshooting.md).
 
 ---
 
@@ -24,13 +24,45 @@ cf-knowledge-kiln is a Cloud Foundry RAG knowledge app — a `cf push`'d Python/
 | 8 | ✅ Complete | bearer auth (#77); rate limit (#90); SBOM + grype (#82); Concourse pipeline (#97) |
 | 9 | ✅ Complete | retrieval eval harness (#92); end-to-end UX eval (#99); public/template readiness (#95); forking guide (#96); coverage-gaps + frontmatter size cap (#102); journey eval extensions (#105); sensitive-content scanner (#106); query-side prompt-injection normalization (#107) |
 
-**What's left in the open-issue list** (none of it blocks the in-repo agent):
+The CF deploy gate continues to wait on the operator track ([bosh-pgvector-release#3](https://github.com/williamzujkowski/bosh-pgvector-release/issues/3)), independent of all in-repo work.
 
-1. **[#93](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/93)** — enable GitHub Code Scanning at repo settings (admin-only click). Drops the spurious CodeQL failure that's been red on every PR for the whole run.
-2. **[#108](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/108)** — `requires_human_review` precision + confidence calibration. Both need a hand-labeled multi-relevance gold corpus that doesn't exist today; mechanically the harness shape from #99 + #105 + #106 + #107 supports them when the corpus lands.
-3. **[#35](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/35)** — operator-side BOSH-deployed Postgres prereq. Not for this repo's agent; tracked because the CF deploy gate still depends on [bosh-pgvector-release#3](https://github.com/williamzujkowski/bosh-pgvector-release/issues/3) (operator runbook).
+---
 
-The CF deploy gate continues to wait on the operator track. Independent of all in-repo work.
+## Updates since 2026-05-17
+
+Phases 0–9 were complete as of 2026-05-17. Everything below is calibration, hardening, and polish merged on top — the historical phase narrative further down is unchanged and still accurate.
+
+**Retrieval quality / eval (#108 closed):**
+
+- **#145, #149, #150, #152** — kiln-self-referential review-precision corpus; local sentence-transformers provider (Nomic Embed v1.5 default); batched concurrent embedding fan-out; multi-relevance schema + env-gated real-embedding eval swap.
+- **#160, #162** — re-baselined the weak-evidence threshold for the RRF score scale; relevance-aware warning emission (`max_warning_rank` + `relevance_floor`).
+- **#163** — consensus-graded relevance map (5-judge median) + per-bucket precision floor.
+- **#166** — normalized the fused RRF score to `[0, 1]` so the `derive_confidence` 0.8 high-confidence cutoff is actually reachable.
+- **#173** — re-measured per-bucket confidence precision post-normalization; `high` bucket now populates (2/2 = 1.000); ratcheted the floor 0.75 → 0.8.
+
+**Security / hardening:**
+
+- **#157** — strict CSP: vendored htmx + fonts, dropped inline style, added the CSP middleware.
+- **#168** — `trust_remote_code` is config-driven, so the configured embedding model actually loads.
+- **#174** — bounded caller-supplied request inputs (query/task length, filter-list item counts) — closes a single-request DoS.
+- **#179** — `/readyz` now probes the embedding provider, not just Postgres, so a misconfigured instance reports `degraded` instead of routing dead traffic.
+
+**Refactors / fixes:**
+
+- **#156** — per-batch failure granularity in the embedding fan-out.
+- **#155, #142, #143, #141** — module splits to hold the 400-line cap (eval helpers, `web.py`, `kiln.css`, inline JS).
+- **#175** — replaced the `pytest_plugins` hook (forbidden outside the rootdir conftest) with explicit fixture imports.
+- **#180** — split `pipeline.py` (543 lines) into `pipeline.py` + `_file_processing.py` + `_summary.py`, all under the cap.
+- **#139, #138** — OKLCH palette + a11y pass; motion polish + dark palette.
+
+**Current open issues** (none block the in-repo agent):
+
+| Issue | What |
+|---|---|
+| [#165](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/165) | eval: commit grading artifacts or add a reproducible grading script |
+| [#172](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/172) | test: coverage-gaps bundle (fan-out audit follow-up) |
+| [#178](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/178) | observability gaps + operator config nits |
+| [#35](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/35) | operator-side BOSH-deployed Postgres prereq (operator track, not this repo's agent) |
 
 ---
 
@@ -198,16 +230,11 @@ TOCTOU between our DNS lookup and httpx's connect lookup is filed as #81; mitiga
 
 ## What's next (in order)
 
-### Recommended order (per the late-night run wrap-up)
+All phases (0–9) and their follow-ups are done. The remaining backlog is small, non-blocking polish — see the **Current open issues** table under [Updates since 2026-05-17](#updates-since-2026-05-17). Recommended order:
 
-1. **Phase 9 #31 — eval harness.** Most impactful unlock; we now have stable retrieval + context-pack APIs to score against. Probably starts with `tests/eval/` + a small recall/MRR rig over a few known queries with golden chunks.
-2. **Phase 7 #26 — smoke-test script + `apps.internal` route docs.** Small; closes Phase 7 entirely.
-3. **Phase 8 #30 — Concourse pipeline.** Mirrors `.github/workflows/ci.yml` for CF-foundation-native CI/CD.
-4. **#81 — TOCTOU DNS-pinning** for the HTTP source connector. Reviewer-flagged on PR #80. Mitigation needs a custom `httpx.HTTPTransport` that pins the resolved IP for the lifetime of one fetch.
-5. **#79 — rate limit `/feedback` + `/search`.** Reviewer-flagged on PR #78. Per-IP token bucket in-process is the MVP shape; defer Redis until horizontal scale.
-6. **#54 — bundled small test-coverage gaps.** `/readyz` failing-branch test, lifespan error path, `QueriesRepository.list(since=)`, `_expand_globs` edge tests, `_walk` cap-order reorder, frontmatter size limit. Bite-sized.
-7. **Phase 9 #32 — forking guide.** Phase 9 capstone; needs Phase 8 done first (#30 + #79 ideally).
-8. **#34 — public/template readiness review** before flipping the repo public.
+1. **[#172](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/172) — test coverage-gaps bundle.** Verified-candidate gaps from a fan-out audit; bite-sized Red/Green additions.
+2. **[#178](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/178) — observability + operator config nits.** Request-level structured logging + a few one-line doc/config fixes.
+3. **[#165](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/165) — reproducible relevance-grading script.** So the consensus grade map can be re-derived when the corpus or retriever shifts.
 
 ### Parallel (operator track — don't do these here)
 
@@ -321,6 +348,7 @@ Closed during the late-night run: #25 (#78), #27 (#80), #28 (#82), #29 (#77), #4
 - **Architecture overview:** [docs/architecture.md](./docs/architecture.md)
 - **User journeys (human + agent):** [docs/user-journeys.md](./docs/user-journeys.md)
 - **Deployment (CF):** [docs/deployment-cloud-foundry.md](./docs/deployment-cloud-foundry.md)
+- **Troubleshooting runbook:** [docs/troubleshooting.md](./docs/troubleshooting.md)
 - **All ADRs:** [docs/adr/README.md](./docs/adr/README.md)
 - **Plan (original):** [plans/cf-rag-plan.md](./plans/cf-rag-plan.md)
 - **All open issues:** `gh issue list -R williamzujkowski/cf-knowledge-kiln`
@@ -335,44 +363,14 @@ cd /home/william/git/cf-knowledge-kiln
 git checkout main && git pull
 docker start kiln-pg  # pgvector container; ignore "already running"
 export KILN_DATABASE_URL=postgresql+asyncpg://kiln:kiln@localhost:5432/kiln  # pragma: allowlist secret
-PY=.venv/bin/python make verify             # 369 unit baseline
-.venv/bin/pytest tests/integration -q       # 96 integration baseline
+make verify                                  # 654 unit baseline (+ lint + mypy + openapi-lint)
+python -m pytest tests/integration -q         # 174 integration baseline
 ```
 
-For the next chunk (Phase 9 #31 — retrieval-eval harness):
+Pick the top open issue from the **What's next** list above, branch (`git checkout -b <type>/<issue>-<slug>`), work it Red/Green per AGENTS.md, and open a PR. `make verify` must be green before every commit.
+
+For the real-embedding eval tier (opt-in; needs the `real-embeddings` extra + Nomic weights):
 
 ```bash
-git checkout -b feat/phase-9-eval-harness
-gh issue view 31 -R williamzujkowski/cf-knowledge-kiln
-# Plan: tests/eval/ with a small golden-judgment set, MRR + recall@K
-# scorers wired to HybridRetriever.search, baseline numbers committed.
-```
-
-(Stale instructions for the no-longer-current next chunks left below as historical reference.)
-
-For the next chunk (#74 — collapse to one DB session per request):
-
-```bash
-git checkout -b fix/74-one-session-per-request
-gh issue view 74              # read the recommended fix
-# Touch points:
-#   src/cf_knowledge_kiln/retrieval/engine.py  (signature + _fetch_candidates)
-#   src/cf_knowledge_kiln/api/retrieval.py     (handler opens session, passes it down)
-#   src/cf_knowledge_kiln/api/dependencies.py  (add get_session dep)
-#   tests/integration/test_api_routes.py       (add concurrency assertion)
-```
-
-For Phase 6 (HTMX UI), ask the user about templating + styling choices first — this is the first UI work in the repo:
-
-```bash
-gh issue view 5                # epic
-gh issue view 23               # first child (search UI scaffold)
-cat docs/user-journeys.md      # intended human flow
-```
-
-Or, to start the operator track in parallel:
-
-```bash
-gh issue view 3 -R williamzujkowski/bosh-pgvector-release
-# follow the runbook on a session where you can `source ~/deployments/bosh/env.sh`
+KILN_EVAL_REAL_EMBEDDINGS=1 make eval
 ```

@@ -263,3 +263,10 @@ cf logs cf-knowledge-kiln-worker --recent
 | Run a one-off task            | `cf run-task cf-knowledge-kiln-worker --command '...'` |
 | SSH into a container          | `cf ssh cf-knowledge-kiln-api`                         |
 | Tail recent logs              | `cf logs cf-knowledge-kiln-api --recent`               |
+
+## Troubleshooting
+
+When something is broken — `/readyz` degraded, a stuck ingestion job,
+a crashed worker, a misconfigured embedding provider — see the
+[troubleshooting runbook](./troubleshooting.md). It is organized as
+Symptom → Diagnosis → Action per failure mode.
