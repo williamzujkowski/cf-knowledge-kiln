@@ -1,8 +1,8 @@
 """Eval-suite fixtures.
 
-Reuses the integration suite's session-scoped fixtures via the
-``pytest_plugins`` hook below so the eval tier inherits the same
-migrations-applied DB and AsyncEngine without duplicating fixtures.
+Reuses the integration suite's DB fixtures (imported explicitly below)
+so the eval tier inherits the same migrations-applied DB without
+duplicating fixtures.
 
 Seeds the repo's own ``docs/`` tree once per session under
 :class:`MockEmbeddingProvider`. The vector arm is therefore degenerate
@@ -28,10 +28,25 @@ from cf_knowledge_kiln.ingestion.pipeline import run_source
 from cf_knowledge_kiln.ingestion.sources import LocalSource
 from cf_knowledge_kiln.retrieval import HybridRetriever, load_retrieval_config
 
-# Load the integration suite's session-scoped fixtures (database_url,
-# engine, _apply_migrations). pytest_plugins must live in a top-level
-# conftest, and tests/eval/conftest.py is one — sibling, not nested.
-pytest_plugins = ["tests.integration.conftest"]
+# Reuse the integration suite's DB fixtures. Imported explicitly rather
+# than via ``pytest_plugins`` — modern pytest forbids ``pytest_plugins``
+# outside the rootdir conftest, and tests/eval/conftest.py is NOT the
+# rootdir (#170). Importing the fixture functions into this conftest
+# registers them for the tests/eval/ subtree only, which is exactly the
+# scoping the old hook was reaching for.
+#
+# This must be the COMPLETE fixture set from that module — re-exporting
+# by import (unlike ``pytest_plugins``, which loads the whole module)
+# registers only the names listed here, so a fixture's transitive deps
+# must be listed too: ``_truncate_between_tests`` -> ``engine`` ->
+# ``database_url``. The two autouse fixtures (``_apply_migrations``,
+# ``_truncate_between_tests``) re-register as autouse here.
+from tests.integration.conftest import (
+    _apply_migrations,
+    _truncate_between_tests,
+    database_url,
+    engine,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _GOLDEN_PATH = _REPO_ROOT / "tests" / "eval" / "golden" / "docs.yaml"

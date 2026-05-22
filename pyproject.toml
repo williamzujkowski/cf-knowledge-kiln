@@ -121,6 +121,12 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["S101", "ARG", "S105", "S106", "S603", "S607"]
+# The eval conftest re-exports integration-suite fixtures by importing
+# them (the pytest-supported alternative to `pytest_plugins`, which is
+# forbidden outside the rootdir conftest — #170). That pattern trips
+# F401 (a re-exported fixture looks unused) and F811 (a fixture consumed
+# as a parameter shadows its own re-export) — both false positives here.
+"tests/eval/conftest.py" = ["S101", "ARG", "S105", "S106", "S603", "S607", "F401", "F811"]
 
 [tool.ruff.format]
 quote-style = "double"
