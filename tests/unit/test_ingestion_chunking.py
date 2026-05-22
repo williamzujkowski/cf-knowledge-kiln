@@ -331,7 +331,7 @@ def test_no_frontmatter_skips_size_check() -> None:
 
 
 def test_safe_source_url_accepts_http_and_https() -> None:
-    from cf_knowledge_kiln.ingestion.pipeline import _safe_source_url
+    from cf_knowledge_kiln.ingestion._file_processing import _safe_source_url
 
     assert _safe_source_url("https://docs.example.com/x") == "https://docs.example.com/x"
     assert _safe_source_url("http://docs.example.com/x") == "http://docs.example.com/x"
@@ -351,13 +351,13 @@ def test_safe_source_url_accepts_http_and_https() -> None:
 )
 def test_safe_source_url_rejects_non_http_schemes(hostile: str) -> None:
     """#24 HIGH: stored-XSS prevention. Anything not http(s) → None."""
-    from cf_knowledge_kiln.ingestion.pipeline import _safe_source_url
+    from cf_knowledge_kiln.ingestion._file_processing import _safe_source_url
 
     assert _safe_source_url(hostile) is None
 
 
 def test_safe_source_url_rejects_empty_and_non_string() -> None:
-    from cf_knowledge_kiln.ingestion.pipeline import _safe_source_url
+    from cf_knowledge_kiln.ingestion._file_processing import _safe_source_url
 
     assert _safe_source_url(None) is None
     assert _safe_source_url("") is None
@@ -368,7 +368,7 @@ def test_safe_source_url_rejects_empty_and_non_string() -> None:
 
 def test_safe_source_url_rejects_scheme_without_netloc() -> None:
     """``https:`` with no host is not a valid absolute URL."""
-    from cf_knowledge_kiln.ingestion.pipeline import _safe_source_url
+    from cf_knowledge_kiln.ingestion._file_processing import _safe_source_url
 
     assert _safe_source_url("https:") is None
     # A relative path is not an absolute URL.
