@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     # Database — optional locally; required in CF (via service binding).
     database_url: str | None = None
     pg_service_name: str = "cf-knowledge-kiln-db"
+    # Per-process pool: up to pg_pool_size + pg_pool_max_overflow
+    # connections. Budget against Postgres max_connections summed over
+    # every process (KILN_WEB_WORKERS api workers + 1 worker app) —
+    # see "Connection pool sizing" in docs/configuration.md before
+    # raising the worker count.
     pg_pool_size: int = 5
     pg_pool_max_overflow: int = 10
 
