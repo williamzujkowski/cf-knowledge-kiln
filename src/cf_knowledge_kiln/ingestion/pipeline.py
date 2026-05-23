@@ -170,12 +170,22 @@ def _runs_update(
     errors: list[str] | None = None,
     commit_sha: str | None = None,
 ) -> Any:
+    # #202: ``clock_timestamp()`` not ``now()``. Postgres' ``now()`` (and
+    # the equivalent ``transaction_timestamp()``) returns the
+    # START-OF-TRANSACTION time. ``run_source`` opens one transaction
+    # for the whole ingestion run — the ``runs_repo.create`` row
+    # (started_at default = ``now()``) and this terminal UPDATE
+    # (finished_at) commit together, so both timestamps would be equal
+    # to the microsecond and any wall-clock duration would be zero.
+    # ``clock_timestamp()`` reads the actual wall clock at the moment
+    # the UPDATE executes, so ``finished_at - started_at`` recovers
+    # the real run duration.
     return (
         update(IngestionRun)
         .where(IngestionRun.id == run_id)
         .values(
             status=status,
-            finished_at=func.now(),
+            finished_at=func.clock_timestamp(),
             stats=stats,
             warnings=warnings or [],
             errors=errors or [],

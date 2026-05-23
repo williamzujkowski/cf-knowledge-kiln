@@ -147,6 +147,14 @@ async def test_pipeline_indexes_local_source_end_to_end(
     assert len(runs) == 1
     assert runs[0].status == "succeeded"
     assert runs[0].stats["files_indexed"] == 3
+    # #202: finished_at must reflect wall-clock at update time, not the
+    # transaction-start (`now()` returns transaction_timestamp(), so when
+    # the row's started_at and the terminal UPDATE both happen inside one
+    # transaction they'd be equal to the microsecond and any duration
+    # metric would be 0). `clock_timestamp()` fixes this — finished_at
+    # is strictly greater than started_at for any non-empty run.
+    assert runs[0].finished_at is not None
+    assert runs[0].finished_at > runs[0].started_at
 
     sources = (await session.execute(select(DataSource))).scalars().all()
     assert {s.name for s in sources} == {"fixtures"}
