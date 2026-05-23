@@ -197,22 +197,42 @@ class _Section:
 
 
 def _group_into_sections(blocks: list[_Block]) -> list[_Section]:
-    """Group blocks into sections bounded by headings. Maintains heading-path stack."""
+    """Group blocks into sections bounded by headings. Maintains heading-path stack.
+
+    #201: a section whose only block is its heading (e.g. an ``H2`` with
+    no preamble before a nested ``H3``, or a top-level ``H1`` followed
+    immediately by ``H2``s) is skipped — emitting it produces a 2-5
+    token \"## Heading\" chunk that pollutes the index, burns embedding
+    storage, and lets a literal heading match boost a near-empty chunk
+    above richer siblings. The heading is still in the
+    ``heading_path`` of every descendant section, so no information
+    is lost; the standalone stub is the thing dropped.
+    """
     sections: list[_Section] = []
     path: list[str] = []
     current = _Section(heading_path=[])
     for block in blocks:
         if block.kind == "heading":
-            if current.blocks:
+            if _has_body(current):
                 sections.append(current)
             path = path[: block.heading_level - 1]
             path.append(block.heading_text)
             current = _Section(heading_path=list(path), blocks=[block])
         else:
             current.blocks.append(block)
-    if current.blocks:
+    if _has_body(current):
         sections.append(current)
     return sections
+
+
+def _has_body(section: _Section) -> bool:
+    """True iff the section contains at least one non-heading block.
+
+    #201 — a section whose blocks are only its heading is content-free
+    once the heading_path is preserved on descendant sections; emitting
+    it as its own chunk just pollutes the index.
+    """
+    return any(b.kind != "heading" for b in section.blocks)
 
 
 def _section_text(section: _Section) -> str:
