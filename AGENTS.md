@@ -47,6 +47,7 @@ These are enforced; PRs that violate them get bounced.
 # Dev
 make bootstrap        # install dev deps via uv/pip
 make install          # install package
+make lock             # regenerate uv.lock against pyproject.toml — see docs/dependencies.md (#194)
 make lint             # ruff check
 make format           # ruff format
 make typecheck        # mypy

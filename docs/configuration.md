@@ -127,6 +127,12 @@ The non-example files are gitignored.
 | `config/sources.yaml`           | Allowlisted ingestion sources.                             |
 | `config/security.yaml`          | Content filters, freshness thresholds, retrieval weights.  |
 
+## Dependencies
+
+The repo uses a `uv.lock` lockfile so deploys are reproducible. Edit
+`pyproject.toml` ranges, then run `make lock` to refresh. CI installs
+via `uv sync --frozen`. Full workflow: [docs/dependencies.md](./dependencies.md).
+
 ## Adding a setting
 
 1. Add the field to `Settings` in `src/cf_knowledge_kiln/config/settings.py`.
