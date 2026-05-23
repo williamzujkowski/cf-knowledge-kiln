@@ -46,7 +46,7 @@ class _NoOpSpan:
 
     def add_event(
         self,
-        name: str,
+        name: str,  # noqa: ARG002
         attributes: dict[str, Any] | None = None,  # noqa: ARG002
     ) -> None:
         return None
