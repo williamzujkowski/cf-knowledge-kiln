@@ -30,20 +30,32 @@ from cf_knowledge_kiln.api.tracing import get_tracer
 from cf_knowledge_kiln.db.connection import Database
 from cf_knowledge_kiln.db.repositories._hybrid import SearchRow
 from cf_knowledge_kiln.db.repositories.documents import ChunksRepository
+from cf_knowledge_kiln.retrieval._engine_helpers import (
+    collect_warnings as _collect_warnings,
+)
+from cf_knowledge_kiln.retrieval._engine_helpers import (
+    conflict_warnings as _conflict_warnings,
+)
+from cf_knowledge_kiln.retrieval._engine_helpers import (
+    document_refs_from_rows as _document_refs_from_rows,
+)
+from cf_knowledge_kiln.retrieval._engine_helpers import (
+    query_normalized_warning as _query_normalized_warning,
+)
+from cf_knowledge_kiln.retrieval._engine_helpers import (
+    require_nonempty as _require_nonempty,
+)
+from cf_knowledge_kiln.retrieval._engine_helpers import (
+    row_to_ranked_chunk as _row_to_ranked_chunk,
+)
 from cf_knowledge_kiln.retrieval.config import RetrievalConfig
 from cf_knowledge_kiln.retrieval.query_normalization import normalize_query
 from cf_knowledge_kiln.retrieval.ranking import (
     RankedChunk,
     apply_boosts,
-    deprecated_warnings,
     detect_conflicts,
-    prompt_injection_warnings,
-    sensitive_content_warnings,
-    stale_warnings,
-    weak_evidence_warning,
 )
 from cf_knowledge_kiln.retrieval.types import (
-    Conflict,
     ContextPackResponse,
     RetrievalFilters,
     Warning,
@@ -379,134 +391,6 @@ class HybridRetriever:
             )
             sql_span.set_attribute("retrieval.rows_returned", len(rows))
         return list(rows)
-
-
-def _row_to_ranked_chunk(row: SearchRow) -> RankedChunk:
-    return RankedChunk(
-        chunk_id=row.chunk_id,
-        document_id=row.document_id,
-        score=row.score,
-        status=row.status,
-        heading_path=row.heading_path,
-        authority=row.authority,
-        last_reviewed=row.last_reviewed,
-        has_prompt_injection=row.has_prompt_injection,
-        has_sensitive_content=row.has_sensitive_content,
-        chunk_metadata=row.chunk_metadata,
-    )
-
-
-def _collect_warnings(
-    chunks: list[RankedChunk],
-    *,
-    today: date,
-    stale_after_days: int | None,
-    weak_evidence_threshold: float | None = None,
-    relevance_floor: float | None = None,
-    max_warning_rank: int | None = None,
-) -> list[Warning]:
-    """Concatenate the standard slice-2 warning set.
-
-    ``relevance_floor`` / ``max_warning_rank`` propagate to the
-    per-chunk security emitters only (#161); stale, deprecated, and
-    weak-evidence are deliberately unaffected — they're either
-    document-property warnings or operate on the best chunk overall.
-    """
-    warnings: list[Warning] = []
-    warnings.extend(stale_warnings(chunks, today=today, stale_after_days=stale_after_days))
-    warnings.extend(deprecated_warnings(chunks))
-    warnings.extend(
-        prompt_injection_warnings(
-            chunks,
-            relevance_floor=relevance_floor,
-            max_warning_rank=max_warning_rank,
-        )
-    )
-    warnings.extend(
-        sensitive_content_warnings(
-            chunks,
-            relevance_floor=relevance_floor,
-            max_warning_rank=max_warning_rank,
-        )
-    )
-    warnings.extend(weak_evidence_warning(chunks, threshold=weak_evidence_threshold))
-    return warnings
-
-
-def _conflict_warnings(conflicts: list[Conflict]) -> list[Warning]:
-    """One ``conflicting_sources`` warning per detected conflict.
-
-    Conflicts are dual-surfaced: as structured :class:`Conflict`
-    entries on the response AND as warning entries. The structured
-    list is canonical for the ``requires_human_review`` decision
-    (see :func:`ranking.requires_human_review` — it inspects the
-    ``conflicts`` argument, not the warnings argument); the warning
-    is purely for agents that only consume the warnings channel and
-    would otherwise miss conflict surfacing.
-    """
-    return [
-        Warning(
-            type="conflicting_sources",
-            message=f"{len(c.source_ids)} active sources address {c.topic!r}.",
-        )
-        for c in conflicts
-    ]
-
-
-def _query_normalized_warning(removed_phrases: list[str]) -> Warning:
-    """One ``query_normalized`` warning when the caller's query was sanitized (#100).
-
-    Lists the phrase sources that matched so an operator auditing the
-    response can spot a query attempting to exfiltrate prompt-
-    injection content from the corpus. The list is informational —
-    the cleaned query has already gone through retrieval.
-    """
-    sample = ", ".join(repr(p) for p in removed_phrases[:3])
-    suffix = f" (and {len(removed_phrases) - 3} more)" if len(removed_phrases) > 3 else ""
-    return Warning(
-        type="query_normalized",
-        message=(
-            f"Query contained prompt-injection markers; stripped before retrieval: "
-            f"{sample}{suffix}."
-        ),
-    )
-
-
-def _document_refs_from_rows(rows: list[SearchRow]) -> dict[UUID, Any]:
-    """Build ``{document_id: DocumentRef}`` from search rows.
-
-    SearchRow carries the document-level fields the EvidenceChunk
-    shape needs; collapse to one ref per document_id (later rows
-    don't overwrite — same document, same metadata). ``DocumentRef``
-    is lazy-imported here to avoid the retrieval ↔ agent cycle.
-
-    ``source_url`` flows from ``documents.source_url`` through the
-    CTE projection (#24); ingestion populates it from frontmatter
-    ``source_url:`` for now. ``None`` is fine — the UI falls back to
-    rendering the plain ``repo/path`` string.
-    """
-    from cf_knowledge_kiln.agent.serializers import DocumentRef
-
-    refs: dict[UUID, Any] = {}
-    for row in rows:
-        if row.document_id in refs:
-            continue
-        refs[row.document_id] = DocumentRef(
-            document_id=row.document_id,
-            title=row.title,
-            repo=row.repo,
-            path=row.path,
-            source_url=row.source_url,
-            commit_sha=row.commit_sha,
-            authority=row.authority,
-            owner=row.owner,
-        )
-    return refs
-
-
-def _require_nonempty(query: str) -> None:
-    if not query or not query.strip():
-        raise ValueError("query must be a non-empty string")
 
 
 __all__ = [
