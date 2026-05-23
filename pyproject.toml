@@ -67,6 +67,16 @@ real-embeddings = [
   "sentence-transformers>=3.0,<6.0",
   "torch>=2.0,<3",
 ]
+otel = [
+  # Optional OpenTelemetry tracing. Enabled only when
+  # KILN_OTEL_EXPORTER_OTLP_ENDPOINT is set AND this extra is
+  # installed — see api/observability.py. Kept optional so production
+  # deploys that don't need tracing don't ship the deps.
+  "opentelemetry-api>=1.20,<2.0",
+  "opentelemetry-sdk>=1.20,<2.0",
+  "opentelemetry-instrumentation-fastapi>=0.40,<2.0",
+  "opentelemetry-exporter-otlp-proto-http>=1.20,<2.0",
+]
 dev = [
   "ruff>=0.7,<1.0",
   "mypy>=1.13,<3.0",
@@ -144,7 +154,9 @@ disallow_untyped_decorators = true
 no_implicit_reexport = true
 show_error_codes = true
 
-# Third-party libs without py.typed markers.
+# Third-party libs without py.typed markers, plus optional extras
+# whose modules may not be installed (mypy must tolerate the import
+# being unresolvable so the optional code path stays type-checkable).
 [[tool.mypy.overrides]]
 module = [
   "pgvector.*",
@@ -152,6 +164,7 @@ module = [
   "mistune.*",
   "tiktoken.*",
   "sentence_transformers.*",
+  "opentelemetry.*",
 ]
 ignore_missing_imports = true
 

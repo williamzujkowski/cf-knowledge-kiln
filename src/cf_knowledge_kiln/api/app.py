@@ -32,6 +32,7 @@ from cf_knowledge_kiln import __version__
 from cf_knowledge_kiln.api.auth import configure_auth
 from cf_knowledge_kiln.api.csp import install_csp_middleware
 from cf_knowledge_kiln.api.health import router as health_router
+from cf_knowledge_kiln.api.observability import configure_observability
 from cf_knowledge_kiln.api.preview import router as preview_router
 from cf_knowledge_kiln.api.rate_limit import TokenBucketLimiter
 from cf_knowledge_kiln.api.request_log import install_request_logging
@@ -154,6 +155,9 @@ def create_app() -> FastAPI:
     # outermost middleware — the logged duration covers the whole
     # request, including auth + CSP.
     install_request_logging(app)
+    # OpenTelemetry tracing — no-op unless KILN_OTEL_EXPORTER_OTLP_ENDPOINT
+    # is set AND the [otel] extra is installed. See api/observability.py.
+    configure_observability(app, settings)
     app.include_router(health_router)
     app.include_router(retrieval_router)
     app.include_router(web_router)
