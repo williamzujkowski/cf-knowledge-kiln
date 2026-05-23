@@ -31,16 +31,24 @@ Same retrieval substrate. Different response shapes: humans get UI-friendly resu
 
 ## Quick start (development)
 
+For the full copy-pasteable laptop-bootstrap sequence (docker pgvector,
+env vars, `models.yaml`, model pre-warm, two-process startup, verify),
+see **[docs/local-development.md](./docs/local-development.md)**.
+
+The day-to-day make targets:
+
 ```bash
-make bootstrap        # install dev deps
-make install          # install package
-make migrate          # apply DB migrations (Phase 2+)
-make ingest           # ingest fixture docs (Phase 3+)
+make bootstrap        # install dev deps (uses uv if available, else pip)
+make lock             # regenerate uv.lock against pyproject.toml (#194)
+make migrate          # apply DB migrations
 make run              # start API on :8080
+make run-worker       # start ingestion worker
 make verify           # the local quality gate (lint + typecheck + test + openapi-lint)
+make ingest           # run a one-off ingestion pass
 ```
 
-See [HANDOFF.md](./HANDOFF.md) for the "how to start working" walkthrough (env vars, pgvector container, where each phase's code lives), and [docs/deployment-cloud-foundry.md](./docs/deployment-cloud-foundry.md) for CF deployment.
+See [HANDOFF.md](./HANDOFF.md) for repo-state context (phase progress, recent slices),
+and [docs/deployment-cloud-foundry.md](./docs/deployment-cloud-foundry.md) for CF deployment.
 
 ## Architecture
 
