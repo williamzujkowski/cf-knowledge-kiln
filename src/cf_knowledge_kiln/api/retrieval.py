@@ -179,7 +179,7 @@ def _chunk_to_result_card(chunk: RankedChunk, ref: object | None, content: str) 
         source_url=getattr(ref, "source_url", None),
         commit_sha=getattr(ref, "commit_sha", None),
         owner=getattr(ref, "owner", None),
-        status=chunk.status,  # type: ignore[arg-type]
+        status=chunk.status,
         last_reviewed=chunk.last_reviewed,
         score=chunk.score,
     )

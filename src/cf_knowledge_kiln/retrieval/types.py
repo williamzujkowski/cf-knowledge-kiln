@@ -135,7 +135,14 @@ class ResultCard(BaseModel):
     path: str | None = None
     source_url: AnyUrl | None = None
     commit_sha: str | None = None
-    status: Status
+    # #203: ``str`` not :data:`Status`. The kiln recommends the
+    # :data:`Status` vocabulary, but real corpora ship with status
+    # values outside it (e.g. ``"reference"``, ``"canonical"``,
+    # ``"running"``). Pinning the response field to a Literal made
+    # any chunk with such a status crash the whole /v1/search request
+    # with a Pydantic ValidationError → 500. The agent-side
+    # :class:`EvidenceChunk` already uses ``str`` for the same reason.
+    status: str
     owner: str | None = None
     last_reviewed: date | None = None
     score: float = Field(ge=0)

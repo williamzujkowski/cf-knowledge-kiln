@@ -18,6 +18,7 @@ from cf_knowledge_kiln.retrieval import Conflict, RetrievalFilters, Warning
 from cf_knowledge_kiln.retrieval.types import (
     MAX_FILTER_ITEMS,
     MAX_QUERY_LENGTH,
+    ResultCard,
     SearchRequest,
 )
 
@@ -98,6 +99,48 @@ class TestWarning:
         uid = uuid4()
         w = Warning(type="deprecated_source", message="x", source_id=uid)
         assert w.source_id == uid
+
+
+class TestResultCardStatus:
+    """#203 regression: ResultCard.status accepts any string, not just the
+    Status Literal. Real corpora ship statuses like 'reference',
+    'canonical', 'running' that aren't in the kiln's recommended set;
+    rejecting them used to crash the whole /v1/search request with a
+    Pydantic ValidationError → HTTP 500."""
+
+    def _card(self, *, status: str) -> ResultCard:
+        return ResultCard(
+            chunk_id=uuid4(),
+            document_id=uuid4(),
+            title="t",
+            excerpt="e",
+            status=status,
+            score=0.5,
+        )
+
+    def test_accepts_kiln_recommended_status(self) -> None:
+        card = self._card(status="active")
+        assert card.status == "active"
+
+    @pytest.mark.parametrize(
+        "status",
+        # Statuses observed in the homelab-iac corpus that USED to 500
+        # /v1/search per #203. All must round-trip verbatim now.
+        ["reference", "canonical", "running", "ready", "open", "proposal", "implemented"],
+    )
+    def test_accepts_corpus_native_status(self, status: str) -> None:
+        card = self._card(status=status)
+        assert card.status == status
+
+    def test_status_is_required(self) -> None:
+        with pytest.raises(ValidationError):
+            ResultCard(  # type: ignore[call-arg]
+                chunk_id=uuid4(),
+                document_id=uuid4(),
+                title="t",
+                excerpt="e",
+                score=0.5,
+            )
 
 
 class TestConflict:
