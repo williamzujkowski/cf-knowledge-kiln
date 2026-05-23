@@ -38,6 +38,7 @@ the manifest.
 | `KILN_BEARER_TOKEN`                   | —                        | Required when `KILN_AUTH_MODE=bearer`.                             |
 | `KILN_OTEL_EXPORTER_OTLP_ENDPOINT`    | —                        | OTLP-HTTP traces endpoint. Set + install the `[otel]` extra to enable tracing; unset = no tracing (zero overhead). See [docs/observability.md](./observability.md). |
 | `KILN_OTEL_SERVICE_NAME`              | `cf-knowledge-kiln`      | OpenTelemetry `service.name` reported with every span.             |
+| `KILN_EMBEDDING_PROBE_TIMEOUT_SECONDS`| `90`                     | Upper bound on the one-shot embedding-provider health probe at startup. Sits below the manifest's app startup `timeout: 120` so the lifespan can finish even when the probe burns its full budget. The probe pins `/readyz` to `embedding: failing` if it trips — bump (and the manifest `timeout` alongside) for very large local models or slow links, or pre-warm the model before first start (#198). |
 
 ## Embedding fan-out (`KILN_INGEST_EMBED_*`)
 

@@ -104,6 +104,19 @@ class Settings(BaseSettings):
     otel_exporter_otlp_endpoint: str | None = None
     otel_service_name: str = "cf-knowledge-kiln"
 
+    # #198: upper bound on the one-shot embedding-provider health probe
+    # run at startup. 90 s gives ~3x the previous 30 s headroom for
+    # cold first-call HuggingFace weight pulls, while leaving a 30 s
+    # margin under the CF app startup ``timeout: 120`` declared in
+    # manifest.yml (so the lifespan can finish the rest of its work —
+    # DB pool, config parse, rate limiters — even when the probe burns
+    # its full budget). Operators with very large models or slow links
+    # bump via ``KILN_EMBEDDING_PROBE_TIMEOUT_SECONDS`` *and* the
+    # manifest's ``timeout`` together. Pre-warming the model before the
+    # first start sidesteps the whole timed path — see
+    # ``docs/deployment-cloud-foundry.md``.
+    embedding_probe_timeout_seconds: float = 90.0
+
     @property
     def status_preference_list(self) -> list[str]:
         """Parse the comma-separated preference string into a list."""

@@ -264,6 +264,57 @@ cf logs cf-knowledge-kiln-worker --recent
 | SSH into a container          | `cf ssh cf-knowledge-kiln-api`                         |
 | Tail recent logs              | `cf logs cf-knowledge-kiln-api --recent`               |
 
+## First-start: pre-warm the embedding model (#198)
+
+If you're deploying with the `local-sentence-transformers` embedding
+provider, the very first container start downloads the model weights
+from HuggingFace on demand. The startup health probe times out by
+default at 90 seconds (`KILN_EMBEDDING_PROBE_TIMEOUT_SECONDS`); cold
+downloads of larger models (`nomic-embed-text-v1.5`, the MVP default
+in `config/models.example.yaml`, is ~500 MB) over a slow link can
+exceed that. When the probe trips, `/readyz` is pinned to
+`embedding: failing` for the life of the process and `/v1/search`
+returns 503 indefinitely.
+
+Two ways to avoid it:
+
+1. **Pre-warm**. Before the first `cf push`, prime the HuggingFace
+   cache on the box you're pushing from. Use the model your
+   `config/models.yaml` references — for the MVP default that's:
+
+   ```bash
+   .venv/bin/python -c "from sentence_transformers import SentenceTransformer; \
+     SentenceTransformer('nomic-ai/nomic-embed-text-v1.5', \
+       trust_remote_code=True, device='cpu').encode(['x'])"
+   ```
+
+   Whether the CF buildpack stages your local `~/.cache/huggingface/`
+   into the dyno depends on the buildpack version and foundation
+   policy — test on your foundation. If the cache isn't preserved
+   across `cf push`, the pre-warm has to happen on the dyno itself
+   (option 2).
+
+2. **Bump the timeouts** for the first deploy. The embedding probe
+   timeout AND the manifest's `timeout:` need to move together — the
+   probe runs inside the app startup window:
+
+   ```bash
+   cf set-env cf-knowledge-kiln-api KILN_EMBEDDING_PROBE_TIMEOUT_SECONDS 600
+   # And bump the manifest startup timeout to match, e.g. 660 (probe + 60s margin):
+   #   timeout: 660
+   cf restage cf-knowledge-kiln-api
+   ```
+
+   Six hundred seconds is enough to download `nomic-embed-text-v1.5`
+   (~500 MB) over a constrained link. After the first successful
+   start the weights cache to disk; you can lower both values again.
+
+If `/readyz` ends up pinned at `embedding: failing` from a tripped
+probe, the fix is `cf restart cf-knowledge-kiln-api` — the next start
+hopefully finds the weights warm on disk (provided the dyno's
+filesystem is persistent on your foundation) and the probe returns in
+milliseconds.
+
 ## Troubleshooting
 
 When something is broken — `/readyz` degraded, a stuck ingestion job,

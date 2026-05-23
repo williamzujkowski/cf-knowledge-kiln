@@ -49,14 +49,9 @@ logger = logging.getLogger(__name__)
 
 _STATIC_DIR = Path(__file__).parent / "static"
 
-# Upper bound on the one-shot embedding-provider health probe run at
-# startup (#176). Generous enough for a cold local model load; bounded
-# so a hung backend can't stall app startup into a CF crash-loop.
-_EMBEDDING_PROBE_TIMEOUT_SECONDS = 30.0
 
-
-async def _probe_embedding(provider: EmbeddingProvider | None) -> str:
-    """One-shot embedding-provider health check for ``/readyz`` (#176).
+async def _probe_embedding(provider: EmbeddingProvider | None, *, timeout_seconds: float) -> str:
+    """One-shot embedding-provider health check for ``/readyz`` (#176, #198).
 
     Returns ``"not_configured"`` when no provider is wired (FTS-only is
     a valid mode), ``"ok"`` when a probe embed succeeds, or ``"failing"``
@@ -66,16 +61,37 @@ async def _probe_embedding(provider: EmbeddingProvider | None) -> str:
     that fails *after* startup is not caught: that is a documented
     limitation (see #176), acceptable because the common failure is a
     deploy-time misconfiguration (bad URL, missing model, dim mismatch).
+
+    ``timeout_seconds`` is operator-tunable via
+    ``KILN_EMBEDDING_PROBE_TIMEOUT_SECONDS`` (#198). Cold HuggingFace
+    weight pulls on first start regularly exceeded the previous hardcoded
+    30 s bound and left ``/readyz`` stuck at ``embedding: failing`` for
+    the life of the process — the default is now 90 s, which gives ~3x
+    the original headroom while staying under the manifest's
+    ``timeout: 120`` (so the rest of the lifespan still has room).
+    Pre-warming the model with a one-line ``encode([\"x\"])`` script
+    avoids the timed path entirely.
     """
     if provider is None:
         return "not_configured"
+    logger.info(
+        "embedding provider health probe starting (timeout=%.0fs); "
+        "cold HuggingFace pulls may take a while — pre-warm or bump "
+        "KILN_EMBEDDING_PROBE_TIMEOUT_SECONDS if this trips",
+        timeout_seconds,
+    )
     try:
         await asyncio.wait_for(
             provider.embed(["readyz embedding health probe"]),
-            timeout=_EMBEDDING_PROBE_TIMEOUT_SECONDS,
+            timeout=timeout_seconds,
         )
     except Exception:
-        logger.exception("embedding provider health probe failed; /readyz will report degraded")
+        logger.exception(
+            "embedding provider health probe failed; /readyz will report degraded. "
+            "If this was a cold-cache weight download, pre-warm the model and restart, "
+            "or raise KILN_EMBEDDING_PROBE_TIMEOUT_SECONDS (current: %.0fs).",
+            timeout_seconds,
+        )
         return "failing"
     logger.info("embedding provider health probe ok")
     return "ok"
@@ -99,7 +115,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Probe the provider once so /readyz reflects embedding health, not
     # just Postgres (#176). A configured-but-broken provider (e.g. a URL
     # typo) builds an object that only fails on use — this surfaces it.
-    app.state.embedding_status = await _probe_embedding(embedding_provider)
+    app.state.embedding_status = await _probe_embedding(
+        embedding_provider,
+        timeout_seconds=settings.embedding_probe_timeout_seconds,
+    )
     # #183: parse config/security.yaml ONCE at startup. Before this,
     # every /v1/search + /search request re-read and re-parsed the file
     # twice (retrieval config + prompt-injection phrases) — synchronous

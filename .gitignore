@@ -86,3 +86,5 @@ tests/eval/reports/*
 .claude/
 ci/vars.yml
 .nexus-agents/
+tests/eval/*-corpus-stats.md
+config/*.local.yaml
