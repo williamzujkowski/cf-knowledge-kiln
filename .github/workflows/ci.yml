@@ -25,17 +25,25 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-          cache: pip
 
       # NOTE: no HuggingFace model cache here yet — neither this `verify`
       # job nor `integration` installs the `[real-embeddings]` extra or
       # sets `KILN_TEST_REAL_EMBEDDINGS=1`, so the cache would store an
       # empty directory. Add it back alongside an opt-in real-embedding
       # job when that runs in CI.
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev,db,ingestion]"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install from lockfile (uv sync --frozen)
+        # `--frozen` refuses to update uv.lock — CI fails fast if a PR
+        # changed pyproject.toml without running `make lock`. This is the
+        # contract that makes the lockfile load-bearing (#194).
+        run: uv sync --frozen --extra dev --extra db --extra ingestion
+
+      - name: Add venv to PATH
+        run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Lint (ruff)
         run: ruff check src tests
@@ -99,12 +107,17 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-          cache: pip
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev,db,ingestion]"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install from lockfile (uv sync --frozen)
+        run: uv sync --frozen --extra dev --extra db --extra ingestion
+
+      - name: Add venv to PATH
+        run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Integration tests (pytest)
         run: pytest tests/integration -q
@@ -170,14 +183,16 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-          cache: pip
-      - name: Install runtime deps
-        # Install the actual deps so syft picks them up. Without -e
-        # the syft scan only sees pyproject metadata, missing the
-        # transitive tree.
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev,db,ingestion]"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install runtime deps from lockfile
+        # syft scans the installed tree; uv sync from the lockfile
+        # gives it the exact pinned versions the deploy would use.
+        run: uv sync --frozen --extra dev --extra db --extra ingestion
+      - name: Add venv to PATH
+        run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
       - name: Generate SBOM (syft)
         uses: anchore/sbom-action@v0
         with:

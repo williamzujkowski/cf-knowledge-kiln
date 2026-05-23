@@ -17,7 +17,7 @@ PKG       := cf_knowledge_kiln
 
 .DEFAULT_GOAL := help
 
-.PHONY: help bootstrap install lint format typecheck test test-unit test-integration \
+.PHONY: help bootstrap install lock lint format typecheck test test-unit test-integration \
         eval security sbom scan openapi-lint run run-worker migrate migrate-down \
         ingest cf-push verify clean build-css verify-css
 
@@ -30,6 +30,10 @@ bootstrap: ## Install dev dependencies (uses uv if available, else pip).
 
 install: ## Install the package in editable mode.
 	@$(PIP) install -e .
+
+lock: ## Regenerate uv.lock against the current pyproject.toml.
+	@command -v $(UV) >/dev/null 2>&1 || { echo "uv is required to refresh the lockfile — install from https://docs.astral.sh/uv/" >&2; exit 1; }
+	@$(UV) lock
 
 lint: ## Lint with ruff.
 	@$(RUFF) check $(SRC_DIR) $(TESTS_DIR)
