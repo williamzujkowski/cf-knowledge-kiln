@@ -34,8 +34,20 @@ dependencies = [
   "jinja2>=3.1,<4.0",
   # FastAPI Form() parameters require python-multipart for the
   # form-encoded body parser. The HTMX search form posts as
-  # application/x-www-form-urlencoded.
-  "python-multipart>=0.0.20,<1.0",
+  # application/x-www-form-urlencoded. Floor >=0.0.27 closes 3
+  # CVEs (GHSA-wp53/mj87/pp6c) — see `.security-discoveries.jsonl`.
+  "python-multipart>=0.0.27,<1.0",
+  # Direct starlette pin to lift the transitive floor above the
+  # CVE window. fastapi 0.135.x only requires `starlette>=0.46.0`
+  # (no upper bound), so bumping fastapi alone wouldn't move the
+  # floor. The 1.0.1 floor closes all three open starlette CVEs:
+  #   * GHSA-2c2j-9gv5-cj73 — multipart-parsing DoS
+  #   * GHSA-7f5h-v6xp-fcq8 — StaticFiles Range-header ReDoS
+  #   * PYSEC-2026-161       — host-header path injection
+  # All three reachable here (form POST + /static + every request).
+  # Compat confirmed empirically: fastapi 0.135.1 + starlette 1.0.1
+  # passes 677 unit + 174 integration tests.
+  "starlette>=1.0.1,<2.0",
 ]
 
 [project.optional-dependencies]
@@ -47,7 +59,8 @@ db = [
 ]
 ingestion = [
   "python-frontmatter>=1.1,<2.0",
-  "mistune>=3.0,<4.0",
+  # Floor >=3.2.1 closes 4 mistune CVEs — see `.security-discoveries.jsonl`.
+  "mistune>=3.2.1,<4.0",
   "tiktoken>=0.8,<1.0",
 ]
 embeddings = [
