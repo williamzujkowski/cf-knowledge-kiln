@@ -36,7 +36,7 @@ the manifest.
 | `KILN_SOURCE_ALLOWLIST_PATH`          | `config/sources.yaml`    | Path to the source allowlist.                                      |
 | `KILN_AUTH_MODE`                      | `none`                   | `none` (dev only) / `bearer` / `mtls`.                             |
 | `KILN_BEARER_TOKEN`                   | —                        | Required when `KILN_AUTH_MODE=bearer`.                             |
-| `KILN_OTEL_EXPORTER_OTLP_ENDPOINT`    | —                        | OTLP-HTTP traces endpoint. Set + install the `[otel]` extra to enable tracing; unset = no tracing (zero overhead). |
+| `KILN_OTEL_EXPORTER_OTLP_ENDPOINT`    | —                        | OTLP-HTTP traces endpoint. Set + install the `[otel]` extra to enable tracing; unset = no tracing (zero overhead). See [docs/observability.md](./observability.md). |
 | `KILN_OTEL_SERVICE_NAME`              | `cf-knowledge-kiln`      | OpenTelemetry `service.name` reported with every span.             |
 
 ## Embedding fan-out (`KILN_INGEST_EMBED_*`)

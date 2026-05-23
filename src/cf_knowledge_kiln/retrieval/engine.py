@@ -26,6 +26,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from cf_knowledge_kiln.api.tracing import get_tracer
 from cf_knowledge_kiln.db.connection import Database
 from cf_knowledge_kiln.db.repositories._hybrid import SearchRow
 from cf_knowledge_kiln.db.repositories.documents import ChunksRepository
@@ -47,6 +48,14 @@ from cf_knowledge_kiln.retrieval.types import (
     RetrievalFilters,
     Warning,
 )
+
+# OTel Phase 2 — module-scoped tracer for retrieval-phase spans. The
+# tracer is a no-op when the ``[otel]`` extra isn't installed AND a
+# no-op when the extra IS installed but no TracerProvider was wired
+# at startup (the default for ``KILN_OTEL_EXPORTER_OTLP_ENDPOINT``
+# unset). Span emission only costs anything when an operator turned
+# tracing on. Attribute vocabulary: see docs/observability.md.
+_TRACER = get_tracer(__name__)
 
 # NOTE: ``cf_knowledge_kiln.agent.serializers`` is intentionally NOT
 # imported at module load. ``retrieval/__init__.py`` re-exports
@@ -152,36 +161,53 @@ class HybridRetriever:
         passes its own session so the same transaction can also write
         telemetry, halving the per-request connection count.
         """
-        _require_nonempty(query)
-        # #100: strip configured prompt-injection markers from the
-        # query before retrieval. If everything got stripped the call
-        # treats it as an empty query (400 at the API layer).
-        cleaned, removed_phrases = normalize_query(query, self._prompt_injection_phrases)
-        if removed_phrases and not cleaned:
-            raise ValueError("query consists entirely of prompt-injection markers")
-        effective = cleaned if removed_phrases else query
-        rows = await self._fetch_candidates(effective, filters, session=session)
-        chunks = [_row_to_ranked_chunk(r) for r in rows]
-        boosted = apply_boosts(chunks, config=self._config, today=date.today())
-        boosted.sort(key=lambda c: c.score, reverse=True)
-        trimmed = boosted[:max_results]
-        warnings = _collect_warnings(
-            trimmed,
-            today=date.today(),
-            stale_after_days=self._config.stale_after_days,
-            weak_evidence_threshold=self._config.weak_evidence_score_threshold,
-            relevance_floor=self._config.effective_relevance_floor,
-            max_warning_rank=self._config.max_warning_rank,
-        )
-        if removed_phrases:
-            warnings.append(_query_normalized_warning(removed_phrases))
-        trimmed_ids = {c.chunk_id for c in trimmed}
-        return SearchResult(
-            chunks=trimmed,
-            warnings=warnings,
-            document_refs=_document_refs_from_rows(rows),
-            chunk_text={r.chunk_id: r.content for r in rows if r.chunk_id in trimmed_ids},
-        )
+        with _TRACER.start_as_current_span(
+            "retrieval.search",
+            attributes={
+                "retrieval.consumer_type": "human",
+                "retrieval.query_length": len(query),
+                "retrieval.max_results": max_results,
+            },
+        ) as root_span:
+            _require_nonempty(query)
+            # #100: strip configured prompt-injection markers from the
+            # query before retrieval. If everything got stripped the call
+            # treats it as an empty query (400 at the API layer).
+            with _TRACER.start_as_current_span("retrieval.normalize_query") as norm_span:
+                cleaned, removed_phrases = normalize_query(query, self._prompt_injection_phrases)
+                norm_span.set_attribute("retrieval.removed_phrases_count", len(removed_phrases))
+            if removed_phrases and not cleaned:
+                raise ValueError("query consists entirely of prompt-injection markers")
+            effective = cleaned if removed_phrases else query
+            rows = await self._fetch_candidates(effective, filters, session=session)
+            with _TRACER.start_as_current_span("retrieval.apply_boosts") as boost_span:
+                chunks = [_row_to_ranked_chunk(r) for r in rows]
+                boosted = apply_boosts(chunks, config=self._config, today=date.today())
+                boosted.sort(key=lambda c: c.score, reverse=True)
+                trimmed = boosted[:max_results]
+                boost_span.set_attribute("retrieval.chunks_in", len(chunks))
+                boost_span.set_attribute("retrieval.chunks_kept", len(trimmed))
+            with _TRACER.start_as_current_span("retrieval.collect_warnings") as warn_span:
+                warnings = _collect_warnings(
+                    trimmed,
+                    today=date.today(),
+                    stale_after_days=self._config.stale_after_days,
+                    weak_evidence_threshold=self._config.weak_evidence_score_threshold,
+                    relevance_floor=self._config.effective_relevance_floor,
+                    max_warning_rank=self._config.max_warning_rank,
+                )
+                if removed_phrases:
+                    warnings.append(_query_normalized_warning(removed_phrases))
+                warn_span.set_attribute("retrieval.warnings_count", len(warnings))
+            trimmed_ids = {c.chunk_id for c in trimmed}
+            root_span.set_attribute("retrieval.chunks_returned", len(trimmed))
+            root_span.set_attribute("retrieval.warnings_count", len(warnings))
+            return SearchResult(
+                chunks=trimmed,
+                warnings=warnings,
+                document_refs=_document_refs_from_rows(rows),
+                chunk_text={r.chunk_id: r.content for r in rows if r.chunk_id in trimmed_ids},
+            )
 
     async def context_pack(
         self,
@@ -214,52 +240,81 @@ class HybridRetriever:
             assemble_context_pack,
         )
 
-        _require_nonempty(query)
-        if not task or not task.strip():
-            raise ValueError("task must be a non-empty string")
-        # #100: same normalization the human path does.
-        cleaned, removed_phrases = normalize_query(query, self._prompt_injection_phrases)
-        if removed_phrases and not cleaned:
-            raise ValueError("query consists entirely of prompt-injection markers")
-        effective = cleaned if removed_phrases else query
-        rows = await self._fetch_candidates(effective, filters, session=session)
-        chunks = [_row_to_ranked_chunk(r) for r in rows]
-        boosted = apply_boosts(chunks, config=self._config, today=date.today())
-        boosted.sort(key=lambda c: c.score, reverse=True)
-        trimmed = boosted[:max_chunks]
-        trimmed_ids = {c.chunk_id for c in trimmed}
-        warnings = _collect_warnings(
-            trimmed,
-            today=date.today(),
-            stale_after_days=self._config.stale_after_days,
-            weak_evidence_threshold=self._config.weak_evidence_score_threshold,
-            relevance_floor=self._config.effective_relevance_floor,
-            max_warning_rank=self._config.max_warning_rank,
-        )
-        conflicts = detect_conflicts(
-            trimmed,
-            relevance_floor=self._config.effective_relevance_floor,
-            max_warning_rank=self._config.max_warning_rank,
-        )
-        warnings.extend(_conflict_warnings(conflicts))
-        if removed_phrases:
-            warnings.append(_query_normalized_warning(removed_phrases))
-        inputs = SerializerInputs(
-            chunks=trimmed,
-            warnings=warnings,
-            conflicts=conflicts,
-            chunk_text={r.chunk_id: r.content for r in rows if r.chunk_id in trimmed_ids},
-            document_refs=_document_refs_from_rows(rows),
-            related_sources=[],
-        )
-        return assemble_context_pack(
-            inputs,
-            task=task,
-            query=query,
-            max_chunks=max_chunks,
-            max_tokens=max_tokens,
-            weak_evidence_threshold=self._config.weak_evidence_score_threshold,
-        )
+        with _TRACER.start_as_current_span(
+            "retrieval.context_pack",
+            attributes={
+                "retrieval.consumer_type": "agent",
+                "retrieval.query_length": len(query),
+                "retrieval.max_chunks": max_chunks,
+                "retrieval.max_tokens": max_tokens,
+            },
+        ) as root_span:
+            _require_nonempty(query)
+            if not task or not task.strip():
+                raise ValueError("task must be a non-empty string")
+            # #100: same normalization the human path does.
+            with _TRACER.start_as_current_span("retrieval.normalize_query") as norm_span:
+                cleaned, removed_phrases = normalize_query(query, self._prompt_injection_phrases)
+                norm_span.set_attribute("retrieval.removed_phrases_count", len(removed_phrases))
+            if removed_phrases and not cleaned:
+                raise ValueError("query consists entirely of prompt-injection markers")
+            effective = cleaned if removed_phrases else query
+            rows = await self._fetch_candidates(effective, filters, session=session)
+            with _TRACER.start_as_current_span("retrieval.apply_boosts") as boost_span:
+                chunks = [_row_to_ranked_chunk(r) for r in rows]
+                boosted = apply_boosts(chunks, config=self._config, today=date.today())
+                boosted.sort(key=lambda c: c.score, reverse=True)
+                trimmed = boosted[:max_chunks]
+                boost_span.set_attribute("retrieval.chunks_in", len(chunks))
+                boost_span.set_attribute("retrieval.chunks_kept", len(trimmed))
+            trimmed_ids = {c.chunk_id for c in trimmed}
+            with _TRACER.start_as_current_span("retrieval.collect_warnings") as warn_span:
+                warnings = _collect_warnings(
+                    trimmed,
+                    today=date.today(),
+                    stale_after_days=self._config.stale_after_days,
+                    weak_evidence_threshold=self._config.weak_evidence_score_threshold,
+                    relevance_floor=self._config.effective_relevance_floor,
+                    max_warning_rank=self._config.max_warning_rank,
+                )
+                warn_span.set_attribute("retrieval.warnings_count", len(warnings))
+            with _TRACER.start_as_current_span("retrieval.detect_conflicts") as conf_span:
+                conflicts = detect_conflicts(
+                    trimmed,
+                    relevance_floor=self._config.effective_relevance_floor,
+                    max_warning_rank=self._config.max_warning_rank,
+                )
+                conf_span.set_attribute("retrieval.conflicts_count", len(conflicts))
+            warnings.extend(_conflict_warnings(conflicts))
+            if removed_phrases:
+                warnings.append(_query_normalized_warning(removed_phrases))
+            inputs = SerializerInputs(
+                chunks=trimmed,
+                warnings=warnings,
+                conflicts=conflicts,
+                chunk_text={r.chunk_id: r.content for r in rows if r.chunk_id in trimmed_ids},
+                document_refs=_document_refs_from_rows(rows),
+                related_sources=[],
+            )
+            with _TRACER.start_as_current_span("retrieval.assemble_context_pack") as asm_span:
+                pack = assemble_context_pack(
+                    inputs,
+                    task=task,
+                    query=query,
+                    max_chunks=max_chunks,
+                    max_tokens=max_tokens,
+                    weak_evidence_threshold=self._config.weak_evidence_score_threshold,
+                )
+                asm_span.set_attribute(
+                    "retrieval.tokens_used_estimate", pack.token_budget.used_estimate
+                )
+                asm_span.set_attribute(
+                    "retrieval.requires_human_review", pack.requires_human_review
+                )
+            root_span.set_attribute("retrieval.chunks_returned", len(trimmed))
+            root_span.set_attribute("retrieval.warnings_count", len(warnings))
+            root_span.set_attribute("retrieval.conflicts_count", len(conflicts))
+            return pack
 
     async def _fetch_candidates(
         self,
@@ -304,16 +359,25 @@ class HybridRetriever:
     ) -> list[SearchRow]:
         repo = ChunksRepository(session)
         if self._provider is None:
-            rows = await repo.search_by_fts(query_text=query, filters=filters)
+            with _TRACER.start_as_current_span("retrieval.sql.fts_search") as span:
+                rows = await repo.search_by_fts(query_text=query, filters=filters)
+                span.set_attribute("retrieval.rows_returned", len(rows))
             return list(rows)
-        embedding = (await self._provider.embed([query]))[0]
-        rows = await repo.hybrid_search(
-            query_text=query,
-            query_embedding=embedding,
-            dimensions=self._provider.dimensions,
-            filters=filters,
-            ef_search=self._ef_search,
-        )
+        with _TRACER.start_as_current_span("retrieval.embed_query") as embed_span:
+            embed_span.set_attribute("retrieval.embedding.provider", self._provider.provider)
+            embed_span.set_attribute("retrieval.embedding.model", self._provider.model)
+            embed_span.set_attribute("retrieval.embedding.dimensions", self._provider.dimensions)
+            embedding = (await self._provider.embed([query]))[0]
+        with _TRACER.start_as_current_span("retrieval.sql.hybrid_search") as sql_span:
+            sql_span.set_attribute("retrieval.ef_search", self._ef_search)
+            rows = await repo.hybrid_search(
+                query_text=query,
+                query_embedding=embedding,
+                dimensions=self._provider.dimensions,
+                filters=filters,
+                ef_search=self._ef_search,
+            )
+            sql_span.set_attribute("retrieval.rows_returned", len(rows))
         return list(rows)
 
 
