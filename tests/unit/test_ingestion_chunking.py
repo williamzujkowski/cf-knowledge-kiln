@@ -373,3 +373,94 @@ def test_safe_source_url_rejects_scheme_without_netloc() -> None:
     assert _safe_source_url("https:") is None
     # A relative path is not an absolute URL.
     assert _safe_source_url("/runbooks/foo") is None
+
+
+# ─── #201 — heading-only sections are dropped ─────────────────────────
+
+
+def test_h2_with_no_preamble_before_nested_h3_does_not_emit_stub() -> None:
+    """#201: an H2 with no body that's followed by a nested H3 used to
+    emit a 2-token "## Heading" chunk. The H2 is still in the H3's
+    heading_path; the standalone stub was pure index pollution.
+    """
+    src = textwrap.dedent(
+        """\
+        # Top
+
+        ## Configuration
+        ### Database
+        The connection settings live in here.
+        """
+    )
+    doc = parse_document(src)
+    # Pre-fix: 2-3 chunks including a "## Configuration" stub.
+    # Post-fix: 1 chunk for the H3 body, no Configuration stub.
+    assert len(doc.chunks) == 1
+    chunk = doc.chunks[0]
+    assert chunk.heading_path == ["Top", "Configuration", "Database"]
+    assert "## Configuration" not in chunk.content or "### Database" in chunk.content
+    # The path retains "Configuration" so no information is lost.
+    assert "Configuration" in chunk.heading_path
+
+
+def test_h1_with_no_preamble_before_first_h2_does_not_emit_stub() -> None:
+    """#201, H1 variant: a doc that opens with ``# Title`` then jumps
+    straight to ``## Section`` used to emit a standalone H1 chunk.
+    """
+    src = textwrap.dedent(
+        """\
+        # Caddy Reverse Proxy
+
+        ## Overview
+        Routes traffic from edge to backend services.
+        """
+    )
+    doc = parse_document(src)
+    assert len(doc.chunks) == 1
+    chunk = doc.chunks[0]
+    assert chunk.heading_path == ["Caddy Reverse Proxy", "Overview"]
+    # The H1 title is in the path, not as a standalone heading-only chunk.
+    assert chunk.content_tokens > 5  # Pre-fix the H1 chunk was 5 tokens.
+
+
+def test_pure_heading_doc_yields_no_chunks() -> None:
+    """#201 edge case: a doc that is ONLY headings (no body anywhere)
+    produces zero chunks. Previously each heading became its own stub.
+
+    This is intentional — a heading-only doc has no retrievable content
+    once the heading itself is the only text. Folding it into a chunk
+    would not help retrieval (no body to embed against). Ingestion
+    callers can detect zero-chunk docs and report them as empty.
+    """
+    src = textwrap.dedent(
+        """\
+        # Top
+
+        ## Section A
+        ## Section B
+        ### Subsection
+        """
+    )
+    doc = parse_document(src)
+    assert doc.chunks == []
+
+
+def test_heading_only_section_followed_by_sibling_with_content_keeps_sibling() -> None:
+    """Skipping heading-only sections must NOT eat real content sections.
+
+    Validates the fix is surgical — only stripped-stub sections vanish.
+    """
+    src = textwrap.dedent(
+        """\
+        # Top
+
+        ## Empty Section
+        ## Real Section
+        Real content lives here.
+        """
+    )
+    doc = parse_document(src)
+    assert len(doc.chunks) == 1
+    chunk = doc.chunks[0]
+    assert chunk.heading_path == ["Top", "Real Section"]
+    assert "Real content" in chunk.content
