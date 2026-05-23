@@ -73,3 +73,22 @@ def test_invalid_env_rejected() -> None:
 def test_invalid_auth_mode_rejected() -> None:
     with pytest.raises(ValueError):
         Settings(auth_mode="oauth")  # type: ignore[arg-type]
+
+
+def test_embedding_probe_timeout_default_is_generous_enough_for_cold_pulls() -> None:
+    """#198: previous hardcoded 30s tripped on first-start HF weight downloads.
+
+    Pin the default high enough that the regression doesn't quietly come back
+    if someone re-introduces a smaller bound, and low enough that it stays
+    under the manifest.yml app startup ``timeout: 120`` with margin for the
+    rest of the lifespan (DB pool, config parse, rate limiters).
+    """
+    timeout = Settings().embedding_probe_timeout_seconds
+    assert 60.0 <= timeout <= 100.0
+
+
+def test_embedding_probe_timeout_env_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("KILN_EMBEDDING_PROBE_TIMEOUT_SECONDS", "300")
+    assert Settings().embedding_probe_timeout_seconds == 300.0

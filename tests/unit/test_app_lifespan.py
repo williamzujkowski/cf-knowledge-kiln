@@ -175,6 +175,49 @@ def test_lifespan_propagates_database_init_error(
         pass
 
 
+def test_probe_embedding_honors_configured_timeout(
+    models_config: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#198: KILN_EMBEDDING_PROBE_TIMEOUT_SECONDS is wired all the way through.
+
+    Pre-fix the timeout was a hardcoded module-level 30s constant, so a
+    cold HuggingFace weight pull on first start tripped the probe and
+    pinned ``app.state.embedding_status = "failing"`` for the life of
+    the process. The fix makes the timeout settings-driven; this test
+    proves the setting actually reaches ``_probe_embedding`` by giving
+    it an absurdly small timeout against a sleep-then-return provider
+    and asserting the probe reports ``failing``.
+    """
+    import asyncio
+    import sys
+
+    monkeypatch.setenv("KILN_EMBEDDING_PROBE_TIMEOUT_SECONDS", "0.05")
+    get_settings.cache_clear()
+
+    class _SlowProvider:
+        provider = "slow"
+        model = "slow-model"
+        dimensions = 768
+
+        async def embed(self, texts: list[str]) -> list[list[float]]:
+            # Sleep well past the 0.05s timeout so asyncio.wait_for trips.
+            await asyncio.sleep(0.5)
+            return [[0.0] * 768 for _ in texts]
+
+        async def aclose(self) -> None:
+            return None
+
+    app_module = sys.modules["cf_knowledge_kiln.api.app"]
+
+    def _factory(_settings: object) -> _SlowProvider:
+        return _SlowProvider()
+
+    monkeypatch.setattr(app_module, "build_provider_from_settings", _factory)
+
+    with TestClient(create_app()) as client:
+        assert client.app.state.embedding_status == "failing"
+
+
 def test_lifespan_disposes_database_even_on_shutdown_path(
     models_config: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
