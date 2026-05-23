@@ -321,8 +321,18 @@ components:
         commit_sha:
           type: string
         status:
+          # #203: no enum. The kiln recommends the
+          # active/approved/draft/deprecated/archived/superseded set,
+          # but real corpora ship status values outside it (e.g.
+          # 'reference', 'canonical', 'running'). Enforcing the enum
+          # here crashed /v1/search with a 500 on any chunk whose
+          # source document had a non-listed status. EvidenceChunk
+          # uses the same permissive type for the same reason.
           type: string
-          enum: [active, approved, draft, deprecated, archived, superseded]
+          description: >-
+            Document status. Recommended values: active, approved,
+            draft, deprecated, archived, superseded — but any string
+            from the source corpus is accepted and returned verbatim.
         owner:
           type: string
         last_reviewed:

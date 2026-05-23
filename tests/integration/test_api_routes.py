@@ -127,6 +127,45 @@ def test_search_returns_200_with_results(
     assert top["score"] >= 0
 
 
+def test_search_does_not_500_on_corpus_native_status(
+    client: TestClient, session: AsyncSession, tmp_path: Path
+) -> None:
+    """#203 regression: a doc whose frontmatter ``status`` is outside the
+    kiln-recommended Literal vocabulary must NOT crash /v1/search.
+
+    Pre-fix: ``ResultCard.status`` was ``Literal[active|approved|draft|
+    deprecated|archived|superseded]``; any chunk with a corpus-native
+    status (e.g. ``reference``, ``canonical``, ``running``) raised a
+    Pydantic ValidationError → HTTP 500 on the whole request. This
+    test exercises that exact path against a real ingestion + retrieval
+    flow.
+    """
+    import asyncio
+
+    (tmp_path / "ref.md").write_text(
+        textwrap.dedent(
+            """\
+            ---
+            status: reference
+            ---
+            # Reference doc
+
+            unique-token-zzz appears here as the only mention.
+            """
+        )
+    )
+    asyncio.get_event_loop().run_until_complete(_seed(session, tmp_path))
+
+    response = client.post("/v1/search", json={"query": "unique-token-zzz", "max_results": 5})
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["results"], "expected at least one result for the seeded token"
+    statuses = {r["status"] for r in body["results"]}
+    assert "reference" in statuses, (
+        f"expected the seeded 'reference'-status chunk; got statuses={statuses!r}"
+    )
+
+
 def test_search_400_on_empty_query(client: TestClient) -> None:
     """Pydantic min_length=1 on query → FastAPI returns 422."""
     response = client.post("/v1/search", json={"query": ""})
