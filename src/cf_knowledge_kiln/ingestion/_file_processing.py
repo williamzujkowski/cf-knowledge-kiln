@@ -49,17 +49,58 @@ async def _existing_chunks_by_index(
     return {idx: (chunk_id, h) for chunk_id, idx, h in (await session.execute(stmt)).all()}
 
 
+# #205: frontmatter field-name aliases. Different documentation repos
+# settle on different spellings — homelab-iac uses ``last-verified``
+# and ``type``, kiln's canonical column names are ``last_reviewed`` and
+# ``doc_type``. Without aliasing, perfectly valid frontmatter silently
+# drops into null columns and downstream features (stale-source warning,
+# doc_type filter) misbehave. The map keys are CANONICAL column names;
+# the lists are accepted frontmatter spellings, in priority order
+# (first present wins). Add aliases here, not at the call site.
+_FRONTMATTER_ALIASES: dict[str, tuple[str, ...]] = {
+    "last_reviewed": (
+        "last_reviewed",
+        "last-reviewed",
+        "last_verified",
+        "last-verified",
+        "reviewed",
+        "verified",
+    ),
+    "doc_type": ("doc_type", "doc-type", "type"),
+}
+
+
+def _first_present(metadata: dict[str, Any], keys: tuple[str, ...]) -> Any:
+    """Return the first non-None value among ``metadata[keys]``.
+
+    Used for canonical-column ↔ frontmatter-spelling resolution
+    (#205). Empty-string is treated as missing — the existing fields
+    use the ``... or default`` idiom, so this stays consistent.
+    """
+    for key in keys:
+        value = metadata.get(key)
+        if value is not None and value != "":
+            return value
+    return None
+
+
 def _resolve_doc_defaults(metadata: dict[str, Any], source_defaults: Source) -> dict[str, Any]:
     """Frontmatter wins; source defaults backfill missing keys.
 
     Pulled out of :func:`_upsert_document` so the SQL upsert stays
-    readable top-to-bottom (#53 cleanup).
+    readable top-to-bottom (#53 cleanup). Frontmatter spellings that
+    aren't the canonical column name are resolved via
+    :data:`_FRONTMATTER_ALIASES` (#205).
     """
     return {
         "status": metadata.get("status") or source_defaults.status,
         "owner": metadata.get("owner") or source_defaults.default_owner,
         "authority": metadata.get("authority") or source_defaults.authority,
         "sensitivity": metadata.get("sensitivity") or source_defaults.default_sensitivity,
+        # #205: ``type:`` (homelab-iac convention) and ``doc-type:`` both
+        # land in ``documents.doc_type`` alongside the canonical spelling.
+        # Pre-#205 this column was always null because nothing wrote to it.
+        "doc_type": _first_present(metadata, _FRONTMATTER_ALIASES["doc_type"]),
         # #24: source_url drives the clickable source link on result
         # cards. Frontmatter-only for now (no source-level template);
         # operators add `source_url: https://...` to a doc to make its
@@ -68,12 +109,15 @@ def _resolve_doc_defaults(metadata: dict[str, Any], source_defaults: Source) -> 
         # javascript:/data:/file: which would be a stored-XSS sink
         # when the template renders the value into an href.
         "source_url": _safe_source_url(metadata.get("source_url")),
-        # #100: last_reviewed feeds the freshness boost + the
+        # #100 + #205: last_reviewed feeds the freshness boost + the
         # stale_source warning. Frontmatter ships an ISO date which
         # yaml.safe_load already returns as datetime.date; the
         # parser-side jsonify() converts it to "YYYY-MM-DD" so we
-        # coerce back to date here for the SQLA column.
-        "last_reviewed": _coerce_iso_date(metadata.get("last_reviewed")),
+        # coerce back to date here for the SQLA column. Aliases like
+        # ``last-verified`` (hyphen) are accepted via the alias map.
+        "last_reviewed": _coerce_iso_date(
+            _first_present(metadata, _FRONTMATTER_ALIASES["last_reviewed"])
+        ),
     }
 
 

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import textwrap
 from collections.abc import AsyncIterator
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -158,6 +159,46 @@ async def test_pipeline_indexes_local_source_end_to_end(
 
     sources = (await session.execute(select(DataSource))).scalars().all()
     assert {s.name for s in sources} == {"fixtures"}
+
+
+async def test_pipeline_resolves_hyphenated_frontmatter_aliases(
+    session: AsyncSession, tmp_path: Path
+) -> None:
+    """#205 regression: hyphenated frontmatter (e.g. ``last-verified``,
+    ``type:``) must land in the canonical columns, not silently drop
+    into nulls.
+
+    Pre-fix: ``last-verified`` and ``type`` were never read — every
+    homelab-iac document had ``documents.last_reviewed = NULL`` and
+    ``documents.doc_type = NULL``, so the stale-source warning fired
+    on every chunk and the doc_type filter was useless.
+    """
+    (tmp_path / "pgvector.md").write_text(
+        textwrap.dedent(
+            """\
+            ---
+            title: pgvector
+            type: component
+            last-verified: 2026-05-17
+            ---
+            # pgvector
+
+            Vector extension for Postgres.
+            """
+        )
+    )
+    src = LocalSource(name="aliases", type="local", path=str(tmp_path), include=["**/*.md"])
+    summary = await run_source(session, source=src, settings=_settings())
+    await session.commit()
+    assert summary.files_indexed == 1
+
+    docs = (await session.execute(select(Document))).scalars().all()
+    assert len(docs) == 1
+    doc = docs[0]
+    assert doc.path == "pgvector.md"
+    # The hyphenated aliases must land in the canonical columns.
+    assert doc.last_reviewed == date(2026, 5, 17)
+    assert doc.doc_type == "component"
 
 
 async def test_pipeline_is_idempotent_on_unchanged_content(
