@@ -36,6 +36,13 @@ WarningType = Literal[
     "prompt_injection_pattern",
     "sensitive_content",
     "query_normalized",
+    # #227: top-1 score is high but top-2 falls off a cliff — suggests
+    # the corpus has ONE chunk that happens to surface-match the query
+    # (e.g. mentioning "Kubernetes" in passing) rather than a genuine
+    # answer. Acts as a partner to ``weak_evidence``: weak_evidence
+    # fires when all scores are low; isolated_match fires when one
+    # score is suspiciously alone above the field.
+    "isolated_match",
 ]
 """Warning code enum — matches openapi.yaml Warning.type."""
 

@@ -23,7 +23,10 @@ from cf_knowledge_kiln.retrieval import (
     stale_warnings,
     weak_evidence_warning,
 )
-from cf_knowledge_kiln.retrieval.ranking import sensitive_content_warnings
+from cf_knowledge_kiln.retrieval.ranking import (
+    isolated_match_warning,
+    sensitive_content_warnings,
+)
 
 TODAY = date(2026, 5, 17)
 
@@ -324,6 +327,85 @@ class TestWeakEvidenceWarning:
         assert weak_evidence_warning([_mk(score=WEAK_EVIDENCE_SCORE_THRESHOLD + 0.01)]) == []
 
 
+# ─── isolated_match warning (#227) ──────────────────────────────────
+
+
+class TestIsolatedMatchWarning:
+    """The wrong-question detector: top-1 confident, runner-up far behind."""
+
+    DROP = 0.30  # default `isolated_match_drop_threshold`
+
+    def test_none_threshold_disables(self) -> None:
+        """Passing ``None`` is the operator off-switch — no warning ever."""
+        chunks = [_mk(score=0.99), _mk(score=0.10)]
+        assert isolated_match_warning(chunks, drop_threshold=None) == []
+
+    def test_empty_chunks_emits_nothing(self) -> None:
+        """No data → weak_evidence's domain, not ours."""
+        assert isolated_match_warning([], drop_threshold=self.DROP) == []
+
+    def test_single_chunk_emits_nothing(self) -> None:
+        """One result can't be 'isolated' relative to peers."""
+        assert isolated_match_warning([_mk(score=0.95)], drop_threshold=self.DROP) == []
+
+    def test_clustered_top_scores_emit_nothing(self) -> None:
+        """Top-1 0.92 vs top-2 0.85 — a healthy cluster, no isolated match."""
+        chunks = [_mk(score=0.92), _mk(score=0.85), _mk(score=0.70)]
+        assert isolated_match_warning(chunks, drop_threshold=self.DROP) == []
+
+    def test_large_gap_above_weak_floor_emits(self) -> None:
+        """The #222 q14 Kubernetes case: top-1 0.90, top-2 ~0.50, gap 0.40 > 0.30."""
+        chunks = [_mk(score=0.90), _mk(score=0.50), _mk(score=0.48)]
+        [w] = isolated_match_warning(chunks, drop_threshold=self.DROP)
+        assert w.type == "isolated_match"
+        assert "0.90" in w.message
+        assert "0.50" in w.message
+
+    def test_large_gap_but_top_below_weak_floor_emits_nothing(self) -> None:
+        """If top-1 is weak, weak_evidence owns the signal — no double-warning."""
+        # top-1 = 0.30 (below default 0.46), top-2 = 0.005 → gap 0.295, but
+        # weak floor blocks emission so weak_evidence_warning fires alone.
+        chunks = [_mk(score=0.30), _mk(score=0.005)]
+        assert (
+            isolated_match_warning(
+                chunks,
+                drop_threshold=0.20,  # gap exceeds 0.20
+                weak_evidence_threshold=0.46,
+            )
+            == []
+        )
+
+    def test_gap_exactly_at_threshold_does_not_emit(self) -> None:
+        """Strictly-greater-than gate: gap == threshold is not 'isolated'.
+
+        Values chosen to avoid IEEE-754 representability slop — 1.0
+        and 0.5 are both exact, so the subtraction is exact 0.5.
+        """
+        chunks = [_mk(score=1.0), _mk(score=0.5)]  # gap exactly 0.50
+        assert isolated_match_warning(chunks, drop_threshold=0.5) == []
+
+    def test_custom_weak_evidence_threshold_lets_lower_top_emit(self) -> None:
+        """Operator-tuned weak floor flows through (parity with other emitters)."""
+        # top-1 0.20 isn't above 0.46 default; but if weak floor lowered to
+        # 0.10 (e.g. mock-embedding tests), the warning is back in scope.
+        chunks = [_mk(score=0.20), _mk(score=0.005)]
+        [w] = isolated_match_warning(
+            chunks,
+            drop_threshold=0.10,
+            weak_evidence_threshold=0.10,
+        )
+        assert w.type == "isolated_match"
+
+    def test_uses_max_not_first_for_top_ranking(self) -> None:
+        """Argument list may be unordered; emitter sorts on score itself."""
+        # Caller hands us reversed-sorted input; we still find the real top.
+        chunks = [_mk(score=0.10), _mk(score=0.90), _mk(score=0.05)]
+        [w] = isolated_match_warning(chunks, drop_threshold=self.DROP)
+        assert "0.90" in w.message
+        # Runner-up should be 0.10, not 0.05.
+        assert "0.10" in w.message
+
+
 # ─── Conflict detection ─────────────────────────────────────────────
 
 
@@ -478,3 +560,13 @@ class TestRequiresHumanReview:
         """Stale + deprecated warnings should NOT force human review by themselves."""
         w = Warning(type="stale_source", message="x")
         assert requires_human_review([_mk(score=0.9, status="active")], [w], []) is False
+
+    def test_isolated_match_warning_requires_review(self) -> None:
+        """#227: isolated_match flags top-1/top-2 cliffs → review.
+
+        Without this, the agent could ship a confidently wrong answer
+        because its highest-scoring chunk just happened to surface-match
+        a keyword from the query.
+        """
+        w = Warning(type="isolated_match", message="x")
+        assert requires_human_review([_mk(score=0.9)], [w], []) is True

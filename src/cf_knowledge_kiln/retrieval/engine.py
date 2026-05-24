@@ -208,6 +208,7 @@ class HybridRetriever:
                     weak_evidence_threshold=self._config.weak_evidence_score_threshold,
                     relevance_floor=self._config.effective_relevance_floor,
                     max_warning_rank=self._config.max_warning_rank,
+                    isolated_match_drop_threshold=self._config.isolated_match_drop_threshold,
                 )
                 if removed_phrases:
                     warnings.append(_query_normalized_warning(removed_phrases))
@@ -289,6 +290,7 @@ class HybridRetriever:
                     weak_evidence_threshold=self._config.weak_evidence_score_threshold,
                     relevance_floor=self._config.effective_relevance_floor,
                     max_warning_rank=self._config.max_warning_rank,
+                    isolated_match_drop_threshold=self._config.isolated_match_drop_threshold,
                 )
                 warn_span.set_attribute("retrieval.warnings_count", len(warnings))
             with _TRACER.start_as_current_span("retrieval.detect_conflicts") as conf_span:

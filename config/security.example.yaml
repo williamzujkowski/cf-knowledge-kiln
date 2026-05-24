@@ -75,3 +75,15 @@ retrieval:
   # docs/security.md for the policy framing.
   # relevance_floor: 0.69   # 1.5x weak_evidence_score_threshold
   max_warning_rank: 3
+
+  # Top-1-minus-top-2 score gap that trips `isolated_match` (#227).
+  # When the best-scoring chunk towers over the runner-up — and the
+  # top score is above `weak_evidence_score_threshold` so it LOOKS
+  # like real signal — that's the classic "wrong-question" shape:
+  # one corpus chunk happens to share surface tokens with the query
+  # but isn't a real answer. Calibrated from the homelab-iac eval
+  # (#222 2026-05-24): real answers clustered with top-1/top-2
+  # deltas of 0.00-0.15; the Kubernetes negative query landed near
+  # 0.40. 0.30 sits in between so genuine answers don't trip but
+  # off-corpus queries do. Set to null to disable the gate.
+  isolated_match_drop_threshold: 0.30

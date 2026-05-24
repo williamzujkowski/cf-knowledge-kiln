@@ -409,6 +409,10 @@ components:
             - prompt_injection_pattern
             - sensitive_content
             - query_normalized
+            # #227: top-1 score is high but the second-best falls
+            # off a cliff — one chunk happens to surface-match the
+            # query without comparable supporting evidence.
+            - isolated_match
         message:
           type: string
         source_id:

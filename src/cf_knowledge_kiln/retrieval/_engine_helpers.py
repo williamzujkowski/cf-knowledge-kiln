@@ -22,6 +22,7 @@ from cf_knowledge_kiln.db.repositories._hybrid import SearchRow
 from cf_knowledge_kiln.retrieval.ranking import (
     RankedChunk,
     deprecated_warnings,
+    isolated_match_warning,
     prompt_injection_warnings,
     sensitive_content_warnings,
     stale_warnings,
@@ -53,6 +54,7 @@ def collect_warnings(
     weak_evidence_threshold: float | None = None,
     relevance_floor: float | None = None,
     max_warning_rank: int | None = None,
+    isolated_match_drop_threshold: float | None = None,
 ) -> list[Warning]:
     """Concatenate the standard slice-2 warning set.
 
@@ -60,6 +62,8 @@ def collect_warnings(
     per-chunk security emitters only (#161); stale, deprecated, and
     weak-evidence are deliberately unaffected — they're either
     document-property warnings or operate on the best chunk overall.
+    ``isolated_match_drop_threshold`` (#227) gates the top-1/top-2
+    gap warning; passing ``None`` disables that emitter entirely.
     """
     warnings: list[Warning] = []
     warnings.extend(stale_warnings(chunks, today=today, stale_after_days=stale_after_days))
@@ -79,6 +83,13 @@ def collect_warnings(
         )
     )
     warnings.extend(weak_evidence_warning(chunks, threshold=weak_evidence_threshold))
+    warnings.extend(
+        isolated_match_warning(
+            chunks,
+            drop_threshold=isolated_match_drop_threshold,
+            weak_evidence_threshold=weak_evidence_threshold,
+        )
+    )
     return warnings
 
 
