@@ -243,6 +243,7 @@ otel = [
 real-embeddings = [
     { name = "sentence-transformers" },
     { name = "torch" },
+    { name = "transformers" },
 ]
 
 [package.metadata]
@@ -271,13 +272,14 @@ requires-dist = [
     { name = "python-multipart", specifier = ">=0.0.27,<1.0" },
     { name = "pyyaml", specifier = ">=6.0,<7.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.7,<1.0" },
-    { name = "sentence-transformers", marker = "extra == 'embeddings'", specifier = ">=3.0,<6.0" },
-    { name = "sentence-transformers", marker = "extra == 'real-embeddings'", specifier = ">=3.0,<6.0" },
+    { name = "sentence-transformers", marker = "extra == 'embeddings'", specifier = ">=5.5,<6.0" },
+    { name = "sentence-transformers", marker = "extra == 'real-embeddings'", specifier = ">=5.5,<6.0" },
     { name = "sqlalchemy", marker = "extra == 'db'", specifier = ">=2.0,<3.0" },
     { name = "starlette", specifier = ">=1.0.1,<2.0" },
     { name = "structlog", specifier = ">=24.4,<26.0" },
     { name = "tiktoken", marker = "extra == 'ingestion'", specifier = ">=0.8,<1.0" },
-    { name = "torch", marker = "extra == 'real-embeddings'", specifier = ">=2.0,<3" },
+    { name = "torch", marker = "extra == 'real-embeddings'", specifier = ">=2.9,<3" },
+    { name = "transformers", marker = "extra == 'real-embeddings'", specifier = ">=5.0,<6" },
     { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0,<7.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32,<1.0" },
 ]
