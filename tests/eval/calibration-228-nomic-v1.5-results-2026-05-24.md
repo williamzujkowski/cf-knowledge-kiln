@@ -213,11 +213,11 @@ not retrieval-quality issues at all. They split into three buckets:
 Of the 8 missed positive queries, **at least 5 were corpus problems,
 not retrieval problems**:
 
-- **3 expected paths don't exist at all** (q01, q06, q10 → 
+* **3 expected paths don't exist at all** (q01, q06, q10 →
   `skills/manage-offsite-backup`, `docs/components/offsite-backup`)
-- **1 filename drift** (q04: corpus has the alert renamed to
+* **1 filename drift** (q04: corpus has the alert renamed to
   `backupoffsitereplicationfailed`)
-- **2 non-markdown expected files** that the ingest filter
+* **2 non-markdown expected files** that the ingest filter
   legitimately excludes (q09 shell script, q11+q12 YAML inventory)
 
 The **truly retrieval-quality problems** are q08, q09 (AGENTS.md
@@ -254,6 +254,7 @@ real signal for #232 (long-section AGENTS.md chunking) and #233
 Closing thought: this is a textbook example of why benchmark
 diagnostics need to look at WHAT the retriever returned and WHERE
 the expected target landed, not just the headline hit-rate. The
-#228 report's headline framing ("Nomic v1.5 doesn't lift the gap")
-remains correct — neither embedder can find files that aren't in
-the DB — but the framing of "retrieval-quality gap" was too broad.
+report's headline framing ("Nomic v1.5 doesn't lift the gap") for
+this experiment remains correct — neither embedder can find files
+that aren't in the DB — but the framing of "retrieval-quality gap"
+was too broad.
