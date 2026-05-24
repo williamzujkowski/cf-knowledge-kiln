@@ -464,3 +464,164 @@ def test_heading_only_section_followed_by_sibling_with_content_keeps_sibling() -
     chunk = doc.chunks[0]
     assert chunk.heading_path == ["Top", "Real Section"]
     assert "Real content" in chunk.content
+
+
+# ─── #200 — nested fence handling ─────────────────────────────────────
+
+
+def test_nested_same_backtick_fence_does_not_close_outer_early() -> None:
+    """#200: a ``` markdown ``` template containing an inner ``` bash ```
+    block must keep the OUTER block atomic.
+
+    Pre-fix: the inner bash fence's closing ``` was treated as closing
+    the outer markdown block. The chunker then walked past it as if the
+    template body were top-level, emitting H2 lines like
+    ``## Root-cause investigation`` as their own section boundaries —
+    spraying the index with stub-shaped chunks and (in the worst case)
+    swallowing the real ``## Index`` that came after the outer close.
+
+    The repro shape comes from
+    williamzujkowski/homelab-iac/docs/runbooks/README.md (lines 23-51).
+    """
+    src = textwrap.dedent(
+        """\
+        # Alert Runbooks
+
+        ## How to add a new runbook
+
+        1. Copy the template.
+        2. Customize.
+
+        ```markdown
+        # <AlertName>
+
+        ## What's happening
+
+        Description.
+
+        ## First checks (30 seconds)
+
+        ```bash
+        # First command
+        ```
+
+        ## Root-cause investigation
+
+        Steps.
+
+        ## Resolution
+
+        Concrete fix.
+
+        ## Related
+
+        - [Component doc](../components/X.md)
+        ```
+
+        ## Index
+
+        Sorted alphabetically.
+        """
+    )
+    doc = parse_document(src)
+    # The outer ```markdown``` fence is one atomic block, so the only
+    # heading-bearing sections are "How to add a new runbook" and "Index".
+    # ("Alert Runbooks" itself has no body before its first H2 → dropped
+    # by #201; that's correct.)
+    paths = [c.heading_path for c in doc.chunks]
+    assert paths == [
+        ["Alert Runbooks", "How to add a new runbook"],
+        ["Alert Runbooks", "Index"],
+    ]
+    # The inner-template headings must NOT appear as chunk-path segments.
+    flat = {seg for path in paths for seg in path}
+    assert "Root-cause investigation" not in flat
+    assert "Resolution" not in flat
+    assert "Related" not in flat
+    # The whole template, both fences and the inner bash block, lives in
+    # the first chunk's content.
+    first = doc.chunks[0].content
+    assert "```markdown" in first
+    assert "```bash" in first
+    # The template close-fence and the post-template Index header live
+    # in different chunks (= the chunker found the real outer close).
+    assert "## Index" not in first
+    assert "## Index" in doc.chunks[1].content
+
+
+def test_simple_python_fence_still_handled_correctly() -> None:
+    """No-regression: a plain ``` python ``` block still works."""
+    src = textwrap.dedent(
+        """\
+        # Top
+        Before.
+
+        ```python
+        def foo():
+            return 1
+        ```
+
+        After.
+        """
+    )
+    doc = parse_document(src)
+    full = "\n".join(c.content for c in doc.chunks)
+    assert "def foo():" in full
+    assert full.count("```") == 2
+
+
+def test_tilde_fence_inside_backtick_fence_treated_as_content() -> None:
+    """A ``~~~`` line inside a ``` ``` `` block must NOT close it (different fence types)."""
+    src = textwrap.dedent(
+        """\
+        # Top
+
+        ```
+        Some text
+        ~~~
+        Even more text inside
+        ~~~
+        Final text
+        ```
+
+        After.
+        """
+    )
+    doc = parse_document(src)
+    # Everything between the outer ``` fences should be one block.
+    body_with_fence = "".join(c.content for c in doc.chunks)
+    assert "Some text" in body_with_fence
+    assert "Final text" in body_with_fence
+    assert "After." in body_with_fence
+    # No spurious header chunks injected mid-fence.
+    paths = [c.heading_path for c in doc.chunks]
+    assert all(p == ["Top"] for p in paths)
+
+
+def test_four_backtick_outer_with_three_backtick_inner_works() -> None:
+    """Conformant CommonMark nesting: ````outer```` contains ```inner```."""
+    src = textwrap.dedent(
+        """\
+        # Top
+
+        ````markdown
+        Use ```python``` for inline code.
+
+        ```python
+        def foo(): pass
+        ```
+
+        Then continue.
+        ````
+
+        After.
+        """
+    )
+    doc = parse_document(src)
+    full = "".join(c.content for c in doc.chunks)
+    # The whole 4-backtick outer fence is one block, and "After." came after it.
+    assert "def foo(): pass" in full
+    assert "After." in full
+    # No internal "## X" got promoted (there aren't any here, but assertion is cheap).
+    paths = [c.heading_path for c in doc.chunks]
+    assert all(p == ["Top"] for p in paths)
