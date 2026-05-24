@@ -10,7 +10,7 @@ Covers:
 * 503 when no generator is wired (the MVP default).
 * Happy path: seed → POST → 200 with answer text + evidence + token
   budget + generator metadata.
-* Telemetry: ``rag_queries`` row appended with ``consumer_type='answer'``.
+* Telemetry: dedicated ``rag_answers`` row with full response classification.
 * Refusal path: when retrieval finds nothing, ``answer=null`` and the
   generator is NOT invoked (we can detect by checking the mock's call
   list — but the mock is per-test so we wire one in and inspect).
@@ -32,7 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from cf_knowledge_kiln.api.app import create_app
 from cf_knowledge_kiln.config import Settings, get_settings
-from cf_knowledge_kiln.db.models import RagQuery
+from cf_knowledge_kiln.db.models import RagAnswer
 from cf_knowledge_kiln.generation import MockGeneratorProvider
 from cf_knowledge_kiln.ingestion.embedding import MockEmbeddingProvider
 from cf_knowledge_kiln.ingestion.pipeline import run_source
@@ -208,18 +208,15 @@ def test_answer_happy_path_returns_synthesized_answer(
 # ─── Telemetry ───────────────────────────────────────────────────────
 
 
-def test_answer_persists_rag_query_row_with_agent_consumer_type(
+def test_answer_persists_full_rag_answers_row_on_happy_path(
     client_with_mock_generator: TestClient,
     session: AsyncSession,
     small_corpus: Path,
     engine: AsyncEngine,
 ) -> None:
-    """The route writes one rag_queries row tagged ``consumer_type='agent'``.
-
-    Uses ``'agent'`` because the existing DB CHECK constraint only
-    allows ``'human'`` or ``'agent'`` (see note in
-    ``api/answer.py::_log_answer_query``). A dedicated ``rag_answers``
-    table for finer per-endpoint segmentation is filed as a follow-up.
+    """#221: the route writes a ``rag_answers`` row capturing the full
+    response classification — answerable flag, generator metadata,
+    finish_reason, token counts — not just the query + chunk ids.
     """
     import asyncio
 
@@ -228,18 +225,29 @@ def test_answer_persists_rag_query_row_with_agent_consumer_type(
     response = client_with_mock_generator.post("/v1/answer", json={"query": "widgets"})
     assert response.status_code == 200, response.text
 
-    async def _rows() -> list[RagQuery]:
+    async def _rows() -> list[RagAnswer]:
         maker = async_sessionmaker(engine, expire_on_commit=False)
         async with maker() as s:
-            return list((await s.execute(select(RagQuery))).scalars().all())
+            return list((await s.execute(select(RagAnswer))).scalars().all())
 
     rows = asyncio.get_event_loop().run_until_complete(_rows())
-    # The route appended a row.
     assert len(rows) == 1
-    assert rows[0].consumer_type == "agent"
-    assert rows[0].query == "widgets"
-    # The retrieved chunk IDs were persisted.
-    assert rows[0].retrieved_chunk_ids
+    row = rows[0]
+    # Request-side fields.
+    assert row.query == "widgets"
+    assert row.evidence_chunk_ids
+    assert row.requested_max_answer_tokens == 1024  # default
+    # Happy-path classification.
+    assert row.answerable is True
+    assert row.requires_human_review is False
+    assert row.refusal_reason is None
+    # Generator metadata (mock from the fixture).
+    assert row.generator_provider == "mock"
+    assert row.generator_model == "mock-answer"
+    assert row.finish_reason == "stop"
+    assert row.prompt_tokens == 120
+    assert row.completion_tokens == 10
+    assert row.total_tokens == 130
 
 
 # ─── Request validation ──────────────────────────────────────────────

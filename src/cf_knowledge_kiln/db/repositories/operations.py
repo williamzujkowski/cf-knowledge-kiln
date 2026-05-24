@@ -13,6 +13,7 @@ from cf_knowledge_kiln.db.models import (
     ContextPack,
     IngestionJob,
     IngestionRun,
+    RagAnswer,
     RagFeedback,
     RagQuery,
 )
@@ -202,6 +203,84 @@ class ContextPacksRepository(BaseRepository):
 
     async def delete(self, id: UUID) -> None:
         await self._session.execute(delete(ContextPack).where(ContextPack.id == id))
+
+
+class AnswersRepository(BaseRepository):
+    """#221: per-request telemetry for ``POST /v1/answer``.
+
+    Mirrors the other repositories' shape (``create`` / ``get`` /
+    ``list`` / ``delete``). The route writes one row per request via
+    ``create`` inside a SAVEPOINT so a transient DB failure doesn't
+    cascade to a 500.
+    """
+
+    async def create(
+        self,
+        *,
+        query: str,
+        answerable: bool,
+        requires_human_review: bool,
+        requested_max_answer_tokens: int,
+        task: str | None = None,
+        filters: dict[str, Any] | None = None,
+        evidence_chunk_ids: Sequence[UUID] | None = None,
+        refusal_reason: str | None = None,
+        confidence: str | None = None,
+        generator_provider: str | None = None,
+        generator_model: str | None = None,
+        finish_reason: str | None = None,
+        prompt_tokens: int | None = None,
+        completion_tokens: int | None = None,
+        total_tokens: int | None = None,
+    ) -> RagAnswer:
+        return await self._persist(
+            RagAnswer(
+                query=query,
+                task=task,
+                filters=filters or {},
+                evidence_chunk_ids=list(evidence_chunk_ids or []),
+                answerable=answerable,
+                requires_human_review=requires_human_review,
+                refusal_reason=refusal_reason,
+                confidence=confidence,
+                generator_provider=generator_provider,
+                generator_model=generator_model,
+                finish_reason=finish_reason,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens,
+                requested_max_answer_tokens=requested_max_answer_tokens,
+            )
+        )
+
+    async def get(self, id: UUID) -> RagAnswer | None:
+        return await self._session.get(RagAnswer, id)
+
+    async def list(
+        self,
+        *,
+        answerable: bool | None = None,
+        requires_human_review: bool | None = None,
+        generator_model: str | None = None,
+        since: datetime | None = None,
+        limit: int | None = None,
+    ) -> Sequence[RagAnswer]:
+        stmt = select(RagAnswer)
+        if answerable is not None:
+            stmt = stmt.where(RagAnswer.answerable.is_(answerable))
+        if requires_human_review is not None:
+            stmt = stmt.where(RagAnswer.requires_human_review.is_(requires_human_review))
+        if generator_model is not None:
+            stmt = stmt.where(RagAnswer.generator_model == generator_model)
+        if since is not None:
+            stmt = stmt.where(RagAnswer.created_at >= since)
+        stmt = stmt.order_by(RagAnswer.created_at.desc())
+        if limit is not None:
+            stmt = stmt.limit(limit)
+        return (await self._session.execute(stmt)).scalars().all()
+
+    async def delete(self, id: UUID) -> None:
+        await self._session.execute(delete(RagAnswer).where(RagAnswer.id == id))
 
 
 class IngestionJobsRepository(BaseRepository):

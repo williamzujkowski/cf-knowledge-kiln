@@ -42,6 +42,7 @@ _TRUNCATE_TABLES = [
     "ingestion_jobs",
     "rag_feedback",
     "rag_queries",
+    "rag_answers",
     "context_packs",
     "chunk_embeddings",
     "document_chunks",

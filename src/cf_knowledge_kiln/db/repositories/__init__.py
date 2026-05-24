@@ -17,6 +17,7 @@ from cf_knowledge_kiln.db.repositories.documents import (
     EmbeddingsRepository,
 )
 from cf_knowledge_kiln.db.repositories.operations import (
+    AnswersRepository,
     ContextPacksRepository,
     FeedbackRepository,
     IngestionJobsRepository,
@@ -25,6 +26,7 @@ from cf_knowledge_kiln.db.repositories.operations import (
 )
 
 __all__ = [
+    "AnswersRepository",
     "ChunksRepository",
     "ContextPacksRepository",
     "DataSourcesRepository",
