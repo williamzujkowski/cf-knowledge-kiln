@@ -77,6 +77,25 @@ _MODEL_PREFIXES: tuple[tuple[re.Pattern[str], str, str], ...] = (
     ),
 )
 
+# Model-family ↔ required-but-undeclared-by-sentence-transformers
+# extras. Each entry is ``(regex, package_name)``; constructor refuses
+# when the model matches the regex but ``import <package_name>`` fails.
+#
+# Why this exists (#231): Nomic's custom modeling code
+# (``nomic-bert-2048``) imports ``einops``. ``einops`` is not declared
+# by ``sentence-transformers`` or ``transformers``, so a fresh install
+# of the ``real-embeddings`` extra lets the worker spin loading the
+# model with a silent ``[transformers] Encountered exception while
+# importing einops: No module named 'einops'`` — partial failure that
+# doesn't propagate as a hard error. Discovered the hard way in #228.
+#
+# Adding a new family to this table is what we do INSTEAD of declaring
+# einops in ``[real-embeddings]`` — declaring it would pull einops for
+# every operator who picks e5, when only Nomic users need it.
+_MODEL_REQUIRED_DEPS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"^nomic-ai/nomic-embed-text-v1"), "einops"),
+)
+
 
 def _prefixes_for(model_name: str) -> tuple[str, str]:
     """Return ``(passage_prefix, query_prefix)`` for ``model_name``.
@@ -89,6 +108,31 @@ def _prefixes_for(model_name: str) -> tuple[str, str]:
         if pattern.match(model_name):
             return passage, query
     return "", ""
+
+
+def _check_required_deps(model_name: str) -> None:
+    """Fail-fast at provider construction if a known model-family dep is missing.
+
+    See :data:`_MODEL_REQUIRED_DEPS` for the table + the
+    Nomic+einops backstory (#231).
+
+    Raises :class:`ImportError` with a clear install hint when a
+    listed dep is unimportable. Models not in the table pass through
+    untouched.
+    """
+    import importlib
+
+    for pattern, package in _MODEL_REQUIRED_DEPS:
+        if not pattern.match(model_name):
+            continue
+        try:
+            importlib.import_module(package)
+        except ImportError as exc:
+            raise ImportError(
+                f"Model {model_name!r} requires the {package!r} package, but "
+                f"importing it failed: {exc}. Install with: pip install {package}. "
+                "See docs/model-providers.md for the model-family dep table."
+            ) from exc
 
 
 # Default model factory: imported lazily so the ``real-embeddings``
@@ -193,6 +237,12 @@ class LocalSentenceTransformersProvider:
             raise ValueError(f"dimensions must be positive, got {dimensions}")
         if batch_size <= 0:
             raise ValueError(f"batch_size must be positive, got {batch_size}")
+        # #231: fail-fast on Nomic + einops (and any future family/dep
+        # the table grows). Production path only — tests inject a
+        # ``model_factory`` to skip the real load, so they shouldn't
+        # have to install einops just to construct the provider.
+        if model_factory is None:
+            _check_required_deps(model_name)
         self.model = model_name
         self.dimensions = dimensions
         self.batch_size = batch_size

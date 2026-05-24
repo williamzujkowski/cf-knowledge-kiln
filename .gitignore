@@ -88,3 +88,4 @@ ci/vars.yml
 .nexus-agents/
 tests/eval/*-corpus-stats.md
 config/*.local.yaml
+config/models.yaml.*-backup

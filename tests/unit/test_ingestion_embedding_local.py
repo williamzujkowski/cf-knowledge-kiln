@@ -341,6 +341,104 @@ class TestTrustRemoteCode:
         assert recorded["trust_remote_code"] is True
 
 
+class TestModelFamilyRequiredDeps:
+    """#231: Nomic family needs ``einops``; missing it must fail-fast.
+
+    Background: Nomic's custom modeling code (``nomic-bert-2048``)
+    imports ``einops``, which is NOT declared by ``sentence-transformers``
+    or ``transformers``. Before this guard the worker spun loading the
+    model with a silent ``[transformers] Encountered exception while
+    importing einops`` for ~30 cycles per #228 incident.
+    """
+
+    def test_nomic_without_einops_raises_at_construction(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Nomic-name + no einops → ImportError before any model load."""
+        import sys
+
+        saved = sys.modules.pop("einops", None)
+        monkeypatch.setitem(sys.modules, "einops", None)
+        try:
+            with pytest.raises(ImportError, match="einops"):
+                LocalSentenceTransformersProvider(
+                    model_name="nomic-ai/nomic-embed-text-v1.5",
+                    dimensions=768,
+                    trust_remote_code=True,
+                )
+        finally:
+            sys.modules.pop("einops", None)
+            if saved is not None:
+                sys.modules["einops"] = saved
+
+    def test_nomic_with_einops_present_constructs(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """If einops IS importable, the guard passes through.
+
+        We inject a fake einops module so the test doesn't depend on
+        the real package being installed in the test environment.
+        """
+        import sys
+        import types
+
+        fake = types.ModuleType("einops")
+        monkeypatch.setitem(sys.modules, "einops", fake)
+        # ``model_factory`` skips the real load path entirely, but the
+        # guard runs even before the factory is consulted… so this
+        # test specifically targets the guard's pass-through. Use the
+        # default factory so the guard is reached, but inject the
+        # model factory via the keyword to avoid an actual download.
+        make, _ = _factory(768)
+        # Note: when model_factory is provided, the guard is skipped
+        # (test-only contract). To verify the guard's PASS path we
+        # construct WITHOUT model_factory and let it reach
+        # _check_required_deps, then stop before _default_factory by
+        # never calling embed(). Constructor must not raise.
+        LocalSentenceTransformersProvider(
+            model_name="nomic-ai/nomic-embed-text-v1.5",
+            dimensions=768,
+            trust_remote_code=True,
+            model_factory=make,  # still injected so embed() wouldn't fail later
+        )
+        # Also assert the guard runs in the no-factory path: rebuild
+        # with no factory but with einops present → still must not
+        # raise at construction.
+        LocalSentenceTransformersProvider(
+            model_name="nomic-ai/nomic-embed-text-v1.5",
+            dimensions=768,
+            trust_remote_code=True,
+        )
+
+    def test_non_nomic_model_skips_the_guard(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """e5 (or any model not in the deps table) constructs without einops."""
+        import sys
+
+        saved = sys.modules.pop("einops", None)
+        monkeypatch.setitem(sys.modules, "einops", None)
+        try:
+            # No raise — e5 doesn't trigger the einops check.
+            LocalSentenceTransformersProvider(
+                model_name="intfloat/e5-small-v2",
+                dimensions=384,
+            )
+        finally:
+            sys.modules.pop("einops", None)
+            if saved is not None:
+                sys.modules["einops"] = saved
+
+    def test_test_factory_path_skips_guard(self) -> None:
+        """Tests inject ``model_factory`` — they shouldn't need einops to construct."""
+        # No einops manipulation: the test injection path bypasses the
+        # check entirely. Without this contract, every test against
+        # the Nomic model name would need einops installed.
+        make, _ = _factory(768)
+        LocalSentenceTransformersProvider(
+            model_name="nomic-ai/nomic-embed-text-v1.5",
+            dimensions=768,
+            trust_remote_code=True,
+            model_factory=make,
+        )
+
+
 class TestMissingExtraImportError:
     """When ``sentence-transformers`` is absent, the error must be actionable."""
 

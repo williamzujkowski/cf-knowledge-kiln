@@ -80,6 +80,27 @@ the pattern to `_MODEL_PREFIXES` in
 `src/cf_knowledge_kiln/ingestion/embedding/local.py` — the table is
 the only place the mapping lives.
 
+### Model-family required deps (#231)
+
+Some models pull in custom modeling code with extra runtime
+dependencies that `sentence-transformers` doesn't declare. The
+adapter checks for these at provider construction and raises
+`ImportError` with a clear install hint when missing — fail-fast
+rather than the silent spin-loop that #228 discovered (the worker
+re-loaded the model every batch with a buried `[transformers]
+Encountered exception while importing einops`).
+
+| Family pattern                          | Required extra dep | Install                         |
+| --------------------------------------- | ------------------ | ------------------------------- |
+| `nomic-ai/nomic-embed-text-v1*`         | `einops`           | `pip install einops`            |
+
+The table lives at `_MODEL_REQUIRED_DEPS` in
+`src/cf_knowledge_kiln/ingestion/embedding/local.py`. Add new
+entries there as new model families are introduced; declaring the
+dep directly in `[real-embeddings]` was considered and rejected —
+it would pull `einops` (or future deps) for operators who pick a
+non-Nomic model and never need it.
+
 The `embed()` method on the adapter is preserved as a raw, no-prefix
 path for the startup health probe and back-compat. New code should
 call `embed_documents` (for chunks being indexed) or `embed_query`
