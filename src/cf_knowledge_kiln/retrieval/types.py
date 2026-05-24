@@ -272,10 +272,92 @@ class ContextPackResponse(BaseModel):
     untrusted_content_notice: str
 
 
+# ─── /v1/answer shapes (#192 Phase B+C) ────────────────────────────────
+
+
+class AnswerRequest(BaseModel):
+    """POST /v1/answer request body.
+
+    Same retrieval substrate as :class:`ContextPackRequest`, plus
+    ``max_answer_tokens`` for the generator. ``task`` is optional —
+    the synthesis prompt defaults to a generic "answer the question
+    from the cited evidence" when none is supplied.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    query: str = Field(min_length=1, max_length=MAX_QUERY_LENGTH)
+    task: str | None = Field(default=None, max_length=MAX_TASK_LENGTH)
+    filters: RetrievalFilters | None = None
+    max_chunks: int = Field(default=8, ge=1, le=20)
+    max_answer_tokens: int = Field(default=1024, ge=64, le=4096)
+
+
+class AnswerTokenBudget(BaseModel):
+    """Token accounting for /v1/answer.
+
+    Honest counts: when the generator returns a ``usage`` block, the
+    values are exact; otherwise they're ``None`` and callers should
+    treat the request as "couldn't measure" rather than "zero used."
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    requested_max_answer_tokens: int
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    total_tokens: int | None = None
+    finish_reason: str | None = None
+
+
+class AnswerResponse(BaseModel):
+    """LLM-synthesized cited answer returned by /v1/answer.
+
+    ``answer`` is ``None`` on the refusal path (no evidence,
+    upstream ``requires_human_review``, or generator content-filter);
+    ``refusal_reason`` is populated in that case. ``answerable``
+    mirrors the upstream context-pack semantic so an agent can
+    distinguish "we tried and synthesized" from "we refused upstream
+    or downstream."
+
+    The same evidence, warnings, conflicts, and untrusted-content
+    notice flow through from the underlying ContextPackResponse — a
+    /v1/answer caller gets the synthesized answer AND the raw
+    evidence + warnings, so it can verify the synthesis against
+    sources if desired.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    answer_id: UUID
+    answer: str | None
+    answerable: bool
+    confidence: Confidence | None = None
+    refusal_reason: str | None = None
+    # Same shapes as ContextPackResponse — agents that already consume
+    # /v1/agent/context-pack can re-use the same parsing code.
+    evidence: list[EvidenceChunk]
+    warnings: list[Warning]
+    conflicts: list[Conflict] = Field(default_factory=list)
+    token_budget: AnswerTokenBudget
+    requires_human_review: bool
+    review_reasons: list[str] = Field(default_factory=list)
+    # Generator-side metadata so an audit row can attribute the answer
+    # to the model that produced it. ``None`` on refusals that never
+    # reached the generator.
+    generator_provider: str | None = None
+    generator_model: str | None = None
+    # Same required preamble as ContextPackResponse (#188).
+    untrusted_content_notice: str
+
+
 __all__ = [
     "MAX_FILTER_ITEMS",
     "MAX_QUERY_LENGTH",
     "MAX_TASK_LENGTH",
+    "AnswerRequest",
+    "AnswerResponse",
+    "AnswerTokenBudget",
     "Confidence",
     "Conflict",
     "ContextPackRequest",
