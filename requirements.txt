@@ -1,0 +1,54 @@
+# Cloud Foundry python_buildpack entry point (#229).
+#
+# WHY THIS FILE EXISTS:
+#
+# python_buildpack (cloudfoundry/python-buildpack) 1.8.x stages a
+# Python app by running ``pip install -r requirements.txt`` (or
+# Pipfile/Pipfile.lock if present). PEP 621 ``pyproject.toml``-only
+# installs are not yet supported as of 1.8.41 — without this file,
+# the buildpack runs ``pip install`` against an empty target, the
+# container has none of the kiln's deps, and the API crash-loops at
+# boot with ``No module named uvicorn``.
+#
+# Reproduced 2026-05-24 on the homelab CF foundation; #229 tracked.
+#
+# WHAT THIS INSTALLS:
+#
+# ``-e .`` editable-installs the kiln package itself from the staged
+# source tree (so the buildpack picks up the pyproject.toml metadata
+# AND the Python code under src/), with extras:
+#
+#   * ``db`` — asyncpg, sqlalchemy, alembic, pgvector. Required by
+#     BOTH the api app (retrieval reads) AND the worker app
+#     (ingestion writes).
+#   * ``ingestion`` — python-frontmatter, mistune, tiktoken.
+#     Required by the worker for markdown parsing + chunking; the
+#     api also imports the chunking module transitively via
+#     telemetry helpers, so include it in both apps to keep stages
+#     identical.
+#   * ``real-embeddings`` — sentence-transformers + transformers +
+#     torch. Heavy (~2 GB). Required by the worker when the active
+#     embedding provider is ``local-sentence-transformers``. The
+#     api never embeds (queries hit the same provider via the
+#     worker's cached vectors), but the import is still pulled in
+#     transitively at startup. ``real-embeddings`` rather than
+#     ``embeddings`` so the direct CVE pins from #222
+#     (transformers>=5.0, torch>=2.9) are honored — without those
+#     pins, ``embeddings`` would resolve to whatever pip finds in
+#     the buildpack cache, which may be CVE-vulnerable.
+#
+# SUPERSET, NOT PER-APP:
+#
+# Both apps in manifest.yml share one buildpack stage, so one
+# requirements.txt has to satisfy both. The api gets a few unused
+# imports (ingestion, real-embeddings) at the cost of the same
+# extras the worker would have installed anyway — disk + memory cost
+# matches the manifest's 1G allocation.
+#
+# UPSTREAM REMOVAL:
+#
+# Once python_buildpack ships PEP 621 support
+# (cloudfoundry/python-buildpack tracking issue) this file should be
+# deleted in favor of a buildpack-detected pyproject.toml install.
+
+-e .[db,ingestion,real-embeddings]
