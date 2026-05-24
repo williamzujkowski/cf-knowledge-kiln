@@ -55,6 +55,16 @@ class _RecordingProvider:
         self.windows.append((start, end))
         return [[float(len(t))] for t in texts]
 
+    async def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        # #204: the fan-out helper calls embed_documents. The recording
+        # stub records the calls via embed, so just delegate. The
+        # production providers add model-family prefixes here; this
+        # mock has no model-family prefix to apply.
+        return await self.embed(texts)
+
+    async def embed_query(self, text: str) -> list[float]:
+        return (await self.embed([text]))[0]
+
     async def aclose(self) -> None:
         return None
 
@@ -186,6 +196,12 @@ class TestBatchedConcurrentEmbedFanOut:
                 # verify "vector at position N corresponds to text N."
                 return [[float(len(t))] for t in texts]
 
+            async def embed_documents(self, texts: list[str]) -> list[list[float]]:
+                return await self.embed(texts)
+
+            async def embed_query(self, text: str) -> list[float]:
+                return (await self.embed([text]))[0]
+
             async def aclose(self) -> None:
                 return None
 
@@ -242,6 +258,12 @@ class TestBatchedConcurrentEmbedFanOut:
                 # Return one fewer vector than requested.
                 return [[1.0] for _ in texts[:-1]] if len(texts) > 1 else []
 
+            async def embed_documents(self, texts: list[str]) -> list[list[float]]:
+                return await self.embed(texts)
+
+            async def embed_query(self, text: str) -> list[float]:
+                return (await self.embed([text]))[0]
+
             async def aclose(self) -> None:
                 return None
 
@@ -289,6 +311,12 @@ class TestBatchedConcurrentEmbedFanOut:
                 self.call_count += 1
                 return [[float(len(t))] for t in texts]
 
+            async def embed_documents(self, texts: list[str]) -> list[list[float]]:
+                return await self.embed(texts)
+
+            async def embed_query(self, text: str) -> list[float]:
+                return (await self.embed([text]))[0]
+
             async def aclose(self) -> None:
                 return None
 
@@ -331,6 +359,12 @@ class TestBatchedConcurrentEmbedFanOut:
 
             async def embed(self, texts: list[str]) -> list[list[float]]:
                 raise RuntimeError("provider hard down")
+
+            async def embed_documents(self, texts: list[str]) -> list[list[float]]:
+                return await self.embed(texts)
+
+            async def embed_query(self, text: str) -> list[float]:
+                return (await self.embed([text]))[0]
 
             async def aclose(self) -> None:
                 return None

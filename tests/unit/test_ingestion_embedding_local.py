@@ -366,3 +366,147 @@ class TestMissingExtraImportError:
             sys.modules.pop("sentence_transformers", None)
             if saved is not None:
                 sys.modules["sentence_transformers"] = saved
+
+
+# ─── #204 — model-family text prefixes ────────────────────────────────
+
+
+class _TextCapturingEncoder:
+    """Fake encoder that captures the exact texts passed to ``encode``.
+
+    Existing :class:`_FakeEncoder` discards texts; these tests need the
+    raw input to assert prefix application.
+    """
+
+    def __init__(self, dimensions: int) -> None:
+        self._dimensions = dimensions
+        self.encoded_batches: list[list[str]] = []
+
+    def encode(
+        self,
+        texts: list[str],
+        normalize_embeddings: bool = True,
+        convert_to_numpy: bool = False,
+        batch_size: int = 32,
+    ) -> list[list[float]]:
+        self.encoded_batches.append(list(texts))
+        return [[0.0] * self._dimensions for _ in texts]
+
+
+def _capturing_factory(dimensions: int) -> tuple[Any, _TextCapturingEncoder]:
+    encoder = _TextCapturingEncoder(dimensions)
+
+    def factory(_name: str, **_kwargs: Any) -> _TextCapturingEncoder:
+        return encoder
+
+    return factory, encoder
+
+
+class TestModelFamilyPrefixes:
+    """#204: e5 + Nomic models need passage/query prefixes or cosine scores collapse."""
+
+    async def test_e5_small_v2_documents_get_passage_prefix(self) -> None:
+        factory, encoder = _capturing_factory(384)
+        provider = LocalSentenceTransformersProvider(
+            "intfloat/e5-small-v2", dimensions=384, model_factory=factory
+        )
+        await provider.embed_documents(["first doc", "second doc"])
+        assert encoder.encoded_batches == [["passage: first doc", "passage: second doc"]]
+
+    async def test_e5_small_v2_query_gets_query_prefix(self) -> None:
+        factory, encoder = _capturing_factory(384)
+        provider = LocalSentenceTransformersProvider(
+            "intfloat/e5-small-v2", dimensions=384, model_factory=factory
+        )
+        await provider.embed_query("what is the alert response")
+        assert encoder.encoded_batches == [["query: what is the alert response"]]
+
+    async def test_e5_base_v2_also_prefixed(self) -> None:
+        """Pattern is family-wide, not version-specific."""
+        factory, encoder = _capturing_factory(768)
+        provider = LocalSentenceTransformersProvider(
+            "intfloat/e5-base-v2", dimensions=768, model_factory=factory
+        )
+        await provider.embed_documents(["x"])
+        assert encoder.encoded_batches == [["passage: x"]]
+
+    async def test_multilingual_e5_large_also_prefixed(self) -> None:
+        factory, encoder = _capturing_factory(1024)
+        provider = LocalSentenceTransformersProvider(
+            "intfloat/multilingual-e5-large", dimensions=1024, model_factory=factory
+        )
+        await provider.embed_documents(["x"])
+        assert encoder.encoded_batches == [["passage: x"]]
+
+    async def test_nomic_embed_v1_5_documents_get_search_document_prefix(self) -> None:
+        factory, encoder = _capturing_factory(768)
+        provider = LocalSentenceTransformersProvider(
+            "nomic-ai/nomic-embed-text-v1.5",
+            dimensions=768,
+            model_factory=factory,
+        )
+        await provider.embed_documents(["alpha", "beta"])
+        assert encoder.encoded_batches == [["search_document: alpha", "search_document: beta"]]
+
+    async def test_nomic_embed_v1_5_query_gets_search_query_prefix(self) -> None:
+        factory, encoder = _capturing_factory(768)
+        provider = LocalSentenceTransformersProvider(
+            "nomic-ai/nomic-embed-text-v1.5",
+            dimensions=768,
+            model_factory=factory,
+        )
+        await provider.embed_query("alpha?")
+        assert encoder.encoded_batches == [["search_query: alpha?"]]
+
+    async def test_unknown_model_gets_no_prefix(self) -> None:
+        """Models without a known family entry pass through unchanged.
+
+        Avoids over-fitting: a future model that adopts its own prefix
+        convention is silently wrong rather than silently right.
+        """
+        factory, encoder = _capturing_factory(384)
+        provider = LocalSentenceTransformersProvider(
+            "Snowflake/snowflake-arctic-embed-m",
+            dimensions=384,
+            model_factory=factory,
+        )
+        await provider.embed_documents(["unprefixed text"])
+        assert encoder.encoded_batches == [["unprefixed text"]]
+
+    async def test_raw_embed_remains_unprefixed(self) -> None:
+        """Backward-compat path: ``embed()`` is raw, no prefix injection.
+
+        Lets the startup health probe + any legacy caller exercise the
+        encoder without the model-family branching.
+        """
+        factory, encoder = _capturing_factory(384)
+        provider = LocalSentenceTransformersProvider(
+            "intfloat/e5-small-v2", dimensions=384, model_factory=factory
+        )
+        await provider.embed(["raw text"])
+        assert encoder.encoded_batches == [["raw text"]]
+
+    async def test_empty_input_to_embed_documents_short_circuits(self) -> None:
+        factory, encoder = _capturing_factory(384)
+        provider = LocalSentenceTransformersProvider(
+            "intfloat/e5-small-v2", dimensions=384, model_factory=factory
+        )
+        result = await provider.embed_documents([])
+        assert result == []
+        assert encoder.encoded_batches == []
+
+
+def test_prefixes_for_table_shape() -> None:
+    """Lock the prefix-lookup contract so additions are explicit."""
+    from cf_knowledge_kiln.ingestion.embedding.local import _prefixes_for
+
+    # Known families.
+    assert _prefixes_for("intfloat/e5-small-v2") == ("passage: ", "query: ")
+    assert _prefixes_for("nomic-ai/nomic-embed-text-v1.5") == (
+        "search_document: ",
+        "search_query: ",
+    )
+    # Unknown → empty pair (caller treats as no-prefix).
+    assert _prefixes_for("unknown/model-name") == ("", "")
+    # Empty model name (defensive).
+    assert _prefixes_for("") == ("", "")

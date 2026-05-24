@@ -109,6 +109,19 @@ class OpenAICompatibleEmbeddingProvider:
         data = response.json()
         return self._parse_vectors(data, expected_count=len(texts))
 
+    async def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        """OpenAI-compatible APIs don't surface a passage/query distinction.
+
+        The hosted endpoint applies whatever model-side preprocessing it
+        wants — we pass raw text and trust the API. Method exists to
+        satisfy the :class:`EmbeddingProvider` Protocol (#204).
+        """
+        return await self.embed(texts)
+
+    async def embed_query(self, text: str) -> list[float]:
+        """OpenAI-compatible APIs: same as :meth:`embed_documents` (#204)."""
+        return (await self.embed([text]))[0]
+
     async def aclose(self) -> None:
         await self._client.aclose()
 

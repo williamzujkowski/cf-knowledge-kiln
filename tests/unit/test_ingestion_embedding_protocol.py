@@ -96,3 +96,19 @@ class TestMockEmbeddingProvider:
         """Tests that simulate provider-swapping need to override model."""
         mock = MockEmbeddingProvider(model="mock-768-test")
         assert mock.model == "mock-768-test"
+
+    async def test_embed_documents_matches_embed_for_mock(self) -> None:
+        """#204: mock provider's embed_documents trivially delegates to embed."""
+        mock = MockEmbeddingProvider()
+        a = await mock.embed_documents(["x", "y"])
+        b = await mock.embed(["x", "y"])
+        assert a == b
+
+    async def test_embed_query_returns_single_vector(self) -> None:
+        """#204: embed_query returns one vector, not a list-of-one."""
+        mock = MockEmbeddingProvider()
+        vec = await mock.embed_query("test query")
+        assert isinstance(vec, list)
+        # Each element is a float dimension, not a nested list.
+        assert all(isinstance(x, float) for x in vec)
+        assert len(vec) == mock.dimensions

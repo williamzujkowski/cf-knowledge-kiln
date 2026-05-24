@@ -86,19 +86,20 @@ class EmbeddingProvider(Protocol):
     Any object matching this Protocol — including ``MockEmbeddingProvider``
     — works here.
 
-    This is a deliberate *subset* of the canonical Protocol: only
-    ``embed`` (plus the metadata attrs) is needed to run a query.
-    ``aclose()`` is intentionally omitted — the retrieval engine
-    borrows a provider, it does not own its lifecycle. Whoever
-    constructed the provider (the API ``lifespan`` or the ingestion
-    worker) is responsible for calling ``aclose()`` on shutdown.
+    Retrieval only needs the QUERY side (``embed_query`` plus the
+    metadata attrs). ``embed_documents`` lives on the ingestion-side
+    Protocol; we don't need it here. ``aclose()`` is intentionally
+    omitted — the retrieval engine borrows a provider, it does not own
+    its lifecycle. Whoever constructed the provider (the API
+    ``lifespan`` or the ingestion worker) is responsible for calling
+    ``aclose()`` on shutdown.
     """
 
     provider: str
     model: str
     dimensions: int
 
-    async def embed(self, texts: list[str]) -> list[list[float]]: ...
+    async def embed_query(self, text: str) -> list[float]: ...
 
 
 @dataclass(frozen=True)
@@ -379,7 +380,10 @@ class HybridRetriever:
             embed_span.set_attribute("retrieval.embedding.provider", self._provider.provider)
             embed_span.set_attribute("retrieval.embedding.model", self._provider.model)
             embed_span.set_attribute("retrieval.embedding.dimensions", self._provider.dimensions)
-            embedding = (await self._provider.embed([query]))[0]
+            # #204: the user's query is a QUERY (not a passage). The
+            # provider applies the model-family query prefix (e5
+            # ``query: ``, Nomic ``search_query: ``) inside embed_query.
+            embedding = await self._provider.embed_query(query)
         with _TRACER.start_as_current_span("retrieval.sql.hybrid_search") as sql_span:
             sql_span.set_attribute("retrieval.ef_search", self._ef_search)
             rows = await repo.hybrid_search(

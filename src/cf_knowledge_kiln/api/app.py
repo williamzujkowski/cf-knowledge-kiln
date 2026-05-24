@@ -82,7 +82,11 @@ async def _probe_embedding(provider: EmbeddingProvider | None, *, timeout_second
     )
     try:
         await asyncio.wait_for(
-            provider.embed(["readyz embedding health probe"]),
+            # #204: use embed_query so the probe exercises the same
+            # prefix path a real /v1/search query takes — a misconfigured
+            # prefix surfaces here at startup instead of as silently
+            # bad cosine scores at query time.
+            provider.embed_query("readyz embedding health probe"),
             timeout=timeout_seconds,
         )
     except Exception:

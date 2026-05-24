@@ -97,7 +97,10 @@ async def embed_chunks_concurrently(
 
     async def _run_one(start: int, batch_texts: list[str]) -> None:
         async with semaphore:
-            vectors = await provider.embed(batch_texts)
+            # #204: chunks being indexed are PASSAGES. The provider
+            # applies any model-family prefix (e5 ``passage: ``,
+            # Nomic ``search_document: ``) inside embed_documents.
+            vectors = await provider.embed_documents(batch_texts)
         if len(vectors) != len(batch_texts):
             raise ValueError(
                 f"embedding provider returned {len(vectors)} vectors for "
