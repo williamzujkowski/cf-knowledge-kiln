@@ -308,6 +308,68 @@ def weak_evidence_warning(
     return []
 
 
+def isolated_match_warning(
+    chunks: list[RankedChunk],
+    *,
+    drop_threshold: float | None,
+    weak_evidence_threshold: float | None = None,
+) -> list[Warning]:
+    """One ``isolated_match`` warning if the top chunk towers over the runner-up.
+
+    Fires when:
+
+    1. There are at least two candidates (a one-result list can't be
+       "isolated" relative to peers; weak_evidence handles the empty /
+       single-low case).
+    2. The top chunk's score is **above** the weak-evidence threshold —
+       i.e. the score *looks* like real signal. Below it, we let
+       :func:`weak_evidence_warning` own the framing and avoid a
+       confusing double-warning that says "both strong-but-isolated AND
+       weak."
+    3. The gap between the top-1 score and the top-2 score exceeds
+       ``drop_threshold``.
+
+    This pattern was the dominant cause of false-positive answers in
+    the homelab-iac calibration eval (#222 → #227): queries about
+    topics with one passing mention in the corpus (e.g. "configure
+    Kubernetes" against a homelab that mentions Kubernetes once in
+    cf-deployment notes) produced a top-1 score of ~0.9 with no other
+    candidates near it. The high score alone reads as confident; the
+    *shape* of the distribution is the actual tell.
+
+    ``drop_threshold = None`` disables the gate (returns ``[]``). This
+    is the off-switch for operators who'd rather tolerate the false
+    positives than nudge real-answer queries into human review.
+    """
+    if drop_threshold is None:
+        return []
+    if len(chunks) < 2:
+        return []
+    weak_floor = (
+        WEAK_EVIDENCE_SCORE_THRESHOLD
+        if weak_evidence_threshold is None
+        else weak_evidence_threshold
+    )
+    sorted_scores = sorted((c.score for c in chunks), reverse=True)
+    top, runner_up = sorted_scores[0], sorted_scores[1]
+    if top < weak_floor:
+        return []
+    gap = top - runner_up
+    if gap <= drop_threshold:
+        return []
+    return [
+        Warning(
+            type="isolated_match",
+            message=(
+                f"Top result scored {top:.2f}, but the next best was only "
+                f"{runner_up:.2f} (gap {gap:.2f} > {drop_threshold:.2f}). "
+                "One chunk surface-matches the query without comparable "
+                "supporting evidence."
+            ),
+        )
+    ]
+
+
 # ─── Conflict detection ─────────────────────────────────────────────
 
 
@@ -388,7 +450,7 @@ def requires_human_review(
         return True
     if statuses == {"draft"}:
         return True
-    bad_types = {"prompt_injection_pattern", "sensitive_content"}
+    bad_types = {"prompt_injection_pattern", "sensitive_content", "isolated_match"}
     if any(w.type in bad_types for w in warnings):
         return True
     effective = (
@@ -406,6 +468,7 @@ __all__ = [
     "apply_boosts",
     "deprecated_warnings",
     "detect_conflicts",
+    "isolated_match_warning",
     "prompt_injection_warnings",
     "requires_human_review",
     "rrf_fuse",

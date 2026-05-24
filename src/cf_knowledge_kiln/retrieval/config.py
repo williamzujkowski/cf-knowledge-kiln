@@ -60,6 +60,18 @@ DEFAULT_WEAK_EVIDENCE_SCORE_THRESHOLD: float = 0.46
 # still trips. See ``docs/security.md`` for the policy framing.
 DEFAULT_MAX_WARNING_RANK: int = 3
 
+# Top-1-minus-top-2 score gap at which we flag ``isolated_match`` (#227).
+# Surfaces queries where ONE chunk happens to surface-match a keyword
+# but no other chunks come close — typically a "wrong question" shape
+# (e.g. asking "how do I configure Kubernetes?" against a corpus that
+# mentions Kubernetes exactly once in passing). 0.30 was picked from
+# the homelab-iac calibration eval (#222 / 2026-05-24): real-answer
+# queries had top-1/top-2 deltas clustered in 0.00-0.15, while the
+# Kubernetes negative query showed a delta near 0.40. Operators tune
+# via ``retrieval.isolated_match_drop_threshold`` in
+# ``config/security.yaml``. Set to ``None`` to disable the gate.
+DEFAULT_ISOLATED_MATCH_DROP_THRESHOLD: float = 0.30
+
 
 class RetrievalConfig(BaseModel):
     """Ranking parameters loaded from ``config/security.yaml``.
@@ -96,6 +108,16 @@ class RetrievalConfig(BaseModel):
         trip ``sensitive_content``, ``prompt_injection_pattern``, or
         ``conflicting_sources``. Default 3 keeps a tight head-of-list
         gate. (#161)
+    isolated_match_drop_threshold:
+        Score gap between top-1 and top-2 that trips the
+        ``isolated_match`` warning + ``requires_human_review`` (#227).
+        A high top-1 with no comparable runners-up is the classic
+        "wrong-question" shape — one corpus chunk happens to share
+        surface tokens with the query but isn't a real answer. The
+        warning fires only when (a) top-1 is above the weak-evidence
+        threshold (so we're talking about a confident-LOOKING score)
+        AND (b) top-1 minus top-2 exceeds this threshold. ``None``
+        disables the gate entirely.
     """
 
     model_config = ConfigDict(extra="ignore", frozen=True)
@@ -111,6 +133,9 @@ class RetrievalConfig(BaseModel):
     )
     relevance_floor: float | None = Field(default=None, gt=0.0)
     max_warning_rank: int = Field(default=DEFAULT_MAX_WARNING_RANK, ge=1)
+    isolated_match_drop_threshold: float | None = Field(
+        default=DEFAULT_ISOLATED_MATCH_DROP_THRESHOLD, gt=0.0
+    )
 
     @property
     def effective_relevance_floor(self) -> float:
@@ -192,6 +217,8 @@ def load_retrieval_config(path: str | Path | None) -> RetrievalConfig:
         payload["relevance_floor"] = retrieval["relevance_floor"]
     if "max_warning_rank" in retrieval:
         payload["max_warning_rank"] = retrieval["max_warning_rank"]
+    if "isolated_match_drop_threshold" in retrieval:
+        payload["isolated_match_drop_threshold"] = retrieval["isolated_match_drop_threshold"]
     try:
         return RetrievalConfig.model_validate(payload)
     except ValidationError as exc:
@@ -199,6 +226,7 @@ def load_retrieval_config(path: str | Path | None) -> RetrievalConfig:
 
 
 __all__ = [
+    "DEFAULT_ISOLATED_MATCH_DROP_THRESHOLD",
     "DEFAULT_MAX_WARNING_RANK",
     "DEFAULT_STALE_AFTER_DAYS",
     "DEFAULT_STATUS_WEIGHTS",

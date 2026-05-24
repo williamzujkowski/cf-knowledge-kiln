@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from cf_knowledge_kiln.retrieval.config import (
+    DEFAULT_ISOLATED_MATCH_DROP_THRESHOLD,
     DEFAULT_MAX_WARNING_RANK,
     DEFAULT_STALE_AFTER_DAYS,
     DEFAULT_STATUS_WEIGHTS,
@@ -214,3 +215,53 @@ class TestRelevanceAwareWarningKnobs:
         )
         with pytest.raises(RetrievalConfigError):
             load_retrieval_config(path)
+
+
+class TestIsolatedMatchDropThreshold:
+    """#227 — isolated_match_drop_threshold loader + defaults."""
+
+    def test_default_matches_calibration(self) -> None:
+        """0.30 default came from the #222 homelab-iac eval; lock it in."""
+        config = RetrievalConfig()
+        assert config.isolated_match_drop_threshold == DEFAULT_ISOLATED_MATCH_DROP_THRESHOLD
+        assert config.isolated_match_drop_threshold == 0.30
+
+    def test_explicit_value_overrides_default(self) -> None:
+        config = RetrievalConfig(isolated_match_drop_threshold=0.45)
+        assert config.isolated_match_drop_threshold == 0.45
+
+    def test_explicit_none_disables_gate(self) -> None:
+        """``None`` is the documented off-switch — must be accepted by pydantic."""
+        config = RetrievalConfig(isolated_match_drop_threshold=None)
+        assert config.isolated_match_drop_threshold is None
+
+    def test_loads_from_yaml(self, tmp_path: Path) -> None:
+        path = _write(
+            tmp_path / "security.yaml",
+            "retrieval:\n  isolated_match_drop_threshold: 0.45\n",
+        )
+        config = load_retrieval_config(path)
+        assert config.isolated_match_drop_threshold == 0.45
+
+    def test_yaml_null_disables_gate(self, tmp_path: Path) -> None:
+        path = _write(
+            tmp_path / "security.yaml",
+            "retrieval:\n  isolated_match_drop_threshold: null\n",
+        )
+        config = load_retrieval_config(path)
+        assert config.isolated_match_drop_threshold is None
+
+    def test_zero_rejected(self, tmp_path: Path) -> None:
+        """A zero gap would fire on every result; refuse at load time."""
+        path = _write(
+            tmp_path / "security.yaml",
+            "retrieval:\n  isolated_match_drop_threshold: 0.0\n",
+        )
+        with pytest.raises(RetrievalConfigError):
+            load_retrieval_config(path)
+
+    def test_example_config_exposes_threshold(self) -> None:
+        """The shipped example must include this knob so the policy is discoverable."""
+        example = Path(__file__).resolve().parents[2] / "config" / "security.example.yaml"
+        config = load_retrieval_config(example)
+        assert config.isolated_match_drop_threshold == DEFAULT_ISOLATED_MATCH_DROP_THRESHOLD
