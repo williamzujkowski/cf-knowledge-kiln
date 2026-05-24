@@ -15,14 +15,35 @@ code (ADR-0005).
 
 Protocol contract:
 
-* ``embed(texts) -> list[list[float]]`` — async, returns one vector
-  per input, in the same order. Each vector has ``dimensions`` floats.
+* ``embed_documents(texts) -> list[list[float]]`` — async, embed
+  texts as **passages** (i.e. documents being indexed). Model-aware
+  prefixes (``passage: `` for e5, ``search_document: `` for Nomic)
+  are applied here when the underlying model requires them.
+* ``embed_query(text) -> list[float]`` — async, embed a single text
+  as a **query**. Mirrors ``embed_documents`` but uses the model's
+  query-side prefix (``query: ``, ``search_query: ``). Returns one
+  vector, not a list-of-one.
+* ``embed(texts) -> list[list[float]]`` — async, raw passthrough
+  (no prefix). Retained for backward compat and for callers that
+  genuinely don't have a passage/query distinction (e.g. the
+  startup health probe). New code should prefer the explicit
+  ``embed_documents`` / ``embed_query`` methods (#204).
 * ``dimensions`` — positive int, fixed for the lifetime of the
   provider. Persisted on every ``chunk_embeddings`` row.
 * ``model`` / ``provider`` — strings persisted alongside the vector so
   Phase 5 retrieval can filter by them.
 * ``aclose()`` — release HTTP / model resources. Optional; the mock
   is a no-op.
+
+#204: e5-family and Nomic Embed v1.5 require model-specific text
+prefixes to produce the cosine-similarity range their downstream
+thresholds were calibrated for. Calling ``encode(["raw text"])`` on
+e5-small-v2 collapses scores into the 0.1-0.4 band; the right way is
+``encode(["passage: raw text"])`` (for docs) or
+``encode(["query: raw text"])`` (for queries). The Local provider
+applies these per-model-family in ``embed_documents`` /
+``embed_query``; HTTP-API providers (OpenAI-compatible) and the Mock
+provider don't need them and pass through.
 """
 
 from __future__ import annotations
@@ -48,6 +69,10 @@ class EmbeddingProvider(Protocol):
     dimensions: int
 
     async def embed(self, texts: list[str]) -> list[list[float]]: ...
+
+    async def embed_documents(self, texts: list[str]) -> list[list[float]]: ...
+
+    async def embed_query(self, text: str) -> list[float]: ...
 
     async def aclose(self) -> None: ...
 
@@ -79,6 +104,14 @@ class MockEmbeddingProvider:
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         return [self._vector_for(text) for text in texts]
+
+    async def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        """Mock: no prefix needed; delegate to :meth:`embed`."""
+        return await self.embed(texts)
+
+    async def embed_query(self, text: str) -> list[float]:
+        """Mock: no prefix needed; delegate to :meth:`embed`."""
+        return (await self.embed([text]))[0]
 
     async def aclose(self) -> None:
         return None

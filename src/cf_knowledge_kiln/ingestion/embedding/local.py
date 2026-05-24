@@ -34,6 +34,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 from collections.abc import Callable
 from typing import Any
 
@@ -46,6 +47,49 @@ PROVIDER_NAME = "local-sentence-transformers"
 DEFAULT_BATCH_SIZE = 32
 DEFAULT_DEVICE = "cpu"
 DEVICE_ENV_VAR = "KILN_EMBEDDING_DEVICE"
+
+
+# #204: model-family text prefixes. Some embedding models were trained
+# with explicit role prefixes (e5 uses ``passage: `` / ``query: ``;
+# Nomic Embed uses ``search_document: `` / ``search_query: ``). Calling
+# ``encode([raw_text])`` on these models without the prefix collapses
+# cosine similarities into the 0.1-0.4 band — the user-reported max
+# top-1 score of 0.300 on e5-small-v2 is exactly this signature.
+# Patterns are matched against the model name in lookup order; first
+# match wins. Models not matching any pattern get no prefix (cohere,
+# bge-m3, snowflake-arctic, etc. don't require one).
+#
+# Add new families here, not at the call site. Pattern syntax is
+# anchored to start-of-string but not end-of-string so suffix variants
+# (e.g. ``-v1.5``, ``-instruct``) ride along without a per-version
+# entry.
+_MODEL_PREFIXES: tuple[tuple[re.Pattern[str], str, str], ...] = (
+    # e5 family — passage / query.
+    # Covers: intfloat/e5-small-v2, e5-base-v2, e5-large-v2,
+    # multilingual-e5-*, e5-mistral-7b-instruct.
+    (re.compile(r"^intfloat/(multilingual-)?e5-"), "passage: ", "query: "),
+    # Nomic Embed v1 family — search_document / search_query.
+    # Covers: nomic-ai/nomic-embed-text-v1, -v1.5.
+    (
+        re.compile(r"^nomic-ai/nomic-embed-text-v1"),
+        "search_document: ",
+        "search_query: ",
+    ),
+)
+
+
+def _prefixes_for(model_name: str) -> tuple[str, str]:
+    """Return ``(passage_prefix, query_prefix)`` for ``model_name``.
+
+    Empty strings for both when no entry in :data:`_MODEL_PREFIXES`
+    matches — the model doesn't need prefixes (or kiln doesn't yet
+    know that it does; add it to the table). #204.
+    """
+    for pattern, passage, query in _MODEL_PREFIXES:
+        if pattern.match(model_name):
+            return passage, query
+    return "", ""
+
 
 # Default model factory: imported lazily so the ``real-embeddings``
 # extra is only required at provider-use time, not at import time.
@@ -168,6 +212,13 @@ class LocalSentenceTransformersProvider:
         return self.model
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
+        """Raw encode, no model-family prefix.
+
+        Backward-compat path for callers that genuinely don't have a
+        passage/query distinction (the startup health probe in
+        ``api/app.py``). New code should prefer the explicit
+        :meth:`embed_documents` / :meth:`embed_query` methods (#204).
+        """
         if not texts:
             return []
         encoder = await self._ensure_loaded()
@@ -179,6 +230,30 @@ class LocalSentenceTransformersProvider:
                     f"adapter is configured for {self.dimensions}"
                 )
         return vectors
+
+    async def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        """Embed ``texts`` as passages/documents, applying the model-family prefix.
+
+        #204: e5 ``passage: ``, Nomic ``search_document: ``. Without the
+        prefix, cosine similarities on these models collapse into the
+        0.1-0.4 band — the user's golden-set max was 0.300 instead of
+        the calibrated >0.46.
+        """
+        if not texts:
+            return []
+        passage_prefix, _ = _prefixes_for(self.model)
+        prefixed = [f"{passage_prefix}{t}" for t in texts] if passage_prefix else texts
+        return await self.embed(prefixed)
+
+    async def embed_query(self, text: str) -> list[float]:
+        """Embed ``text`` as a single query, applying the model-family prefix.
+
+        Returns the vector directly (not a list-of-one) to match the
+        Protocol shape — query callers always want exactly one vector.
+        """
+        _, query_prefix = _prefixes_for(self.model)
+        prefixed = f"{query_prefix}{text}" if query_prefix else text
+        return (await self.embed([prefixed]))[0]
 
     async def aclose(self) -> None:
         # sentence-transformers doesn't expose a teardown hook; releasing
