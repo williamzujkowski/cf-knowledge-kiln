@@ -122,23 +122,54 @@ def _scan_blocks(body: str) -> list[_Block]:
         if not line.strip():
             i += 1
             continue
-        # Fenced code block — close fence must be the SAME character class
-        # and AT LEAST as long as the opener (CommonMark §4.5). This lets
-        # docs use ```` ```` to wrap a block that itself contains ``` lines.
+        # Fenced code block — close fence must be the SAME character
+        # class and AT LEAST as long as the opener (CommonMark §4.5).
+        # Strict CommonMark says nested fences require the OUTER to be
+        # longer, but real markdown frequently uses 3 backticks for both
+        # the outer doc-template fence and any inner ```bash``` block
+        # (homelab-iac's docs/runbooks/README.md, #200). Without
+        # accommodating that pattern, the inner ``` line prematurely
+        # closes the outer block and the chunker walks past it as if
+        # the inner-block's content were top-level — leaking headings
+        # that the author meant to be code-block content as chunk
+        # boundaries.
+        #
+        # #200 heuristic: maintain a stack of open fences. A fence line
+        # whose info string is non-empty is treated as an OPENER (push);
+        # a fence line with no info string is a CLOSER (pop) when its
+        # char matches the top of the stack AND its length is at least
+        # the top's. Different-char fences (~~~ inside ```) are treated
+        # as content. The block ends only when the stack empties (or
+        # at EOF — same graceful behavior as the previous flat loop on
+        # unclosed input).
         fence_m = _FENCE_OPEN_RE.match(line)
         if fence_m:
-            fence = fence_m.group("fence")
-            fence_char = fence[0]
-            fence_len = len(fence)
+            opener_fence = fence_m.group("fence")
             start = i
+            fence_stack: list[tuple[str, int]] = [(opener_fence[0], len(opener_fence))]
             i += 1
-            while i < n:
-                stripped = lines[i].lstrip()
-                if stripped.startswith(fence_char * fence_len) and set(
-                    stripped[: len(stripped.rstrip())]
-                ) <= {fence_char}:
-                    i += 1  # consume closing fence
-                    break
+            while i < n and fence_stack:
+                inner_m = _FENCE_OPEN_RE.match(lines[i].lstrip())
+                if inner_m:
+                    inner_fence = inner_m.group("fence")
+                    inner_char = inner_fence[0]
+                    inner_len = len(inner_fence)
+                    # Info string lives between the fence and any trailing
+                    # whitespace. Stripped because the fence regex anchors
+                    # to start-of-line and a fence line that's pure
+                    # whitespace-after-the-backticks is a no-info closer.
+                    inner_info = lines[i].lstrip()[len(inner_fence) :].strip()
+                    top_char, top_len = fence_stack[-1]
+                    if inner_char == top_char:
+                        if inner_info:
+                            # Nested opener (e.g. ```bash inside ```markdown).
+                            fence_stack.append((inner_char, inner_len))
+                        elif inner_len >= top_len:
+                            # Bare ``` (or longer) of the matching char →
+                            # close the current fence.
+                            fence_stack.pop()
+                        # else: shorter fence line, treat as content.
+                    # else: different fence type, treat as content.
                 i += 1
             blocks.append(_Block(kind="code", text="\n".join(lines[start:i])))
             continue
