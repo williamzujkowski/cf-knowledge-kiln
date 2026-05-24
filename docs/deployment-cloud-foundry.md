@@ -76,6 +76,12 @@ cf push -f manifest.yml --strategy rolling
 
 `--strategy rolling` keeps the previous app running until the new instance passes healthchecks, so a botched buildpack upgrade or a regression in `/readyz` can't tear down the live API mid-deploy. The Concourse `deploy-cf` job uses the same flag. Drop `--strategy rolling` for the first ever push (when there's nothing live to roll over).
 
+### Dep installation (`requirements.txt`)
+
+The repo ships a top-level `requirements.txt` whose only line is `-e .[db,ingestion,real-embeddings]`. It exists for the CF `python_buildpack` 1.8.x family, which doesn't yet support PEP 621 `pyproject.toml`-only installs — without the file, the buildpack runs `pip install` against an empty target and the API crash-loops with `No module named uvicorn` (#229).
+
+Local dev installs still go through `make bootstrap` / `pip install -e .[dev,db,ingestion,embeddings]`; the `requirements.txt` is only for the buildpack staging path. Once `cloudfoundry/python-buildpack` ships PEP 621 support, the file can be removed.
+
 For deployments where zero downtime matters more than the simpler ops surface, swap in a blue-green pattern (`cf push <name>-green` → swap routes → `cf delete <name>-blue`) or the `cf-cli` blue-green plugin.
 
 This deploys two apps:
