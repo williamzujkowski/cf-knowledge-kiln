@@ -85,27 +85,40 @@ path for the startup health probe and back-compat. New code should
 call `embed_documents` (for chunks being indexed) or `embed_query`
 (for a user-supplied query).
 
-**Migration note: existing corpora need re-ingestion.** Chunks
+**Migration note: existing corpora need re-embedding.** Chunks
 embedded before #204 landed were encoded WITHOUT the prefix; new
 queries (after #204) are encoded WITH the prefix. The two live in
 different semantic spaces, so old chunks rank poorly against new
-queries on the same e5/Nomic model. Re-embed the corpus to get the
-calibrated cosine range back:
+queries on the same e5/Nomic model. The same situation arises after
+swapping the embedding model entirely in `config/models.yaml`.
 
-```sql
--- The simplest path: drop the embedding rows; the worker re-embeds
--- on next ingestion pass. Chunks themselves stay intact (FK is the
--- chunk row, not the embedding).
-TRUNCATE chunk_embeddings;
-```
+Re-embed the corpus to get the calibrated cosine range back:
 
 ```bash
-make ingest   # worker re-embeds every chunk against the prefix-aware provider
+make reembed-dry-run   # preview the chunk count first (#224)
+make reembed           # actually re-embed every chunk
 ```
 
-For larger corpora where TRUNCATE-and-re-ingest is too slow, scope
-the delete to one provider/model with a `WHERE provider = '...' AND
-model = '...'` clause and let the worker backfill.
+The helper walks every `document_chunks` row, calls the active
+provider's `embed_documents` (which applies the model-family prefix
+per #204), and upserts each result into `chunk_embeddings` —
+replacing whatever was there. The existing chunk rows are untouched
+(their content_hash is what gates re-embedding, not the row itself).
+
+Behavior:
+
+- `make reembed-dry-run` reports `would re-embed N chunks via
+  <provider>/<model>` without contacting the provider.
+- `make reembed` reports `reembed done: <embedded> embedded, <failed>
+  failed, <total> total` and exits 0 on any success (partial-failure
+  runs still persist the surviving batches; only TOTAL failure exits
+  non-zero).
+- Concurrency tuning via the standard `KILN_INGEST_EMBED_BATCH_SIZE`
+  / `KILN_INGEST_EMBED_CONCURRENCY` env vars.
+
+Run during a maintenance window. The retrieval endpoints continue to
+serve the OLD embeddings until the re-embed completes; query
+quality is degraded but not broken during the swap.
 
 Reindex requirement: `chunk_embeddings.dimensions` is per-row, so
 rows from different models coexist — but the HNSW index created in
