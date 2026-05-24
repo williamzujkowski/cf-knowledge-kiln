@@ -37,7 +37,7 @@ from cf_knowledge_kiln.api.rate_limit import (
     TokenBucketLimiter,
     raise_429_if_limited,
 )
-from cf_knowledge_kiln.db.repositories import QueriesRepository
+from cf_knowledge_kiln.db.repositories import AnswersRepository
 from cf_knowledge_kiln.generation import GeneratorProvider
 from cf_knowledge_kiln.retrieval import HybridRetriever
 from cf_knowledge_kiln.retrieval.types import AnswerRequest, AnswerResponse
@@ -92,33 +92,40 @@ async def answer(
 async def _log_answer_query(
     session: AsyncSession, *, body: AnswerRequest, response: AnswerResponse
 ) -> None:
-    """Append a ``rag_queries`` row tagged ``consumer_type='agent'``.
+    """Append a ``rag_answers`` row with the full response classification (#221).
 
     Failures are logged, NOT raised — a transient DB hiccup during
     telemetry persistence must not turn a successful answer into a
     500 for the caller. Mirrors the existing context-pack telemetry
     pattern (#172 trap #21).
 
-    Uses ``consumer_type='agent'`` because the existing
-    ``ck_queries_consumer_type`` CHECK constraint only allows
-    ``'human'`` and ``'agent'`` — /v1/answer is an agent-shaped
-    endpoint, so the value is semantically correct. Distinguishing
-    answer-rows from context-pack-rows in the same table is a
-    follow-up: a dedicated ``rag_answers`` table (with the
-    generator-side metadata + finish_reason + truncation/refusal
-    flag) would earn its keep once the eval harness needs to slice
-    on it. Migration deferred to keep this PR focused.
+    Writes to ``rag_answers`` (not the shared ``rag_queries``) so the
+    answer-side signals — refusal class, generator metadata,
+    finish_reason, token counts — are captured at write time and
+    don't need to be reconstructed from JSON later. The migration
+    landed alongside this change.
     """
     try:
         async with session.begin_nested():
-            await QueriesRepository(session).create(
+            await AnswersRepository(session).create(
                 query=body.query,
-                consumer_type="agent",
+                task=body.task,
                 filters=(body.filters.model_dump(exclude_none=True) if body.filters else {}),
-                retrieved_chunk_ids=[e.chunk_id for e in response.evidence],
+                evidence_chunk_ids=[e.chunk_id for e in response.evidence],
+                answerable=response.answerable,
+                requires_human_review=response.requires_human_review,
+                refusal_reason=response.refusal_reason,
+                confidence=response.confidence,
+                generator_provider=response.generator_provider,
+                generator_model=response.generator_model,
+                finish_reason=response.token_budget.finish_reason,
+                prompt_tokens=response.token_budget.prompt_tokens,
+                completion_tokens=response.token_budget.completion_tokens,
+                total_tokens=response.token_budget.total_tokens,
+                requested_max_answer_tokens=response.token_budget.requested_max_answer_tokens,
             )
     except Exception:
-        logger.exception("rag_queries telemetry write for /v1/answer failed (non-fatal)")
+        logger.exception("rag_answers telemetry write for /v1/answer failed (non-fatal)")
 
 
 __all__ = ["router"]

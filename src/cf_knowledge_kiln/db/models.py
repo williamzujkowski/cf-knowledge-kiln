@@ -233,6 +233,65 @@ class ContextPack(Base):
     created_at: Mapped[datetime] = _ts()
 
 
+class RagAnswer(Base):
+    """#221: per-request telemetry for ``POST /v1/answer``.
+
+    Strict superset of what ``rag_queries`` records for the answer
+    endpoint. Captures the response classification (synthesized vs
+    refused, refusal class via ``refusal_reason``), generator metadata
+    (provider/model/finish_reason — null on refusals that never
+    reached the generator), and honest token counts (null when the
+    provider didn't return a ``usage`` block, never ``0``). The
+    /v1/answer route writes here instead of (not alongside) the
+    shared ``rag_queries`` table.
+    """
+
+    __tablename__ = "rag_answers"
+    __table_args__ = (
+        CheckConstraint(
+            "confidence IS NULL OR confidence IN ('high', 'medium', 'low', 'none')",
+            name="ck_rag_answers_confidence",
+        ),
+        CheckConstraint(
+            "prompt_tokens IS NULL OR prompt_tokens >= 0",
+            name="ck_rag_answers_prompt_tokens_nonneg",
+        ),
+        CheckConstraint(
+            "completion_tokens IS NULL OR completion_tokens >= 0",
+            name="ck_rag_answers_completion_tokens_nonneg",
+        ),
+        CheckConstraint(
+            "total_tokens IS NULL OR total_tokens >= 0",
+            name="ck_rag_answers_total_tokens_nonneg",
+        ),
+    )
+
+    id: Mapped[UUID] = _pk()
+    query: Mapped[str] = mapped_column(Text, nullable=False)
+    task: Mapped[str | None] = mapped_column(Text, nullable=True)
+    filters: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default="{}")
+    evidence_chunk_ids: Mapped[list[UUID]] = mapped_column(
+        ARRAY(PG_UUID(as_uuid=True)), nullable=False, server_default="{}"
+    )
+    answerable: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    requires_human_review: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    refusal_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    confidence: Mapped[str | None] = mapped_column(Text, nullable=True)
+    generator_provider: Mapped[str | None] = mapped_column(Text, nullable=True)
+    generator_model: Mapped[str | None] = mapped_column(Text, nullable=True)
+    finish_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    completion_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    total_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    requested_max_answer_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
+    # #202: use clock_timestamp() at write time, not now() (which
+    # returns the transaction start). Each row is one-shot — no
+    # started/finished pair — so a single created_at is enough.
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.clock_timestamp()
+    )
+
+
 class IngestionJob(Base):
     __tablename__ = "ingestion_jobs"
     __table_args__ = (

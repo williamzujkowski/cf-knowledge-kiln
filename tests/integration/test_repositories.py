@@ -10,12 +10,14 @@ parent row — never raw SQL into another repo's table.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from uuid import uuid4
 
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from cf_knowledge_kiln.db.repositories import (
+    AnswersRepository,
     ChunksRepository,
     ContextPacksRepository,
     DataSourcesRepository,
@@ -435,3 +437,112 @@ async def test_jobs_mark_done_with_result_run_id_links_back(
     await session.refresh(claimed)
 
     assert claimed.result_run_id == run.id
+
+
+# ─── AnswersRepository (#221) ─────────────────────────────────────────
+
+
+async def test_answers_crud_happy_path(session: AsyncSession) -> None:
+    """#221: a successful answer round-trips every field."""
+    repo = AnswersRepository(session)
+    row = await repo.create(
+        query="what is widget X",
+        task="explain widget X",
+        evidence_chunk_ids=[uuid4()],
+        answerable=True,
+        requires_human_review=False,
+        requested_max_answer_tokens=1024,
+        confidence="high",
+        generator_provider="openai-compatible",
+        generator_model="phi-4-mini-instruct",
+        finish_reason="stop",
+        prompt_tokens=120,
+        completion_tokens=10,
+        total_tokens=130,
+    )
+    fetched = await repo.get(row.id)
+    assert fetched is not None
+    assert fetched.query == "what is widget X"
+    assert fetched.task == "explain widget X"
+    assert fetched.answerable is True
+    assert fetched.requires_human_review is False
+    assert fetched.refusal_reason is None
+    assert fetched.generator_model == "phi-4-mini-instruct"
+    assert fetched.finish_reason == "stop"
+    assert fetched.total_tokens == 130
+    await repo.delete(row.id)
+    assert await repo.get(row.id) is None
+
+
+async def test_answers_crud_refusal_path(session: AsyncSession) -> None:
+    """#221: a refusal stores null generator metadata + a reason."""
+    repo = AnswersRepository(session)
+    row = await repo.create(
+        query="anything",
+        answerable=False,
+        requires_human_review=True,
+        requested_max_answer_tokens=1024,
+        refusal_reason="no evidence found for the query",
+        confidence="none",
+        # Generator never reached — all nulls.
+        generator_provider=None,
+        generator_model=None,
+        finish_reason=None,
+        prompt_tokens=None,
+        completion_tokens=None,
+        total_tokens=None,
+    )
+    assert row.refusal_reason == "no evidence found for the query"
+    assert row.generator_provider is None
+    assert row.prompt_tokens is None
+
+
+async def test_answers_list_filters(session: AsyncSession) -> None:
+    """``list`` applies answerable / requires_human_review / generator_model filters."""
+    repo = AnswersRepository(session)
+    await repo.create(
+        query="happy",
+        answerable=True,
+        requires_human_review=False,
+        requested_max_answer_tokens=512,
+        generator_model="phi-4",
+    )
+    await repo.create(
+        query="refused",
+        answerable=False,
+        requires_human_review=True,
+        requested_max_answer_tokens=512,
+    )
+    await repo.create(
+        query="other model",
+        answerable=True,
+        requires_human_review=False,
+        requested_max_answer_tokens=512,
+        generator_model="llama-3",
+    )
+
+    answerable = await repo.list(answerable=True)
+    assert {r.query for r in answerable} == {"happy", "other model"}
+
+    review = await repo.list(requires_human_review=True)
+    assert {r.query for r in review} == {"refused"}
+
+    phi = await repo.list(generator_model="phi-4")
+    assert {r.query for r in phi} == {"happy"}
+
+
+async def test_answers_negative_token_count_rejected(session: AsyncSession) -> None:
+    """CHECK constraint rejects negative token counts (data-integrity belt)."""
+    import pytest
+    from sqlalchemy.exc import IntegrityError
+
+    repo = AnswersRepository(session)
+    with pytest.raises(IntegrityError):
+        await repo.create(
+            query="x",
+            answerable=True,
+            requires_human_review=False,
+            requested_max_answer_tokens=512,
+            prompt_tokens=-1,  # constraint violation
+        )
+        await session.flush()
