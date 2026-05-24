@@ -432,7 +432,11 @@ def requires_human_review(
     2. The result set is empty.
     3. Every retrieved chunk is deprecated/archived/superseded.
     4. Every retrieved chunk is draft.
-    5. Any warning has a type in {prompt_injection_pattern, sensitive_content}.
+    5. Any warning has a type in
+       {prompt_injection_pattern, sensitive_content, isolated_match}.
+       ``isolated_match`` (#227) means top-1 dominates top-2 by more
+       than the configured drop threshold — the "confidently wrong
+       answer" shape from one corpus chunk surface-matching the query.
     6. The top-scoring chunk is below the weak-evidence threshold.
 
     ``weak_evidence_threshold`` overrides
