@@ -69,16 +69,32 @@ embeddings = [
   # the `openai-compatible` and `mock` providers work without this
   # extra. Kept as an alias for back-compat — see `real-embeddings`
   # below.
-  "sentence-transformers>=3.0,<6.0",
+  "sentence-transformers>=5.5,<6.0",
 ]
 real-embeddings = [
   # Canonical name for the heavy local-inference extra. Mirrors
-  # `embeddings` above; both install the same set. `torch` is pulled
-  # in transitively by `sentence-transformers` but we pin it explicitly
-  # so CI can pre-cache it as a separate layer and so a bad
-  # transitive resolution can't silently downgrade past the floor.
-  "sentence-transformers>=3.0,<6.0",
-  "torch>=2.0,<3",
+  # `embeddings` above; both install the same set.
+  #
+  # Floor bumps (#222, calibration eval pass — see
+  # `.security-discoveries.jsonl`):
+  #   * sentence-transformers>=5.5 (was >=3.0) — current upstream.
+  #   * transformers>=5.0,<6 pinned directly — closes 8 CVEs in
+  #     4.53.2 (PYSEC-2025-211..217, CVE-2026-1839). The pin is direct
+  #     rather than transitive so a future sentence-transformers
+  #     loosening can't silently let an old transformers back in.
+  #   * torch>=2.9 (was >=2.0) — closes PYSEC-2025-203/204/206 +
+  #     CVE-2025-3730 + GHSA-887c-mr87-cxwp. PYSEC-2026-139 is
+  #     upstream-unpatched as of 2026-05; tracking via the security
+  #     ledger.
+  #
+  # Calibration eval (#222, 2026-05-24): ingested the homelab-iac
+  # corpus (269 docs, 2566 chunks) on the new floors + e5-small-v2;
+  # positive top-1 scores spanned 0.484 → 0.977 with median 0.500,
+  # comfortably above the configured `weak_evidence_score_threshold`
+  # of 0.46. Calibration preserved.
+  "sentence-transformers>=5.5,<6.0",
+  "transformers>=5.0,<6",
+  "torch>=2.9,<3",
 ]
 otel = [
   # Optional OpenTelemetry tracing. Enabled only when
