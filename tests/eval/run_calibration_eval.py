@@ -85,19 +85,23 @@ QUERIES: list[Query] = [
 
 
 def search(q: str, k: int = 5) -> dict:
-    req = urllib.request.Request(
+    # S310: API is a hardcoded http://127.0.0.1:8000 constant at the
+    # top of this file — a local dev eval harness, not a tool that
+    # accepts caller-supplied URLs. The S310 risk (file:// / custom
+    # schemes via untrusted input) doesn't apply.
+    req = urllib.request.Request(  # noqa: S310
         f"{API}/v1/search",
         data=json.dumps({"query": q, "max_results": k}).encode("utf-8"),
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=30) as resp:
+    with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
         return json.loads(resp.read())
 
 
 def main() -> int:
     try:
-        urllib.request.urlopen(f"{API}/healthz", timeout=5).read()
+        urllib.request.urlopen(f"{API}/healthz", timeout=5).read()  # noqa: S310 — hardcoded localhost
     except urllib.error.URLError as exc:
         print(f"API unreachable at {API}: {exc}", file=sys.stderr)
         return 2
