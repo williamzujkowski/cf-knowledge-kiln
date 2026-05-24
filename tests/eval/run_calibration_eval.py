@@ -1,18 +1,34 @@
-"""Calibration eval for #222 — top-1 score distribution on the homelab-iac
-corpus with the active embedding model (e5-small-v2) + active deps.
+"""Calibration eval harness for the homelab-iac golden set (#222, #228).
 
-Runs the 14 golden queries from homelab-iac issue #627. For each:
-- POST the query to /v1/search.
-- Capture top-1 score.
-- Note whether the expected source appeared in top-5 (rough quality check).
+Runs the 15-query golden set from homelab-iac#627 (13 positives,
+2 negatives) against ``POST /v1/search`` on the local API and prints
+a markdown report with:
 
-Outputs a markdown report with the distribution (min/p25/median/p75/max),
-per-query rows, and a comparison-ready summary. Run BEFORE and AFTER
-any dep bump; diff the reports.
+- Top-1 score distribution (min, p25, median, mean, p75, max) — the
+  ``floor-index`` percentile convention is used
+  (``sorted[(p*n)//100]``), matching the e5 + Nomic calibration
+  reports so they're comparable.
+- Per-query top-1 score, expected source, and
+  ``in-top-5`` / ``missed`` / ``leaked-through`` classification.
 
-Designed for /v1/search since it's the simplest path; /v1/answer adds
-generator latency to the loop without changing the underlying retrieval
-score that #222 cares about.
+Use cases:
+
+* Before/after a ``sentence-transformers`` / ``torch`` floor bump
+  (#222 — calibration is preserved if the top-1 distribution doesn't
+  shift below the configured ``weak_evidence_score_threshold``).
+* Embedder-swap experiments (#228 — measure top-5 hit rate, not just
+  threshold pass-through).
+
+Requires:
+
+* A running API at ``http://127.0.0.1:8000`` (uvicorn) with the same
+  ``config/models.yaml`` the corpus was ingested at.
+* The homelab-iac corpus ingested into the local Postgres (see
+  ``config/sources.local.yaml``).
+
+Designed for ``/v1/search`` since it's the simplest path;
+``/v1/answer`` adds generator latency to the loop without changing
+the underlying retrieval score these reports track.
 """
 
 from __future__ import annotations
