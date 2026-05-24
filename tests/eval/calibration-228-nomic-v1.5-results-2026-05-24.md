@@ -192,3 +192,68 @@ is consistent with the score-distribution shape but isn't separately
 audited by the eval script (which only captures top-1). A future
 revision of the script could log top-2 explicitly to make this claim
 self-verifying.
+
+## Postscript (2026-05-24, post-merge): The misses aren't all retrieval problems
+
+A read-only diagnostic against the live DB (with the e5 corpus
+re-ingested) revealed that most "top-5 misses" in this report are
+not retrieval-quality issues at all. They split into three buckets:
+
+| qid | expected target | actual category |
+| --- | --------------- | --------------- |
+| q01 | `skills/manage-offsite-backup` | **0 chunks** — path does not exist in this corpus snapshot |
+| q04 | `docs/runbooks/offsitebackupfailed` | **0 chunks** — filename drift (corpus has `backupoffsitereplicationfailed.md`, not the expected name) |
+| q06 | `docs/components/offsite-backup` | **0 chunks** — path does not exist (only `docs/proposals/178-offsite-backup-design.md` is present) |
+| q08 | `AGENTS.md` | found at **rank 20** — real retrieval issue (chunk-ranking, not corpus) |
+| q09 | `AGENTS.md`, `scripts/wait-for-host` | AGENTS.md present (23 chunks) but ranked beyond top-25; **`scripts/wait-for-host` is a shell script**, excluded by the `**/*.md` ingest filter |
+| q10 | `skills/manage-offsite-backup` | **0 chunks** — same path as q01 |
+| q11 | `AGENTS.md`, `inventory/lab.yml` | AGENTS.md found at rank 19 (real retrieval issue); **`inventory/lab.yml` is YAML**, excluded by the `**/*.md` filter |
+| q12 | `docs/components/authentik-sso`, `inventory/lab.yml` | authentik-sso has 10 chunks but ranked beyond top-25 (real retrieval issue); lab.yml is YAML (filter) |
+
+Of the 8 missed positive queries, **at least 5 were corpus problems,
+not retrieval problems**:
+
+- **3 expected paths don't exist at all** (q01, q06, q10 → 
+  `skills/manage-offsite-backup`, `docs/components/offsite-backup`)
+- **1 filename drift** (q04: corpus has the alert renamed to
+  `backupoffsitereplicationfailed`)
+- **2 non-markdown expected files** that the ingest filter
+  legitimately excludes (q09 shell script, q11+q12 YAML inventory)
+
+The **truly retrieval-quality problems** are q08, q09 (AGENTS.md
+side), q11 (AGENTS.md side), and q12 (authentik-sso) — chunks exist
+in the DB but rank beyond top-25 on these queries. That's still a
+real signal for #232 (long-section AGENTS.md chunking) and #233
+(query rewriting), but the proportion is smaller than the headline
+"5/13 top-5" suggested.
+
+### Headline-metric corrected
+
+| metric | as reported | as observed |
+| ------ | ----------- | ----------- |
+| total positive queries | 13 | 13 |
+| retriever's fault | 8 misses | **3-4 misses** (q08, q11, q12; q09 partially) |
+| corpus-drift / out-of-scope-file-type | 0 (not separated) | **4-5 misses** (q01, q04, q06, q10, q11/q12/q09 file-type pieces) |
+
+### Implications for the follow-ups
+
+* **#232 — chunking for long-section docs**: still real (AGENTS.md
+  ranks at 19-20 on multiple queries; authentik-sso has 10 chunks
+  none of which surface). But the headline lever is smaller —
+  shrinking max_tokens won't help q01/q04/q06/q10 at all.
+* **#233 — query rewriting**: weaker case than originally framed.
+  The "operator-imperative vs declarative-passage" hypothesis can't
+  be validated against queries whose expected target doesn't exist.
+  Worth re-scoping to the queries with real retrieval-quality
+  issues (q08, q09, q11, q12) and re-evaluating the asymmetry.
+* **homelab-iac side**: the golden set in homelab-iac#627 needs
+  reconciliation with the current corpus state — either the missing
+  paths get created, OR the golden set is updated to target files
+  that exist. Tracked as a comment on #232.
+
+Closing thought: this is a textbook example of why benchmark
+diagnostics need to look at WHAT the retriever returned and WHERE
+the expected target landed, not just the headline hit-rate. The
+#228 report's headline framing ("Nomic v1.5 doesn't lift the gap")
+remains correct — neither embedder can find files that aren't in
+the DB — but the framing of "retrieval-quality gap" was too broad.
