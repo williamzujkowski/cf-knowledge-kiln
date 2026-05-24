@@ -44,6 +44,13 @@ costs roughly 50% more wall clock on CPU).
 | p75 | 0.500 | 0.500 | 0 |
 | max | 0.977 | 0.977 | 0 |
 
+Percentile convention used here (same as the e5 baseline report and
+`tests/eval/run_calibration_eval.py`): floor-index pick,
+`sorted[(3*n)//4]` with n=13 → index 9 → 0.500. (Linear-interpolation
+`numpy.percentile(..., 75)` gives the same answer for this data;
+linear-rank-with-1-indexed-positions gives 0.868. The floor-index
+choice matches across both calibration reports so they're comparable.)
+
 Score *shape* is essentially identical. The fused-RRF normalization
 (#164) caps both arms-rank-1 at 1.0 and single-arm rank-1 at 0.5; both
 models land most positives at the 0.5 single-arm plateau, with a few
@@ -53,10 +60,16 @@ both-arm hits up at 0.97.
 
 | metric | e5-small-v2 | nomic-v1.5 |
 | ------ | ----------- | ---------- |
-| top-1 ≥ weak_evidence floor (0.46) | 13/13 (100%) | 13/13 (100%) |
+| positive top-1 ≥ weak_evidence floor (0.46) | 13/13 (100%) | 13/13 (100%) |
 | positive top-5 hit | **5/13 (38%)** | **4/13 (31%)** |
 | negative correctly flagged | 0/2 (0%) | 0/2 (0%) |
 | user's target | 85% top-5 | (no change) |
+
+The weak-evidence floor row counts positive queries only — the two
+negatives (q13, q14) also score at 0.500 on nomic (and 0.500 / 0.901
+on e5), so the gate doesn't catch them either way. That's the
+motivation for #227 isolated_match and the rest of the rejection
+discussion below.
 
 ## Per-query (nomic-v1.5)
 
@@ -148,22 +161,34 @@ the actual cost drivers.
 ## Reproduce
 
 ```bash
-# (one-time) install the Nomic custom-code dep
+# (one-time) install the Nomic custom-code dep (see #231)
 .venv/bin/pip install einops
 
 # swap config to Nomic v1.5
 cp config/models.yaml config/models.yaml.e5-backup
 # edit: name: nomic-ai/nomic-embed-text-v1.5; dimensions: 768;
 #       trust_remote_code: true
-# (the full file used here is at the foot of this report)
 
-# re-ingest at 768-dim
-make ingest    # via the running worker
-# wait for ingestion_jobs status='succeeded'
+# re-ingest at 768-dim (worker uses the new provider on restart)
+make ingest    # enqueue + drain via the running worker
+# wait for ingestion_jobs.status='succeeded'
 
-# run the eval
-python /tmp/calibration-222/run_eval.py
+# run the eval — script is committed to the repo (#228 follow-up)
+python tests/eval/run_calibration_eval.py > /tmp/my-nomic-results.md
+
+# revert + clean up
+cp config/models.yaml.e5-backup config/models.yaml
+rm config/models.yaml.e5-backup
+# re-ingest at 384-dim to repopulate the DB with e5 vectors
+make ingest
 ```
 
-To revert: `cp config/models.yaml.e5-backup config/models.yaml` then
-re-ingest the corpus at 384-dim.
+Note on q14 top-2 (#227 calibration claim): the report says
+isolated_match's gap is 0 on nomic-v1.5 q14 because top-1 is at the
+0.500 single-arm plateau and the corpus has multiple chunks that also
+land at 0.500 on this query — so the gap to top-2 is at most a small
+fraction of the score range, well below the 0.30 drop_threshold. This
+is consistent with the score-distribution shape but isn't separately
+audited by the eval script (which only captures top-1). A future
+revision of the script could log top-2 explicitly to make this claim
+self-verifying.
