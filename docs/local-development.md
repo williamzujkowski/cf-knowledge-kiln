@@ -123,6 +123,27 @@ curl -sX POST http://localhost:8000/v1/search \
 - **`/v1/search` returns 503 with `embedding_provider: not_configured`.** No `config/models.yaml` is present. Copy the example, then restart the API process.
 - **First `/v1/search` is slow then OK.** The provider lazy-loads the model on first call; the pre-warm above avoids it. After the first call, the model stays in memory for the life of the process.
 
+## Re-embedding after a model swap (#224)
+
+If you change the active embedding model in `config/models.yaml`
+(e.g. swap `nomic-embed-text-v1.5` for `intfloat/e5-small-v2`) or land
+a prefix-handling fix like #204, existing chunk embeddings need to be
+regenerated against the new shape:
+
+```bash
+make reembed-dry-run   # preview: "would re-embed N chunks via <provider>/<model>"
+make reembed           # actually re-embed
+```
+
+The helper walks every row in `document_chunks`, calls the active
+provider's `embed_documents`, and upserts into `chunk_embeddings`.
+Partial failures are non-fatal: surviving batches persist, the
+report shows `<embedded>/<failed>/<total>`, and the failed batches'
+forensics land in the log at WARNING.
+
+See [docs/model-providers.md](./model-providers.md#model-family-text-prefixes-204)
+for the full background.
+
 ## Tearing it down
 
 ```bash

@@ -19,7 +19,7 @@ PKG       := cf_knowledge_kiln
 
 .PHONY: help bootstrap install lock lint format typecheck test test-unit test-integration \
         eval security sbom scan openapi-lint run run-worker migrate migrate-down \
-        ingest cf-push verify clean build-css verify-css
+        ingest reembed reembed-dry-run cf-push verify clean build-css verify-css
 
 help: ## Show this help.
 	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z_-]+:.*?##/ {printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -88,6 +88,12 @@ migrate-down: ## Roll back one revision.
 
 ingest: ## Enqueue ingestion jobs for active sources (uses config/sources.yaml).
 	@$(PY) -m $(PKG).ingestion ingest --config config/sources.yaml
+
+reembed: ## Re-embed every chunk via the active provider (use after a model swap or prefix fix; #224).
+	@$(PY) -m $(PKG).ingestion reembed
+
+reembed-dry-run: ## Preview the reembed chunk count without writing anything.
+	@$(PY) -m $(PKG).ingestion reembed --dry-run
 
 cf-push: ## Push to Cloud Foundry using ./manifest.yml.
 	@command -v cf >/dev/null 2>&1 || { echo "cf CLI not installed"; exit 1; }
