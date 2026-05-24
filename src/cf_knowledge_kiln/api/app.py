@@ -29,6 +29,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from cf_knowledge_kiln import __version__
+from cf_knowledge_kiln.api.answer import router as answer_router
 from cf_knowledge_kiln.api.auth import configure_auth
 from cf_knowledge_kiln.api.csp import install_csp_middleware
 from cf_knowledge_kiln.api.health import router as health_router
@@ -40,6 +41,8 @@ from cf_knowledge_kiln.api.retrieval import router as retrieval_router
 from cf_knowledge_kiln.api.web import router as web_router
 from cf_knowledge_kiln.config import get_settings
 from cf_knowledge_kiln.db import Database, resolve_database_url
+from cf_knowledge_kiln.generation import GeneratorProvider
+from cf_knowledge_kiln.generation.factory import build_generator_from_settings
 from cf_knowledge_kiln.ingestion.embedding import EmbeddingProvider
 from cf_knowledge_kiln.ingestion.embedding.factory import build_provider_from_settings
 from cf_knowledge_kiln.ingestion.prompt_injection import load_phrases
@@ -114,8 +117,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             max_overflow=settings.pg_pool_max_overflow,
         )
     embedding_provider: EmbeddingProvider | None = build_provider_from_settings(settings)
+    # #192: optional generator for /v1/answer. ``None`` is the MVP
+    # default — get_generator_provider raises 503 in that case so
+    # /v1/answer reports "no generator configured" clearly. Other
+    # endpoints (/v1/search, /v1/agent/context-pack) ignore this.
+    generator_provider: GeneratorProvider | None = build_generator_from_settings(settings)
     app.state.db = db
     app.state.embedding_provider = embedding_provider
+    app.state.generator_provider = generator_provider
     # Probe the provider once so /readyz reflects embedding health, not
     # just Postgres (#176). A configured-but-broken provider (e.g. a URL
     # typo) builds an object that only fails on use — this surfaces it.
@@ -143,6 +152,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        if generator_provider is not None:
+            await generator_provider.aclose()
         if embedding_provider is not None:
             await embedding_provider.aclose()
         if db is not None:
@@ -183,6 +194,7 @@ def create_app() -> FastAPI:
     configure_observability(app, settings)
     app.include_router(health_router)
     app.include_router(retrieval_router)
+    app.include_router(answer_router)
     app.include_router(web_router)
     app.include_router(preview_router)
     app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")

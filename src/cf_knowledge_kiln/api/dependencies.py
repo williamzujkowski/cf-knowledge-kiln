@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from cf_knowledge_kiln.api.rate_limit import TokenBucketLimiter
 from cf_knowledge_kiln.config import Settings, get_settings
 from cf_knowledge_kiln.db.connection import Database
+from cf_knowledge_kiln.generation import GeneratorProvider
 from cf_knowledge_kiln.ingestion.embedding import EmbeddingProvider
 from cf_knowledge_kiln.retrieval import (
     HybridRetriever,
@@ -65,6 +66,30 @@ def get_embedding_provider(request: Request) -> EmbeddingProvider | None:
     provider = getattr(request.app.state, "embedding_provider", None)
     if provider is None:
         return None
+    return provider  # type: ignore[no-any-return]
+
+
+def get_generator_provider(request: Request) -> GeneratorProvider:
+    """Return the active :class:`GeneratorProvider` or 503 (#192).
+
+    Unlike the embedding provider, /v1/answer cannot operate without a
+    generator — there's no fallback. When the lifespan attached
+    ``app.state.generator_provider = None`` (no config, disabled, or
+    missing required env vars), this dependency raises a clear 503 so
+    the caller sees "no generator configured" rather than a generic
+    500. Operators bring up /v1/answer by enabling the generator block
+    in ``config/models.yaml`` and setting ``KILN_GENERATOR_*``.
+    """
+    provider = getattr(request.app.state, "generator_provider", None)
+    if provider is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "Generator not configured. Enable models.generator in "
+                "config/models.yaml and set KILN_GENERATOR_BASE_URL + "
+                "KILN_GENERATOR_API_KEY to bring up /v1/answer."
+            ),
+        )
     return provider  # type: ignore[no-any-return]
 
 
@@ -158,6 +183,7 @@ __all__ = [
     "get_db",
     "get_embedding_provider",
     "get_feedback_limiter",
+    "get_generator_provider",
     "get_hybrid_retriever",
     "get_prompt_injection_phrases",
     "get_retrieval_config",
