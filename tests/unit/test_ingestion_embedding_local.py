@@ -371,9 +371,7 @@ class TestModelFamilyRequiredDeps:
             if saved is not None:
                 sys.modules["einops"] = saved
 
-    def test_nomic_with_einops_present_constructs(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_nomic_with_einops_present_constructs(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """If einops IS importable, the guard passes through.
 
         We inject a fake einops module so the test doesn't depend on
@@ -410,9 +408,7 @@ class TestModelFamilyRequiredDeps:
             trust_remote_code=True,
         )
 
-    def test_non_nomic_model_skips_the_guard(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_non_nomic_model_skips_the_guard(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """e5 (or any model not in the deps table) constructs without einops."""
         import sys
 
