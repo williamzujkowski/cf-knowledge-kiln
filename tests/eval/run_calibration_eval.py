@@ -53,34 +53,55 @@ class Query:
 
 # From homelab-iac issue #627 (kiln-test A.4 golden set).
 QUERIES: list[Query] = [
-    Query("q01", "How do I rotate the restic passphrase for the offsite backup?",
-          ["skills/manage-offsite-backup"]),
-    Query("q02", "What's the BBR director restore command?",
-          ["skills/bbr-backup-and-restore", "docs/components/backups-bbr"]),
-    Query("q03", "What does the CredHubCAExpiring alert mean and what do I do?",
-          ["docs/runbooks/credhubcaexpiring"]),
-    Query("q04", "OffsiteBackupSizeAnomaly fired — likely cause?",
-          ["docs/runbooks/offsitebackupfailed"]),
-    Query("q05", "How does TLS work in the lab? Where do the certs come from?",
-          ["docs/components/caddy-reverse-proxy", "AGENTS.md"]),
-    Query("q06", "What's the offsite backup architecture?",
-          ["docs/components/offsite-backup"]),
-    Query("q07", "Why do we have two offsite backup tiers and what does each protect against?",
-          ["docs/components/offsite-backup", "docs/components/backups-bbr"]),
-    Query("q08", "Where is the Cloudflare DNS token stored and what uses it?",
-          ["AGENTS.md"]),
-    Query("q09", "If I reboot pi-b, how do I tell when SSH is reachable again from the workstation?",
-          ["AGENTS.md", "scripts/wait-for-host"]),
-    Query("q10", "What's the trap with re-keying restic vs. regenerating the passphrase?",
-          ["skills/manage-offsite-backup"]),
-    Query("q11", "Which IPs are on VLAN 40 and what runs there?",
-          ["AGENTS.md", "inventory/lab.yml"]),
-    Query("q12", "What does pi-a do?",
-          ["docs/components/authentik-sso", "inventory/lab.yml"]),
+    Query(
+        "q01",
+        "How do I rotate the restic passphrase for the offsite backup?",
+        ["skills/manage-offsite-backup"],
+    ),
+    Query(
+        "q02",
+        "What's the BBR director restore command?",
+        ["skills/bbr-backup-and-restore", "docs/components/backups-bbr"],
+    ),
+    Query(
+        "q03",
+        "What does the CredHubCAExpiring alert mean and what do I do?",
+        ["docs/runbooks/credhubcaexpiring"],
+    ),
+    Query(
+        "q04",
+        "OffsiteBackupSizeAnomaly fired — likely cause?",
+        ["docs/runbooks/offsitebackupfailed"],
+    ),
+    Query(
+        "q05",
+        "How does TLS work in the lab? Where do the certs come from?",
+        ["docs/components/caddy-reverse-proxy", "AGENTS.md"],
+    ),
+    Query("q06", "What's the offsite backup architecture?", ["docs/components/offsite-backup"]),
+    Query(
+        "q07",
+        "Why do we have two offsite backup tiers and what does each protect against?",
+        ["docs/components/offsite-backup", "docs/components/backups-bbr"],
+    ),
+    Query("q08", "Where is the Cloudflare DNS token stored and what uses it?", ["AGENTS.md"]),
+    Query(
+        "q09",
+        "If I reboot pi-b, how do I tell when SSH is reachable again from the workstation?",
+        ["AGENTS.md", "scripts/wait-for-host"],
+    ),
+    Query(
+        "q10",
+        "What's the trap with re-keying restic vs. regenerating the passphrase?",
+        ["skills/manage-offsite-backup"],
+    ),
+    Query(
+        "q11", "Which IPs are on VLAN 40 and what runs there?", ["AGENTS.md", "inventory/lab.yml"]
+    ),
+    Query("q12", "What does pi-a do?", ["docs/components/authentik-sso", "inventory/lab.yml"]),
     Query("q13", "What's the procedure for failing over to AWS?", [], is_negative=True),
     Query("q14", "How do I configure Kubernetes?", [], is_negative=True),
-    Query("q15", "What's the current pgvector deployment status?",
-          ["docs/components/pgvector"]),
+    Query("q15", "What's the current pgvector deployment status?", ["docs/components/pgvector"]),
 ]
 
 
@@ -131,9 +152,7 @@ def main() -> int:
             for res in results[:5]:
                 loc = f"{res.get('repo') or ''}/{res.get('path') or ''}"
                 top5_locations.append(loc)
-            expected_hit = any(
-                any(exp in loc for loc in top5_locations) for exp in q.expected
-            )
+            expected_hit = any(any(exp in loc for loc in top5_locations) for exp in q.expected)
         if q.is_negative:
             negative_count += 1
             # "Correctly flagged" = warnings include weak_evidence OR
@@ -144,8 +163,7 @@ def main() -> int:
             if flagged:
                 negatives_correctly_flagged += 1
             rows.append(
-                (q.qid, q.text, top1, "negative",
-                 "flagged" if flagged else "leaked-through")
+                (q.qid, q.text, top1, "negative", "flagged" if flagged else "leaked-through")
             )
         else:
             positive_count += 1
@@ -153,15 +171,22 @@ def main() -> int:
             if expected_hit:
                 positives_expected_in_top5 += 1
             rows.append(
-                (q.qid, q.text, top1, ",".join(q.expected),
-                 "in-top-5" if expected_hit else "missed")
+                (
+                    q.qid,
+                    q.text,
+                    top1,
+                    ",".join(q.expected),
+                    "in-top-5" if expected_hit else "missed",
+                )
             )
 
     # ── report ──
     print("# Calibration eval — homelab-iac corpus")
     print()
-    print(f"Active embedding: from `config/models.yaml`. Queries: {len(QUERIES)} "
-          f"({positive_count} positives, {negative_count} negatives).")
+    print(
+        f"Active embedding: from `config/models.yaml`. Queries: {len(QUERIES)} "
+        f"({positive_count} positives, {negative_count} negatives)."
+    )
     print()
 
     if positives_top1:
