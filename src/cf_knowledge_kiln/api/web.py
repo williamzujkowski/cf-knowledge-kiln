@@ -51,7 +51,7 @@ from cf_knowledge_kiln.api.forms import (
     selected_statuses,
 )
 from cf_knowledge_kiln.api.rate_limit import TokenBucketLimiter, client_ip
-from cf_knowledge_kiln.api.views import humanize_warning, log_human_query
+from cf_knowledge_kiln.api.views import humanize_warning, log_human_query, split_warnings
 from cf_knowledge_kiln.db.repositories import FeedbackRepository
 from cf_knowledge_kiln.retrieval import HybridRetriever
 from cf_knowledge_kiln.retrieval.types import MAX_QUERY_LENGTH
@@ -185,13 +185,24 @@ async def search_partial(
         )
         for c in result.chunks
     ]
+    # #257: split warnings into query-global vs per-document so the
+    # template can render per-document warnings inline on each card.
+    # The spec (user-journeys.md:59-69) requires per-result warning
+    # context — a security engineer scanning a list shouldn't have to
+    # cross-reference a top-of-list 'stale_source' warning with the
+    # right card.
+    all_warnings = [humanize_warning(w) for w in (result.warnings or [])]
+    visible_doc_ids = {str(c.document_id) for c in result.chunks}
+    global_warnings, per_doc_warnings = split_warnings(all_warnings, visible_doc_ids)
+    for card in cards:
+        card["warnings"] = per_doc_warnings.get(str(card.get("document_id")), [])
     return templates.TemplateResponse(
         request,
         "_results.html",
         {
             "query": query,
             "results": cards,
-            "warnings": [humanize_warning(w) for w in (result.warnings or [])],
+            "warnings": global_warnings,
             "query_id": str(query_id) if query_id else None,
             # The rail isn't re-rendered in the HTMX partial today, but
             # passing the values through keeps the contract symmetric

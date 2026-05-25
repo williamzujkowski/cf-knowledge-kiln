@@ -1135,10 +1135,70 @@ a.source-link:focus-visible {
   background: var(--oxblood-tint);
 }
 
-.warning-weak_evidence {
+.warning-weak_evidence,
+.warning-isolated_match {
   color: var(--ink-soft);
   background: var(--paper-dim);
   border-inline-start-color: var(--ink-faded);
+}
+
+/* #257: per-result inline warnings rendered inside each result card.
+   Tighter visual treatment than the top-level .warnings list so they
+   read as margin annotations on the card, not standalone alerts.
+   Severity tiers (advisory / warning / blocking) drive the rule
+   color + weight; the .warning-icon adds an extra ⚠ glyph for
+   blocking-level warnings (sensitive content, prompt injection)
+   so a security engineer scanning at speed can't miss them. */
+
+.result-warnings {
+  list-style: none;
+  padding: 0;
+  margin: 0.6rem 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.result-warning {
+  padding: 0.32rem 0.6rem;
+  border-inline-start: 2px solid currentColor;
+  border-radius: 0 3px 3px 0;
+}
+
+.result-warning .warning-prefix {
+  font-style: italic;
+  font-variation-settings: "opsz" 14;
+  color: currentColor;
+}
+
+.result-warning .warning-icon {
+  /* Decorative; the severity tier carries the meaning. Keep ASCII
+     so the glyph survives any font that doesn't ship the Unicode
+     warning sign. */
+  display: inline-block;
+  margin-inline-end: 0.25rem;
+  font-weight: 700;
+}
+
+.result-warning.severity-advisory {
+  color: var(--gold);
+  background: var(--gold-tint);
+}
+
+.result-warning.severity-warning {
+  color: var(--oxblood);
+  background: var(--oxblood-tint);
+}
+
+.result-warning.severity-blocking {
+  color: var(--oxblood);
+  background: var(--oxblood-tint);
+  border-inline-start-width: 3px;
+  /* Heavier left border + larger icon so blocking warnings demand
+     attention in a list scanned at 200ms per card. */
+  font-weight: 600;
 }
 /* ─── Error fragment (#122 margin-note voice) ─────────────────── */
 

@@ -5,13 +5,17 @@
 <div class="results-fade">
 
 {% if warnings %}
-  {# role="status" is invalid on <ul> per axe-allowed-role; setting it
-     also strips list semantics so the children <li> failed listitem
-     validation. The live-region announcement happens on the sibling
-     #search-status (#120), so this list is back to plain HTML. #}
+  {# Query-global warnings (#257 split). Per-document warnings now
+     render inline on each result card (.result-warnings block below)
+     so a security engineer scanning results doesn't have to cross-
+     reference a top-level 'stale_source' with the matching card.
+     This list is what remains: weak_evidence on the whole result set,
+     query_normalized, conflicting_sources (multi-source by nature),
+     plus any per-document warning whose chunk didn't surface in the
+     visible top-K. #}
   <ul class="warnings">
     {% for w in warnings %}
-      <li class="warning warning-{{ w.type }}">
+      <li class="warning warning-{{ w.type }} severity-{{ w.severity }}">
         {% if w.prefix %}<em class="warning-prefix">{{ w.prefix }}</em> {% endif %}
         <span class="warning-message">{{ w.message }}</span>
       </li>
@@ -67,6 +71,24 @@
             </h2>
             <span class="status-badge status-{{ r.status }}">{{ r.status }}</span>
           </header>
+          {# #257 per-card inline warnings. Severity classes:
+             - advisory: gold rule, italic prefix
+             - warning:  oxblood rule, bold prefix
+             - blocking: oxblood rule + warning icon
+             The split_warnings() helper buckets these from the top-of-
+             list block so the per-card context surfaces with the result
+             instead of next to a separate top-of-page list. #}
+          {% if r.warnings %}
+            <ul class="result-warnings">
+              {% for w in r.warnings %}
+                <li class="result-warning result-warning-{{ w.type }} severity-{{ w.severity }}">
+                  {% if w.severity == 'blocking' %}<span class="warning-icon" aria-hidden="true">⚠</span> {% endif %}
+                  {% if w.prefix %}<em class="warning-prefix">{{ w.prefix }}</em> {% endif %}
+                  <span class="warning-message">{{ w.message }}</span>
+                </li>
+              {% endfor %}
+            </ul>
+          {% endif %}
           {% if r.heading_path %}
             <p class="heading-path">
               {% for part in r.heading_path %}<span>{{ part }}</span>{% if not loop.last %} <span class="sep" aria-hidden="true">›</span> {% endif %}{% endfor %}
