@@ -202,6 +202,7 @@ Max 5 auto-filed issues per session. Security findings go to a gitignored `.secu
 | Current state + next chunk       | [HANDOFF.md](./HANDOFF.md)                                              |
 | Architecture overview            | [docs/architecture.md](./docs/architecture.md)                          |
 | User journeys (human + agent)    | [docs/user-journeys.md](./docs/user-journeys.md)                        |
+| Connect an external agent        | [docs/agent-integration-guide.md](./docs/agent-integration-guide.md)    |
 | Cloud Foundry deployment         | [docs/deployment-cloud-foundry.md](./docs/deployment-cloud-foundry.md)  |
 | Configuration reference          | [docs/configuration.md](./docs/configuration.md)                        |
 | Model providers + provenance     | [docs/model-providers.md](./docs/model-providers.md)                    |
