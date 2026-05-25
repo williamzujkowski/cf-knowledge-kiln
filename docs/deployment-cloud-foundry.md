@@ -108,6 +108,32 @@ numbers:
 
 A foundation with a `default_app_disk_in_mb` lower than 2048 will refuse this manifest — escalation in that case is to bump the foundation default. Tracked in homelab-iac#700 for the homelab CF foundation.
 
+### First-deploy schema bootstrap (#244)
+
+The API and worker both run `alembic upgrade head` at startup by
+default. A first `cf push` against a freshly-provisioned database
+applies the schema with no operator action — no `cf ssh ... make
+migrate` step needed. A Postgres transaction-level advisory lock
+serializes both apps so they can't race on `alembic_version`.
+
+Opt-out for shared-DB deployments (where another process owns the
+schema, or you prefer the explicit migration step):
+
+```bash
+cf set-env cf-knowledge-kiln-api    KILN_AUTO_MIGRATE_ON_STARTUP false
+cf set-env cf-knowledge-kiln-worker KILN_AUTO_MIGRATE_ON_STARTUP false
+cf restage cf-knowledge-kiln-api
+cf restage cf-knowledge-kiln-worker
+```
+
+Constraint inherited from the migrate-first model: every revision in
+`alembic/versions/` must be backward-compatible with the previously
+deployed app version. The rolling deploy (`--strategy rolling` above)
+leaves the old app instance serving traffic while the new one
+migrates; a destructive DDL change breaks the old instance until the
+roll completes. Stage breaking schema changes as expand → contract
+across two deploys.
+
 ## Environment variables
 
 Set sensitive values via `cf set-env`, never in the manifest:

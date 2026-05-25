@@ -31,6 +31,7 @@ from typing import Any
 
 from cf_knowledge_kiln.config import Settings, get_settings
 from cf_knowledge_kiln.db import Database, resolve_database_url
+from cf_knowledge_kiln.db.migrations import run_upgrade_head
 from cf_knowledge_kiln.db.repositories import IngestionJobsRepository
 from cf_knowledge_kiln.ingestion.embedding import EmbeddingProvider
 from cf_knowledge_kiln.ingestion.embedding.factory import build_provider_from_settings
@@ -231,6 +232,17 @@ async def serve(
             "(set KILN_DATABASE_URL or bind a Postgres service)"
         )
         return 2
+
+    # #244: auto-apply migrations BEFORE opening the pool. Crash the
+    # worker on failure rather than poll for jobs against a DB whose
+    # ingestion_jobs table doesn't exist yet.
+    if settings.auto_migrate_on_startup:
+        logger.info("auto-migrate enabled; running alembic upgrade head before opening pool")
+        try:
+            await run_upgrade_head(url)
+        except Exception:
+            logger.exception("worker refused to start: alembic upgrade head failed")
+            return 2
 
     db = Database(url, pool_size=settings.pg_pool_size, max_overflow=settings.pg_pool_max_overflow)
     provider = build_provider_from_settings(settings)

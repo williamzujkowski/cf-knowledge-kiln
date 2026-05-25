@@ -22,6 +22,7 @@ the manifest.
 | `KILN_PG_SERVICE_NAME`                | `cf-knowledge-kiln-db`   | Name to look up in `VCAP_SERVICES`.                                |
 | `KILN_PG_POOL_SIZE`                   | `5`                      | Connection pool size.                                              |
 | `KILN_PG_POOL_MAX_OVERFLOW`           | `10`                     | Pool overflow.                                                     |
+| `KILN_AUTO_MIGRATE_ON_STARTUP`        | `true`                   | When true (default), the API + worker run `alembic upgrade head` at startup against the resolved DB URL BEFORE opening the connection pool. A Postgres transaction-level advisory lock serializes concurrent starts. Set `false` for shared-DB deployments where another process owns the schema; then run `make migrate` out-of-band (#244). |
 | `KILN_EMBEDDING_API_KEY`              | —                        | Secret. Set via `cf set-env` or env.                               |
 | `KILN_EMBEDDING_BASE_URL`             | —                        | Override the OpenAI-compatible embedding base URL.                 |
 | `KILN_GENERATOR_API_KEY`              | —                        | Secret.                                                            |
