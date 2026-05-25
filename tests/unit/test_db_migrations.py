@@ -123,6 +123,42 @@ class TestRunUpgradeHeadAsync:
         assert calls == ["postgresql+asyncpg://target/db"]  # pragma: allowlist secret
 
 
+class TestAlembicIniPathResolution:
+    """The path resolver must work in both editable + wheel-installed layouts (#244)."""
+
+    def test_returns_path_object_when_file_relative_exists(self) -> None:
+        """Source-tree / editable-install path: returns the absolute Path."""
+        from cf_knowledge_kiln.db.migrations import _alembic_ini_path
+
+        out = _alembic_ini_path()
+        # In the test env we ARE in the source tree, so the file
+        # exists at the file-relative location.
+        assert isinstance(out, type(out))  # at minimum a Path-like
+        from pathlib import Path as _P
+
+        assert isinstance(out, _P)
+        assert out.exists()
+        assert out.name == "alembic.ini"
+
+    def test_falls_back_to_cwd_relative_string_when_file_relative_missing(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Wheel-installed layout (#244): when the file-relative
+        ``alembic.ini`` doesn't exist (the kiln is installed
+        non-editably and ``__file__`` lives in site-packages), the
+        helper returns the literal string so Alembic resolves from
+        CWD."""
+        from pathlib import Path as _P
+
+        from cf_knowledge_kiln.db import migrations as mig
+
+        # Point the resolver at a directory we know has no alembic.ini.
+        fake_file = _P("/nonexistent/site-packages/cf_knowledge_kiln/db/migrations.py")
+        monkeypatch.setattr(mig, "__file__", str(fake_file))
+        out = mig._alembic_ini_path()
+        assert out == "alembic.ini"
+
+
 class TestRedact:
     """Password redaction for log lines."""
 

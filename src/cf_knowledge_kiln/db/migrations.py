@@ -50,15 +50,37 @@ logger = logging.getLogger(__name__)
 _DB_URL_ENV = "KILN_DATABASE_URL"
 
 
-def _alembic_ini_path() -> Path:
-    """Resolve ``alembic.ini`` from the package layout.
+def _alembic_ini_path() -> Path | str:
+    """Resolve ``alembic.ini`` across editable + wheel-installed layouts.
 
-    Three levels up: ``db/`` → ``cf_knowledge_kiln/`` → ``src/`` →
-    repo root. Absolute path so the helper works regardless of the
-    caller's CWD (CF stages at ``/home/vcap/app`` which is the repo
-    root, but local-dev callers may invoke from anywhere).
+    Two install shapes the kiln runs in:
+
+    1. **Editable / source tree** (local dev, integration tests, a
+       buildpack stage that hasn't copied to site-packages yet).
+       ``__file__`` is ``src/cf_knowledge_kiln/db/migrations.py``, so
+       ``parents[3]`` is the repo root and ``alembic.ini`` is right
+       there next to ``pyproject.toml``.
+    2. **Non-editable / wheel-installed** (Cloud Foundry's
+       ``pip install .`` from ``requirements.txt`` — see #238 for why
+       it's non-editable). ``__file__`` is
+       ``site-packages/cf_knowledge_kiln/db/migrations.py``, so
+       ``parents[3]`` is ``site-packages``'s parent (typically
+       ``python3.12/``) — no ``alembic.ini`` there. The CF buildpack
+       still has the SOURCE tree at ``/home/vcap/app`` (the CWD when
+       ``./scripts/start-api.sh`` execs), so the cwd-relative string
+       ``alembic.ini`` resolves correctly via Alembic's own search.
+
+    Try the file-relative path first. If it exists, use it (handles
+    both editable installs AND the test suite running from any CWD).
+    Otherwise fall back to the literal string ``"alembic.ini"``,
+    which Alembic resolves relative to CWD — the right answer in
+    CF's wheel-installed layout where the source tree at
+    ``/home/vcap/app`` still carries the file.
     """
-    return Path(__file__).resolve().parents[3] / "alembic.ini"
+    file_relative = Path(__file__).resolve().parents[3] / "alembic.ini"
+    if file_relative.exists():
+        return file_relative
+    return "alembic.ini"
 
 
 def _snapshot_logger_disabled() -> tuple[dict[str, bool], bool]:
@@ -114,7 +136,8 @@ def run_upgrade_head_sync(database_url: str) -> None:
     get_settings.cache_clear()
     try:
         logger.info("alembic upgrade head: starting against %s", _redact(database_url))
-        cfg = Config(str(_alembic_ini_path()))
+        ini = _alembic_ini_path()
+        cfg = Config(str(ini) if isinstance(ini, Path) else ini)
         command.upgrade(cfg, "head")
         logger.info("alembic upgrade head: done")
     finally:
