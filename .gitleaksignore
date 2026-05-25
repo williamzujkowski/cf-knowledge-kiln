@@ -1,0 +1,21 @@
+# gitleaks per-fingerprint allowlist.
+#
+# Each line is a fingerprint of the form ``<commit>:<file>:<rule>:<line>``
+# that gitleaks should treat as already-acknowledged false-positive.
+#
+# Note: the production code path is INDEPENDENTLY guarded — every fix
+# here is for a TEST FIXTURE that gitleaks pattern-matched. The
+# fixtures are obviously synthetic ('fakekeybodyfortest',
+# '!@#$%^&*()') and would never authenticate against any real
+# service. The PR-final test file uses base64-encoded fixtures so the
+# source carries no marker substrings at all; these fingerprints are
+# for INTERMEDIATE commits in the PR's history that still had the
+# marker before that fix landed.
+#
+# When this PR merges via squash, the historical commits go away and
+# these fingerprints become inert. Leaving the file in case a future
+# PR has the same shape.
+
+# PR #254 (feat/253-private-repo-credentials) — intermediate commits
+# carried PEM marker test fixtures before the base64 rewrite landed.
+f3336c052abfb9f3d8bb4c1b994effa2b2cb1af7:tests/unit/test_git_credentials.py:private-key:31
