@@ -35,6 +35,12 @@ from cf_knowledge_kiln.db.migrations import run_upgrade_head
 from cf_knowledge_kiln.db.repositories import IngestionJobsRepository
 from cf_knowledge_kiln.ingestion.embedding import EmbeddingProvider
 from cf_knowledge_kiln.ingestion.embedding.factory import build_provider_from_settings
+from cf_knowledge_kiln.ingestion.git_credentials import (
+    GitCredentials,
+)
+from cf_knowledge_kiln.ingestion.git_credentials import (
+    install_at_startup as install_git_credentials,
+)
 from cf_knowledge_kiln.ingestion.pipeline import run_source
 from cf_knowledge_kiln.ingestion.prompt_injection import load_phrases
 from cf_knowledge_kiln.ingestion.sensitive_content import load_patterns
@@ -65,6 +71,7 @@ class Worker:
         prompt_injection_phrases: list[str] | None = None,
         sensitive_patterns: list[Any] | None = None,
         poll_interval_seconds: float | None = None,
+        git_credentials: GitCredentials | None = None,
     ) -> None:
         self._db = db
         self._allowlist = allowlist
@@ -72,6 +79,7 @@ class Worker:
         self._embedding_provider = embedding_provider
         self._prompt_injection_phrases = prompt_injection_phrases
         self._sensitive_patterns = sensitive_patterns
+        self._git_credentials = git_credentials
         self._poll = (
             poll_interval_seconds
             if poll_interval_seconds is not None
@@ -194,6 +202,7 @@ class Worker:
                 embedding_provider=self._embedding_provider,
                 prompt_injection_phrases=self._prompt_injection_phrases,
                 sensitive_patterns=self._sensitive_patterns,
+                git_credentials=self._git_credentials,
             )
             await IngestionJobsRepository(session).mark_done(job_id, result_run_id=summary.run_id)
             await session.commit()
@@ -254,6 +263,19 @@ async def serve(
         logger.info("embedding provider ready: %s (%s)", provider.model, provider.provider)
     phrases = load_phrases(settings.security_config_path)
     sensitive = load_patterns(settings.security_config_path)
+    # #253: install git credentials (SSH key + askpass) before any
+    # ingest job can fire. install_at_startup is a no-op when no
+    # credentials are configured — public-repo deployments don't
+    # set either env var and see no behavior change.
+    git_creds_raw = GitCredentials.from_settings(settings)
+    if git_creds_raw.has_any():
+        logger.info(
+            "git credentials: token=%s ssh-key=%s known-hosts=%s",
+            git_creds_raw.token is not None,
+            git_creds_raw.ssh_key_pem is not None,
+            git_creds_raw.known_hosts is not None,
+        )
+    git_creds = install_git_credentials(git_creds_raw)
     worker = Worker(
         db=db,
         allowlist=allowlist,
@@ -261,6 +283,7 @@ async def serve(
         embedding_provider=provider,
         prompt_injection_phrases=phrases,
         sensitive_patterns=sensitive,
+        git_credentials=git_creds,
     )
     _install_signal_handlers(worker)
     try:
