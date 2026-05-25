@@ -19,7 +19,7 @@ PKG       := cf_knowledge_kiln
 
 .PHONY: help bootstrap install lock lint format typecheck test test-unit test-integration \
         eval security sbom scan openapi-lint run run-worker migrate migrate-down \
-        ingest reembed reembed-dry-run cf-push verify clean build-css verify-css
+        ingest reembed reembed-dry-run cf-push cf-verify verify clean build-css verify-css
 
 help: ## Show this help.
 	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z_-]+:.*?##/ {printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -99,6 +99,9 @@ cf-push: ## Push to Cloud Foundry using ./manifest.yml.
 	@command -v cf >/dev/null 2>&1 || { echo "cf CLI not installed"; exit 1; }
 	@cf push -f manifest.yml
 
+cf-verify: ## Static checks against the CF-deploy contract — manifest, requirements, scripts, example configs (#229/#240/#241/#242).
+	@$(PY) scripts/cf-verify.py
+
 build-css: ## Concatenate the static/kiln/*.css partials into static/kiln.css.
 	@printf '/* GENERATED FILE — DO NOT EDIT.\n   Source: src/cf_knowledge_kiln/api/static/kiln/_*.css\n   Regenerate with `make build-css`; `make verify-css` blocks drift in CI. */\n\n' > src/cf_knowledge_kiln/api/static/kiln.css
 	@cat src/cf_knowledge_kiln/api/static/kiln/_tokens.css \
@@ -121,7 +124,7 @@ verify-css: ## Rebuild kiln.css from partials and fail if the file drifted.
 	       echo "  Run 'make build-css' and commit the regenerated kiln.css."; \
 	       exit 1; }
 
-verify: lint typecheck test openapi-lint verify-css ## The local quality gate. Run before pushing.
+verify: lint typecheck test openapi-lint verify-css cf-verify ## The local quality gate. Run before pushing.
 	@echo ""
 	@echo "✓ verify passed"
 

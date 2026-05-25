@@ -60,6 +60,15 @@ jobs:
       - name: OpenAPI lint
         run: python scripts/lint_openapi.py openapi/openapi.yaml
 
+      - name: cf-verify (deploy-contract static checks)
+        # Encodes the lessons from #229/#240/#241/#242/#243 as static
+        # checks: manifest sizing + executable scripts + serve-worker
+        # invocation + requirements.txt resolves + example yaml loads.
+        # Catches the entire class of "looks right, fails at CF
+        # staging" regressions in seconds before they hit the live
+        # foundation again.
+        run: python scripts/cf-verify.py
+
       - name: kiln.css partials in sync with concatenated artifact
         # The browser-served stylesheet `static/kiln.css` is a build
         # artifact of the topical partials under `static/kiln/`. CI
