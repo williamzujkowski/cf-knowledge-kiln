@@ -14,9 +14,22 @@
 #
 # WHAT THIS INSTALLS:
 #
-# ``-e .`` editable-installs the kiln package itself from the staged
-# source tree (so the buildpack picks up the pyproject.toml metadata
-# AND the Python code under src/), with extras:
+# ``.`` installs the kiln package itself from the staged source tree
+# (so the buildpack picks up the pyproject.toml metadata AND the
+# Python code under src/), with extras. NOT ``-e .`` — see the
+# editable-install note below.
+#
+# WHY NOT EDITABLE (``-e``):
+#
+# A previous version of this file used ``-e .[...]``. Verified on the
+# homelab CF foundation 2026-05-24 (homelab-iac#701) — the buildpack
+# runs pip in a working directory where editable installs land
+# ``.egg-info`` next to the source but DO NOT copy the package source
+# into ``site-packages``. The staged container then crashes at boot
+# with ``ModuleNotFoundError: No module named 'cf_knowledge_kiln'``.
+# Non-editable install copies the source properly and works.
+#
+# Extras:
 #
 #   * ``db`` — asyncpg, sqlalchemy, alembic, pgvector. Required by
 #     BOTH the api app (retrieval reads) AND the worker app
@@ -51,4 +64,4 @@
 # (cloudfoundry/python-buildpack tracking issue) this file should be
 # deleted in favor of a buildpack-detected pyproject.toml install.
 
--e .[db,ingestion,real-embeddings]
+.[db,ingestion,real-embeddings]
