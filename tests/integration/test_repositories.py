@@ -392,6 +392,42 @@ async def test_context_packs_crud(session: AsyncSession) -> None:
     assert await repo.get(a.id) is None
 
 
+async def test_context_packs_create_with_explicit_id_uses_it_as_pk(
+    session: AsyncSession,
+) -> None:
+    """#256: when ``id`` is passed, the row PK equals the wire-visible UUID.
+
+    Otherwise an operator who gets a complaint quoting
+    ``context_pack_id: abc...`` would have no DB key to look up.
+    """
+    import uuid
+
+    repo = ContextPacksRepository(session)
+    wire_id = uuid.uuid4()
+    row = await repo.create(
+        id=wire_id,
+        query="audit-trail-test",
+        task="diagnose",
+        token_budget=1000,
+    )
+    assert row.id == wire_id
+    # And round-trips via get():
+    fetched = await repo.get(wire_id)
+    assert fetched is not None
+    assert fetched.query == "audit-trail-test"
+
+
+async def test_context_packs_create_without_id_generates_one(
+    session: AsyncSession,
+) -> None:
+    """Backward-compat: omitting ``id`` keeps the pre-#256 behavior
+    (model's default UUID fires). Important so any existing caller that
+    doesn't pass id still works."""
+    repo = ContextPacksRepository(session)
+    row = await repo.create(query="q", task="t", token_budget=500)
+    assert row.id is not None  # model default fired
+
+
 # ─── ingestion_jobs mutations ───────────────────────────────────────
 
 
@@ -510,6 +546,26 @@ async def test_answers_crud_happy_path(session: AsyncSession) -> None:
     assert fetched.total_tokens == 130
     await repo.delete(row.id)
     assert await repo.get(row.id) is None
+
+
+async def test_answers_create_with_explicit_id_uses_it_as_pk(
+    session: AsyncSession,
+) -> None:
+    """#256: ``id`` kwarg sets the row PK so an operator can look up
+    the audit row by the response-visible ``answer_id``."""
+    repo = AnswersRepository(session)
+    wire_id = uuid4()
+    row = await repo.create(
+        id=wire_id,
+        query="audit-trail-q",
+        answerable=True,
+        requires_human_review=False,
+        requested_max_answer_tokens=1024,
+    )
+    assert row.id == wire_id
+    fetched = await repo.get(wire_id)
+    assert fetched is not None
+    assert fetched.query == "audit-trail-q"
 
 
 async def test_answers_crud_refusal_path(session: AsyncSession) -> None:

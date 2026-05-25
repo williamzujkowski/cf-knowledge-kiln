@@ -222,6 +222,10 @@ async def _log_context_pack(
     try:
         async with session.begin_nested():
             await ContextPacksRepository(session).create(
+                # #256: persist the response-visible UUID as the row PK
+                # so an operator looking up a complaint by
+                # ``context_pack_id`` finds the audit row.
+                id=pack.context_pack_id,
                 query=body.query,
                 task=body.task,
                 token_budget=pack.token_budget.requested,

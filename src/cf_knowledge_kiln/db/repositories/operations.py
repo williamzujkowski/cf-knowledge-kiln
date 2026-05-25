@@ -164,9 +164,23 @@ class ContextPacksRepository(BaseRepository):
         confidence: str | None = None,
         warnings: list[Any] | None = None,
         requires_human_review: bool = False,
+        id: UUID | None = None,
     ) -> ContextPack:
+        """Insert one ``context_packs`` row.
+
+        ``id`` (#256): when provided, the row's PK is set explicitly so it
+        matches the response-visible ``context_pack_id`` an agent caller
+        received. Without this, the audit row's PK is a fresh UUID
+        unrelated to the wire value — an operator who gets a complaint
+        quoting ``context_pack_id: abc...`` has no DB key to look it up.
+
+        When ``id`` is None the previous behavior holds: the model's
+        ``_pk()`` default fires and the row gets a fresh UUID. Tests
+        and pre-#256 callers continue to work.
+        """
         return await self._persist(
             ContextPack(
+                **({"id": id} if id is not None else {}),
                 query=query,
                 task=task,
                 token_budget=token_budget,
@@ -232,9 +246,18 @@ class AnswersRepository(BaseRepository):
         prompt_tokens: int | None = None,
         completion_tokens: int | None = None,
         total_tokens: int | None = None,
+        id: UUID | None = None,
     ) -> RagAnswer:
+        """Insert one ``rag_answers`` row.
+
+        ``id`` (#256): when provided, sets the row's PK explicitly so
+        it matches the response-visible ``answer_id``. See the
+        ContextPacksRepository.create docstring for the audit-gap
+        rationale this closes.
+        """
         return await self._persist(
             RagAnswer(
+                **({"id": id} if id is not None else {}),
                 query=query,
                 task=task,
                 filters=filters or {},
