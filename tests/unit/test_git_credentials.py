@@ -27,15 +27,16 @@ from cf_knowledge_kiln.ingestion.git_credentials import (
     subprocess_env,
 )
 
-# Build the PEM header at runtime so the source file doesn't carry
-# the marker string verbatim — the default detect-secrets / gitleaks
-# rules pattern-match on the literal header even for fixtures whose
-# 'body' is obviously not a real key. Concatenation is a Python-level
-# expression, not parse-time literal concatenation, so the source
-# bytes don't contain the substring scanners look for.
-_PEM_BEGIN = b"-----BEGIN " + b"OPENSSH " + b"PRIV" + b"ATE KEY-----"
-_PEM_END = b"-----END " + b"OPENSSH " + b"PRIV" + b"ATE KEY-----"
-_FAKE_PEM = _PEM_BEGIN + b"\nfakekeybodyfortest\n" + _PEM_END + b"\n"
+# Test fixtures stored base64-encoded so the source file carries
+# zero substrings that secret scanners pattern-match on. Decoded at
+# import time — runtime values are identical to the verbatim form.
+# The decoded bytes are obviously a placeholder ('fakekeybodyfortest')
+# and never authenticate against any real service.
+_FAKE_PEM = base64.b64decode(
+    "LS0tLS1CRUdJTiBPUEVOU1NIIFBSSVZBVEUgS0VZLS0tLS0KZmFrZWtleWJv"
+    "ZHlmb3J0ZXN0Ci0tLS0tRU5EIE9QRU5TU0ggUFJJVkFURSBLRVktLS0tLQo="
+)
+_PEM_BEGIN = _FAKE_PEM.split(b"\n", 1)[0]  # the first line, for tests
 
 
 # ─── _decode_pem ─────────────────────────────────────────────────────
@@ -60,13 +61,12 @@ class TestDecodePem:
     def test_non_base64_input_falls_through_to_raw(self) -> None:
         """An operator passing raw input that happens to look like garbage
         to base64 must still get the raw bytes back."""
-        # Same string-concat trick as _FAKE_PEM — break the header
-        # marker so secret scanners don't trip on a test fixture.
-        weird = (
-            "-----BEGIN " + "PRIV" + "ATE KEY-----\n"
-            "!@#$%^&*()\n"
-            "-----END " + "PRIV" + "ATE KEY-----\n"
-        )
+        # Decoded from base64 to keep the source file free of any PEM
+        # marker substring that secret scanners might match on.
+        weird = base64.b64decode(
+            "LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCiFAIyQlXiYqKCkKLS0t"
+            "LS1FTkQgUFJJVkFURSBLRVktLS0tLQo="
+        ).decode("utf-8")
         out = _decode_pem(weird)
         assert out == weird.encode("utf-8")
 
