@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
@@ -142,21 +143,45 @@ class TestAlembicIniPathResolution:
         assert out.exists()
         assert out.name == "alembic.ini"
 
-    def test_falls_back_to_cwd_relative_string_when_file_relative_missing(
-        self, monkeypatch: pytest.MonkeyPatch
+    def test_resolves_in_wheel_bundle_when_source_tree_missing(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Wheel-installed layout (#244): when the file-relative
-        ``alembic.ini`` doesn't exist (the kiln is installed
-        non-editably and ``__file__`` lives in site-packages), the
-        helper returns the literal string so Alembic resolves from
-        CWD."""
-        from pathlib import Path as _P
+        """Wheel-installed layout: the helper finds the bundled
+        ``_alembic/alembic.ini`` under the package directory.
 
+        Simulates the layout the ``force-include`` rule in
+        pyproject.toml produces:
+        ``site-packages/cf_knowledge_kiln/_alembic/alembic.ini``
+        bundled next to the package's source tree, with the package's
+        ``db/migrations.py`` resolving via ``__file__.parents[1]``.
+        """
         from cf_knowledge_kiln.db import migrations as mig
 
-        # Point the resolver at a directory we know has no alembic.ini.
-        fake_file = _P("/nonexistent/site-packages/cf_knowledge_kiln/db/migrations.py")
-        monkeypatch.setattr(mig, "__file__", str(fake_file))
+        pkg = tmp_path / "site-packages" / "cf_knowledge_kiln"
+        (pkg / "db").mkdir(parents=True)
+        (pkg / "_alembic").mkdir(parents=True)
+        bundled_ini = pkg / "_alembic" / "alembic.ini"
+        bundled_ini.write_text("[alembic]\n", encoding="utf-8")
+        fake_migrations = pkg / "db" / "migrations.py"
+        fake_migrations.write_text("", encoding="utf-8")
+        monkeypatch.setattr(mig, "__file__", str(fake_migrations))
+        out = mig._alembic_ini_path()
+        assert out == bundled_ini
+
+    def test_falls_back_to_cwd_relative_string_when_neither_layout_finds_it(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Last-resort: when neither source-tree (parents[3]) nor
+        wheel-bundle (parents[1]/_alembic) hits, return the literal
+        string so Alembic resolves from CWD. Preserves the CF
+        buildpack happy-accident path where the source tree at
+        /home/vcap/app carries the file even without bundling."""
+        from cf_knowledge_kiln.db import migrations as mig
+
+        fake = tmp_path / "isolated" / "cf_knowledge_kiln" / "db" / "migrations.py"
+        fake.parent.mkdir(parents=True)
+        fake.write_text("", encoding="utf-8")
+        monkeypatch.setattr(mig, "__file__", str(fake))
         out = mig._alembic_ini_path()
         assert out == "alembic.ini"
 

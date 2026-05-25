@@ -129,6 +129,27 @@ cf-knowledge-kiln = "cf_knowledge_kiln.api.cli:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/cf_knowledge_kiln"]
 
+# Bundle alembic migrations into the wheel (#244 follow-up).
+#
+# Without this, the wheel ships only the package source — no
+# alembic.ini, no migration scripts. The auto-migrate path
+# (``cf_knowledge_kiln.db.migrations.run_upgrade_head``) would then
+# only work when the caller's CWD happens to be a source tree with
+# ``alembic.ini`` at the root (the CF buildpack case — happy
+# accident, not a guarantee). A clean ``pip install
+# cf-knowledge-kiln`` into a Docker image with no source tree would
+# silently fall back to the CWD-relative path resolution, find no
+# ``alembic.ini``, and the auto-migrate would crash at first
+# startup.
+#
+# ``force-include`` maps repo-root paths to in-wheel paths. The
+# in-wheel layout mirrors the source tree (alembic.ini next to its
+# alembic/ directory) so alembic's own ``script_location = alembic``
+# relative-to-ini resolution works without alembic.ini changes.
+[tool.hatch.build.targets.wheel.force-include]
+"alembic" = "cf_knowledge_kiln/_alembic/alembic"
+"alembic.ini" = "cf_knowledge_kiln/_alembic/alembic.ini"
+
 # ─── ruff ────────────────────────────────────────────────────────────
 [tool.ruff]
 line-length = 100

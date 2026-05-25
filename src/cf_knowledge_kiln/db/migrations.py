@@ -53,33 +53,42 @@ _DB_URL_ENV = "KILN_DATABASE_URL"
 def _alembic_ini_path() -> Path | str:
     """Resolve ``alembic.ini`` across editable + wheel-installed layouts.
 
-    Two install shapes the kiln runs in:
+    Three install shapes the kiln runs in, checked in priority order:
 
     1. **Editable / source tree** (local dev, integration tests, a
        buildpack stage that hasn't copied to site-packages yet).
        ``__file__`` is ``src/cf_knowledge_kiln/db/migrations.py``, so
        ``parents[3]`` is the repo root and ``alembic.ini`` is right
-       there next to ``pyproject.toml``.
-    2. **Non-editable / wheel-installed** (Cloud Foundry's
-       ``pip install .`` from ``requirements.txt`` — see #238 for why
-       it's non-editable). ``__file__`` is
-       ``site-packages/cf_knowledge_kiln/db/migrations.py``, so
-       ``parents[3]`` is ``site-packages``'s parent (typically
-       ``python3.12/``) — no ``alembic.ini`` there. The CF buildpack
-       still has the SOURCE tree at ``/home/vcap/app`` (the CWD when
-       ``./scripts/start-api.sh`` execs), so the cwd-relative string
-       ``alembic.ini`` resolves correctly via Alembic's own search.
+       there next to ``pyproject.toml``. Returned as an absolute Path.
+    2. **Wheel-installed** (``pip install cf-knowledge-kiln`` in a
+       clean environment — e.g. a multi-stage Docker image). The
+       ``pyproject.toml``'s ``force-include`` rule bundles
+       ``alembic.ini`` + ``alembic/`` under
+       ``cf_knowledge_kiln/_alembic/`` inside the package. ``__file__``
+       is ``site-packages/cf_knowledge_kiln/db/migrations.py``, so
+       ``parents[1]`` is ``site-packages/cf_knowledge_kiln/`` and the
+       bundled ini sits at ``_alembic/alembic.ini``. Returned as an
+       absolute Path.
+    3. **CWD-relative fallback** (last resort). The literal string
+       ``"alembic.ini"`` lets Alembic resolve from CWD. Preserves
+       the CF buildpack happy-accident path where the source tree
+       at ``/home/vcap/app`` carries the file.
 
-    Try the file-relative path first. If it exists, use it (handles
-    both editable installs AND the test suite running from any CWD).
-    Otherwise fall back to the literal string ``"alembic.ini"``,
-    which Alembic resolves relative to CWD — the right answer in
-    CF's wheel-installed layout where the source tree at
-    ``/home/vcap/app`` still carries the file.
+    The relative-to-ini-file resolution of ``script_location`` in
+    ``alembic.ini`` means the in-wheel layout works without any
+    alembic.ini changes: ``script_location = alembic`` resolves to
+    ``_alembic/alembic`` when the ini is at ``_alembic/alembic.ini``.
     """
-    file_relative = Path(__file__).resolve().parents[3] / "alembic.ini"
+    here = Path(__file__).resolve()
+    # 1. Editable / source-tree case: walk three levels up to repo root.
+    file_relative = here.parents[3] / "alembic.ini"
     if file_relative.exists():
         return file_relative
+    # 2. Wheel-installed case: bundled under <pkg>/_alembic/alembic.ini.
+    in_wheel = here.parents[1] / "_alembic" / "alembic.ini"
+    if in_wheel.exists():
+        return in_wheel
+    # 3. Last resort: let Alembic resolve from CWD.
     return "alembic.ini"
 
 
