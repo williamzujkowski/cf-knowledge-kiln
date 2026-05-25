@@ -33,7 +33,9 @@ class TestRunUpgradeHeadSync:
         monkeypatch.setenv("KILN_DATABASE_URL", sentinel)
         with patch("cf_knowledge_kiln.db.migrations.command.upgrade") as up:
             up.return_value = None
-            run_upgrade_head_sync("postgresql+asyncpg://other@target/db")  # pragma: allowlist secret
+            run_upgrade_head_sync(
+                "postgresql+asyncpg://other@target/db"
+            )  # pragma: allowlist secret
         assert os.environ.get("KILN_DATABASE_URL") == sentinel
 
     def test_clears_database_url_env_var_if_originally_unset(
@@ -56,7 +58,9 @@ class TestRunUpgradeHeadSync:
             pytest.raises(RuntimeError, match="boom"),
         ):
             up.side_effect = RuntimeError("boom")
-            run_upgrade_head_sync("postgresql+asyncpg://other@target/db")  # pragma: allowlist secret
+            run_upgrade_head_sync(
+                "postgresql+asyncpg://other@target/db"
+            )  # pragma: allowlist secret
         # finally-block must still restore even on raise.
         assert os.environ.get("KILN_DATABASE_URL") == sentinel
 
@@ -87,9 +91,7 @@ class TestRunUpgradeHeadSync:
         ):
             run_upgrade_head_sync("postgresql+asyncpg://t/d")  # pragma: allowlist secret
 
-    def test_passes_database_url_to_alembic_env(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_passes_database_url_to_alembic_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """During the upgrade call, KILN_DATABASE_URL must be set to
         the argument so alembic/env.py picks up the right DSN."""
         observed: dict[str, str] = {}

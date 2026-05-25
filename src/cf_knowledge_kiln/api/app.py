@@ -119,9 +119,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # Migration failure crashes the lifespan — that's intentional;
         # running against an unmigrated DB is worse than not running.
         if settings.auto_migrate_on_startup:
-            logger.info(
-                "auto-migrate enabled; running alembic upgrade head before opening pool"
-            )
+            logger.info("auto-migrate enabled; running alembic upgrade head before opening pool")
             await run_upgrade_head(url)
         db = Database(
             url,
