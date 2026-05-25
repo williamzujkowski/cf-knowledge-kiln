@@ -64,9 +64,7 @@ def test_logs_warning_once_per_path_on_substitution(
     assert "falling back" in warnings[0].message
 
 
-def test_logs_warning_per_distinct_path(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_logs_warning_per_distinct_path(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     """Different missing files each get their own one-time warning."""
     a_configured = tmp_path / "models.yaml"
     a_example = tmp_path / "models.example.yaml"
