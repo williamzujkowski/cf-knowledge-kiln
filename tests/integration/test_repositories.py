@@ -61,6 +61,44 @@ async def test_data_sources_crud(session: AsyncSession) -> None:
     assert await repo.get(created.id) is None
 
 
+async def test_data_sources_get_or_create_inserts_when_missing(
+    session: AsyncSession,
+) -> None:
+    """#239: first call inserts the row + returns it populated."""
+    repo = DataSourcesRepository(session)
+    row = await repo.get_or_create(
+        name="brand-new", type="git", location="https://example.invalid/r.git"
+    )
+    assert row.name == "brand-new"
+    assert row.type == "git"
+    assert row.id is not None
+    assert row.created_at is not None
+    # Round-trip via list() to confirm the row actually landed.
+    rows = await repo.list()
+    assert any(r.name == "brand-new" for r in rows)
+
+
+async def test_data_sources_get_or_create_returns_existing_on_conflict(
+    session: AsyncSession,
+) -> None:
+    """#239: same name → returns the existing row, no new insert.
+
+    The UPSERT must surface the original row id (not generate a new
+    one) so the caller's downstream FK references stay consistent.
+    """
+    repo = DataSourcesRepository(session)
+    first = await repo.get_or_create(
+        name="dup-name", type="git", location="https://example.invalid/first.git"
+    )
+    second = await repo.get_or_create(
+        name="dup-name", type="git", location="https://example.invalid/second.git"
+    )
+    assert first.id == second.id
+    # Existing-row fields are NOT overwritten — leaves operator-set
+    # location/type alone (documented behavior).
+    assert second.location == "https://example.invalid/first.git"
+
+
 # ─── model_registry ─────────────────────────────────────────────────
 
 
