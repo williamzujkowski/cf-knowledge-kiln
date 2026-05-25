@@ -242,20 +242,25 @@ models:
     def test_shipped_example_config_loads(self) -> None:
         """The shipped ``config/models.example.yaml`` must parse cleanly.
 
-        The example file is what operators copy; a broken example
-        config (bare model name, missing trust_remote_code) ships a
-        config that cannot load the model it names. This is the
-        regression guard for that.
+        The example file is what operators copy AND what the kiln
+        falls back to when ``config/models.yaml`` doesn't exist
+        (#241). Two regressions this guards:
+
+        * **It must load** — a bare name, a typo, or a missing
+          required field would ship a config that can't construct a
+          provider.
+        * **It must use the mock provider out of the box** (#241)
+          so a fresh CF deploy boots cleanly without weights or
+          network. Operators uncomment one of the real-provider
+          blocks for production.
         """
         example = Path(__file__).resolve().parents[2] / "config" / "models.example.yaml"
         assert example.exists(), f"missing fixture: {example}"
         config = load_embedding_config(example)
-        assert config.provider == "local"
-        # Full HuggingFace org/model id — a bare name will not resolve.
-        assert config.name == "nomic-ai/nomic-embed-text-v1.5"
-        assert config.dimensions == 768
-        # Nomic needs custom modeling code; the example must opt in.
-        assert config.trust_remote_code is True
+        assert config.provider == "mock"
+        assert config.dimensions == 384
+        # Mock provider doesn't need trust_remote_code; default False.
+        assert config.trust_remote_code is False
 
     def test_dimensions_must_be_positive(self, tmp_path: Path) -> None:
         path = _write(
