@@ -157,7 +157,13 @@ class _BearerAuthMiddleware:
             await self._app(scope, receive, send)
             return
         if not _authorized(request, self._expected):
-            response = _unauthorized()
+            # #258: thread the request_id (set by the request_id
+            # middleware running upstream of this auth wrapper) into
+            # the structured envelope so an operator can correlate
+            # the 401 with the per-request log line.
+            from cf_knowledge_kiln.api.request_id import request_id_for
+
+            response = _unauthorized(request_id_for(request))
             await response(scope, receive, send)
             return
         await self._app(scope, receive, send)
@@ -179,11 +185,27 @@ def _authorized(request: Request, expected_token: str) -> bool:
     return compare_digest(value.encode("utf-8"), expected_token.encode("utf-8"))
 
 
-def _unauthorized() -> Response:
+def _unauthorized(request_id: str | None = None) -> Response:
+    # #258: structured envelope. The auth middleware runs BEFORE the
+    # global exception handler can intercept anything, so we build the
+    # envelope inline rather than raising HTTPException. WWW-Authenticate
+    # stays as the RFC-required hint for HTTP clients.
+    from cf_knowledge_kiln.api.errors import ErrorResponse
+    from cf_knowledge_kiln.api.request_id import HEADER as REQUEST_ID_HEADER
+
+    envelope = ErrorResponse(
+        error_code="auth_required",
+        message="Authentication required.",
+        retry_safe=False,
+        request_id=request_id,
+    )
+    headers = {"WWW-Authenticate": 'Bearer realm="kiln"'}
+    if request_id is not None:
+        headers[REQUEST_ID_HEADER] = request_id
     return JSONResponse(
-        {"detail": "Authentication required."},
+        envelope.model_dump(exclude_none=False),
         status_code=401,
-        headers={"WWW-Authenticate": 'Bearer realm="kiln"'},
+        headers=headers,
     )
 
 

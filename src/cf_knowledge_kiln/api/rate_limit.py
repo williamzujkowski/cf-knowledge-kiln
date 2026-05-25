@@ -31,7 +31,7 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from threading import Lock
 
-from fastapi import HTTPException, Request, status
+from fastapi import Request, status
 
 # Cap the per-key bucket dict so a spray of distinct keys (e.g. random
 # X-Forwarded-For values) can't grow it without bound. 50k entries is
@@ -171,9 +171,17 @@ def raise_429_if_limited(
     key = client_ip(request, trust_xff=trust_xff)
     if not limiter.hit(key):
         retry = limiter.retry_after(key)
-        raise HTTPException(
+        # #258: raise via the error_handler shorthand so the envelope
+        # carries error_code='rate_limited' + retry_safe=true + the
+        # numeric retry_after. The Retry-After header is still set on
+        # the response so HTTP-aware clients (curl, browsers) see it.
+        from cf_knowledge_kiln.api.error_handlers import raise_with_code
+
+        raise_with_code(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Rate limit exceeded.",
+            error_code="rate_limited",
+            message="Rate limit exceeded.",
+            retry_after_seconds=retry,
             headers={"Retry-After": str(retry)},
         )
 
