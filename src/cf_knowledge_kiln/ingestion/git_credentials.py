@@ -109,30 +109,49 @@ class GitCredentials:
         return self.token is not None or self.ssh_key_pem is not None
 
 
+class InvalidPemError(ValueError):
+    """Raised when the supplied key isn't a recognizable PEM.
+
+    SSH private keys on disk always carry a ``-----BEGIN ... PRIVATE
+    KEY-----`` header (RSA, DSA, EC, ED25519, or OpenSSH). A value
+    that doesn't end up with that header in either its raw OR
+    base64-decoded form is operator error — refusing loudly here is
+    better than silently writing the wrong bytes to ``~/.ssh/id_rsa``
+    and getting an opaque ``Load key: invalid format`` from OpenSSH
+    later.
+    """
+
+
 def _decode_pem(value: str) -> bytes:
     """Accept raw PEM or base64-encoded PEM; auto-detect on shape.
 
     The detection rule: try base64 decoding; if the result starts with
-    ``-----BEGIN`` it's a base64-encoded PEM. Otherwise treat the input
-    as raw PEM bytes. Catches the common case where the operator
-    pipes ``base64 -w 0 key.pem | xargs cf set-env`` AND the case where
-    they paste the multi-line PEM directly.
+    ``-----BEGIN`` it's a base64-encoded PEM. Otherwise the raw input
+    must itself start with ``-----BEGIN``. If neither form looks like
+    a PEM, raise :class:`InvalidPemError` — silently writing the
+    operator's mis-formatted input to disk produces opaque OpenSSH
+    failures later (the reviewer on PR #254 caught this).
 
     Always returns bytes ending with a newline — OpenSSH refuses keys
     without the trailing newline and the error message is opaque.
     """
     candidate = value.strip()
+    decoded: bytes | None = None
     try:
         decoded = base64.b64decode(candidate, validate=True)
     except (ValueError, binascii.Error):
-        # Not valid base64 at all — fall through to raw-PEM treatment.
-        return _ensure_trailing_newline(value.encode("utf-8"))
-    if decoded.startswith(b"-----BEGIN"):
+        decoded = None
+    if decoded is not None and decoded.startswith(b"-----BEGIN"):
         return _ensure_trailing_newline(decoded)
-    # base64 decoded fine but the result isn't a PEM — operator passed
-    # a non-base64 value that coincidentally validated. Trust the raw
-    # input instead of the meaningless decoded bytes.
-    return _ensure_trailing_newline(value.encode("utf-8"))
+    raw = value.encode("utf-8")
+    if raw.lstrip().startswith(b"-----BEGIN"):
+        return _ensure_trailing_newline(raw)
+    raise InvalidPemError(
+        "git_ssh_private_key does not look like a PEM private key — expected "
+        "a value beginning with '-----BEGIN ... PRIVATE KEY-----' either "
+        "verbatim or base64-encoded. Got "
+        f"{len(value)} chars; first 16 chars repr={value[:16]!r}"
+    )
 
 
 def _ensure_trailing_newline(b: bytes) -> bytes:
@@ -336,6 +355,7 @@ def _file_mode_ok(path: Path, expected: int) -> bool:
 
 __all__ = [
     "GitCredentials",
+    "InvalidPemError",
     "install_at_startup",
     "redact_credentials",
     "should_inject_oauth_userinfo",

@@ -58,12 +58,35 @@ class TestDecodePem:
         out = _decode_pem(weird)
         assert out == weird.encode("utf-8")
 
-    def test_base64_decodes_but_not_pem_treated_as_raw(self) -> None:
-        """A short string that coincidentally is valid base64 but the
-        decoded bytes aren't a PEM — trust the original input."""
+    def test_base64_decodes_but_not_pem_and_raw_not_pem_raises(self) -> None:
+        """PR #254 review catch: a short string that's valid base64 but
+        whose decoded bytes aren't a PEM AND whose raw form isn't a
+        PEM either must raise InvalidPemError, NOT silently get
+        written to disk."""
+        from cf_knowledge_kiln.ingestion.git_credentials import InvalidPemError
+
         # "Zm9v" is base64 for "foo" — valid base64 but not a PEM.
-        out = _decode_pem("Zm9v")
-        assert out == b"Zm9v\n"
+        # Raw "Zm9v" doesn't start with "-----BEGIN" either.
+        with pytest.raises(InvalidPemError, match="PEM private key"):
+            _decode_pem("Zm9v")
+
+    def test_garbage_input_raises(self) -> None:
+        """Any value that isn't a PEM in either form raises loudly so
+        the operator catches the mis-formatted key at deploy time, not
+        when 'Load key: invalid format' surfaces in worker logs."""
+        from cf_knowledge_kiln.ingestion.git_credentials import InvalidPemError
+
+        with pytest.raises(InvalidPemError, match="PEM private key"):
+            _decode_pem("not a pem at all")
+
+    def test_raw_pem_with_leading_whitespace_still_accepted(self) -> None:
+        """Some shells add a leading space when passing multi-line
+        values; tolerate it as long as the rest is a PEM."""
+        padded = "   " + _FAKE_PEM.decode("utf-8")
+        out = _decode_pem(padded)
+        # lstrip-aware: the body is the original PEM (we don't strip
+        # internal whitespace, just the leading-PEM marker check).
+        assert b"-----BEGIN OPENSSH PRIVATE KEY-----" in out
 
 
 # ─── GitCredentials.from_settings ─────────────────────────────────────
