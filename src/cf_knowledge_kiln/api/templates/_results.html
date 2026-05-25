@@ -131,8 +131,20 @@
                 </time>
               {% endif %}
             </span>
-            <span class="score" title="Hybrid retrieval score (higher is more relevant)">
+            {# #259 score visualization. A 5-dot scale alongside the
+               numeric so users scanning 20 results can assess relevance
+               at a glance. Thresholds are encoded in api.views.score_tier
+               and threaded through as r.score_tier so the template stays
+               policy-free. data-score on the wrapper is a hook for
+               power-user instrumentation (e.g. recording scores into
+               a feedback comment). #}
+            <span class="score score-tier-{{ r.score_tier }}"
+                  title="Hybrid retrieval score (0.0–1.0; higher is more relevant). {{ r.score_tier }} of 5."
+                  data-score="{{ '%.3f' % r.score }}">
               <span class="score-label">score</span>
+              <span class="score-dots" aria-hidden="true">
+                {% for i in range(1, 6) %}<span class="score-dot{% if i <= r.score_tier %} score-dot-on{% endif %}"></span>{% endfor %}
+              </span>
               <span class="score-value">{{ '%.3f' % r.score }}</span>
             </span>
           </footer>

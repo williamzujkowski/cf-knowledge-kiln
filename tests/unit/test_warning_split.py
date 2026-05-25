@@ -16,6 +16,7 @@ import pytest
 
 from cf_knowledge_kiln.api.views import (
     humanize_warning,
+    score_tier,
     split_warnings,
     warning_severity,
 )
@@ -76,6 +77,43 @@ class TestWarningSeverity:
         what 'do no harm' looks like for an additive emitter change.
         """
         assert warning_severity("future_warning_xyz") == "advisory"
+
+
+class TestScoreTier:
+    """#259: 5-dot visual scale mapped from the fused-RRF normalized score.
+
+    The threshold ladder is policy: an operator tuning the
+    weak_evidence floor would also revisit these tiers. Pinning the
+    mapping in tests catches accidental refactors that drop a tier
+    or invert the ordering.
+    """
+
+    @pytest.mark.parametrize(
+        ("score", "expected_tier"),
+        [
+            (1.0, 5),
+            (0.977, 5),
+            (0.85, 5),  # exact boundary
+            (0.849, 4),
+            (0.7, 4),
+            (0.65, 4),  # exact boundary
+            (0.649, 3),
+            (0.55, 3),
+            (0.5, 3),  # exact boundary — single-arm rank-1 plateau
+            (0.499, 2),
+            (0.47, 2),
+            (0.46, 2),  # exact boundary — default weak_evidence floor
+            (0.459, 1),
+            (0.0, 1),
+        ],
+    )
+    def test_boundaries_map_correctly(self, score: float, expected_tier: int) -> None:
+        assert score_tier(score) == expected_tier
+
+    def test_returns_int_for_jinja(self) -> None:
+        """Template uses {% for i in range(1, 6) if i <= r.score_tier %} —
+        must be an int, not a float, so the comparison is type-aligned."""
+        assert isinstance(score_tier(0.7), int)
 
 
 class TestSplitWarnings:

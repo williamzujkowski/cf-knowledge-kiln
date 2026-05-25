@@ -1090,6 +1090,53 @@ a.source-link:focus-visible {
   font-variant-numeric: lining-nums tabular-nums;
 }
 
+/* #259 5-dot relevance scale. The dots sit between the label and the
+   numeric so the editorial reading order is "score · ●●●●○ · 0.852"
+   — visual anchor, scale, precise value. Tier color comes from the
+   parent .score-tier-N class so an upgrade path (different palette,
+   different dot count) doesn't fan out per-dot rules. */
+
+.score-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.18rem;
+  /* Constrain so the dot row aligns with the JetBrains Mono baseline.
+     0.5rem matches the visual weight of the small caps label. */
+  height: 0.5rem;
+}
+
+.score-dot {
+  display: inline-block;
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 50%;
+  /* Off state: faded ring, no fill. Reads as "out of N" at-a-glance. */
+  border: 1px solid var(--ink-faded);
+  background: transparent;
+}
+
+.score-dot-on {
+  /* On state: filled with the tier color (set by the .score-tier-N
+     parent). currentColor lets the per-tier class drive both the
+     numeric label hue and the filled-dot hue together. */
+  background: currentColor;
+  border-color: currentColor;
+}
+
+/* Per-tier color tuning. Editorial palette:
+   - Tier 5 (≥ 0.85): teal — confident hit, both arms rank-1
+   - Tier 4 (≥ 0.65): teal-faded — strong but not perfect
+   - Tier 3 (≥ 0.50): ink — single-arm rank-1 (the plateau)
+   - Tier 2 (≥ 0.46): gold — at the weak-evidence threshold; survives
+                       but flagged
+   - Tier 1 (<  0.46): oxblood — below configured threshold; only
+                       visible if operator tuned it down */
+.score-tier-5 { color: var(--teal); }
+.score-tier-4 { color: var(--teal); opacity: 0.85; }
+.score-tier-3 { color: var(--ink-soft); }
+.score-tier-2 { color: var(--gold); }
+.score-tier-1 { color: var(--oxblood); }
+
 /* ─── Warnings ─────────────────────────────────────────────────── */
 
 .warnings {

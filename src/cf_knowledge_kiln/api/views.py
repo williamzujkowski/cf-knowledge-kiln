@@ -112,6 +112,39 @@ def warning_severity(wtype: str) -> str:
     return _WARNING_SEVERITY.get(wtype, "advisory")
 
 
+# Score-tier thresholds for the 5-dot visual scale (#259). Reflect the
+# normalized fused-RRF scale (#164):
+#   * both-arm rank-1 hit → 1.0   (tier 5)
+#   * strong cross-arm hit → ~0.7 (tier 4)
+#   * single-arm rank-1 hit → 0.5 (tier 3)
+#   * at the default weak_evidence floor → 0.46 (tier 2)
+#   * below the configured weak_evidence floor → tier 1 (only visible
+#     when an operator tuned the floor down)
+#
+# Ordered low-to-high so the lookup walks bottom-up: any score
+# below the lowest threshold falls to tier 1.
+_SCORE_TIERS: tuple[tuple[float, int], ...] = (
+    (0.85, 5),
+    (0.65, 4),
+    (0.50, 3),
+    (0.46, 2),
+)
+
+
+def score_tier(score: float) -> int:
+    """Map a fused-RRF score to a 1-5 visual tier (#259).
+
+    Tier 5 = both-arm rank-1 quality; tier 1 = below the
+    weak_evidence floor. Tier values drive a per-tier color +
+    filled-dot count in the result-card score widget. See
+    ``_SCORE_TIERS`` for the threshold table.
+    """
+    for threshold, tier in _SCORE_TIERS:
+        if score >= threshold:
+            return tier
+    return 1
+
+
 def split_warnings(
     warnings: list[dict[str, Any]],
     result_document_ids: set[str],
@@ -169,6 +202,7 @@ async def log_human_query(
 __all__ = [
     "humanize_warning",
     "log_human_query",
+    "score_tier",
     "split_warnings",
     "warning_severity",
 ]
