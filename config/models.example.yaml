@@ -13,39 +13,64 @@
 #
 # MVP scope (ADR-0002, reaffirmed by ADR-0008): hybrid retrieval over
 # Postgres + pgvector. The embedding model below is MVP-active.
+#
+# OUT-OF-THE-BOX BEHAVIOR (#241):
+#
+# The shipped active provider is ``mock`` so a fresh checkout / first
+# CF deploy boots cleanly and the API survives /healthz + /readyz
+# without requiring any local model weights or external API. Mock
+# vectors are deterministic-but-not-meaningful — they let the kiln
+# come up + serve, but retrieval quality is zero. **Operators MUST
+# replace this with a real provider for production.** The two real
+# options are shown below as commented blocks; uncomment one and
+# delete the mock block to swap.
 
 models:
   embedding:
-    provider: local                       # local | local-sentence-transformers | openai-compatible | mock
-    name: nomic-ai/nomic-embed-text-v1.5   # full HuggingFace org/model id — bare names won't resolve
-    dimensions: 768
+    provider: mock
+    name: mock-embedding
+    dimensions: 384
     enabled: true
-    trust_remote_code: true                # Nomic ships custom modeling code (nomic-bert-2048);
-                                           # transformers >= 4.51 refuses to load it without this.
-                                           # Defaults to false — opt in ONLY for models that need it,
-                                           # since it executes code downloaded from the model hub.
     notes: |
-      Apache 2.0 license. US-origin. Subject to provenance/license
-      review per ADR-0005.
+      Out-of-the-box default (#241). Lets the API + worker start
+      without weights or network. Replace with one of the commented
+      providers below for real retrieval quality.
 
-  # Alternate: explicit `local-sentence-transformers` provider name.
-  # Identical behavior to `local`; the descriptive name is preferred
-  # for new configs. Any sentence-transformers-compatible HuggingFace
-  # model works — swap `name` to change backends, declare the model's
-  # actual output `dimensions`, and (optionally) tune `batch_size` /
-  # `device`. Weights cache to ~/.cache/huggingface/ on first use.
+  # ── Real provider option A: Nomic Embed v1.5 (local-sentence-transformers) ──
+  #
+  # 768-dim, US-origin, Apache 2.0. Heaviest of the options (~500 MB
+  # weights + the torch+cpu runtime). Requires:
+  #   pip install -e '.[real-embeddings]' einops
+  # einops is the documented Nomic dep (#231). Without it the loader
+  # raises a clear ImportError at construction.
   #
   # embedding:
   #   provider: local-sentence-transformers
-  #   name: nomic-ai/nomic-embed-text-v1.5   # default; Snowflake/snowflake-arctic-embed-m is an alternative
-  #   dimensions: 768                         # arctic-embed-m is also 768
+  #   name: nomic-ai/nomic-embed-text-v1.5
+  #   dimensions: 768
   #   batch_size: 32
   #   device: cpu                             # cpu | cuda | mps; precedence: yaml > KILN_EMBEDDING_DEVICE env > cpu
-  #   trust_remote_code: true                 # required for Nomic; OMIT (false) for arctic-embed-m
+  #   trust_remote_code: true                 # Nomic ships custom modeling code (nomic-bert-2048)
   #   enabled: true
   #   notes: |
-  #     Generic wrapper. Requires the `real-embeddings` extra:
-  #       pip install -e '.[real-embeddings]'
+  #     Apache 2.0 license. US-origin. Subject to provenance/license
+  #     review per ADR-0005.
+
+  # ── Real provider option B: intfloat/e5-small-v2 (local-sentence-transformers) ──
+  #
+  # 384-dim, US-origin, MIT. Smallest local option (~134 MB weights).
+  # No custom modeling code (no einops). Same `[real-embeddings]`
+  # extra. The #222 calibration eval found e5-small-v2 keeps pace
+  # with Nomic v1.5 on the homelab corpus at much lower memory.
+  #
+  # embedding:
+  #   provider: local-sentence-transformers
+  #   name: intfloat/e5-small-v2
+  #   dimensions: 384
+  #   batch_size: 32
+  #   device: cpu
+  #   trust_remote_code: false
+  #   enabled: true
 
   generator:
     provider: openai-compatible           # local | openai-compatible
