@@ -28,8 +28,15 @@
 
 applications:
   - name: cf-knowledge-kiln-api
+    # disk_quota 2G (#242): the buildpack stages sentence-transformers
+    # + torch+cpu + the kiln package (~1.3 GB installed). The droplet
+    # copy-in step into the runtime cell fails on libtorch_cpu.so
+    # extraction at 1G — needs ≥ 1.5G. 2G is the CF foundation default
+    # hard cap (cf-deployment's default_app_disk_in_mb); pin at the cap
+    # to leave room for the package + a bit of operator debug/logging.
+    # Foundations with a higher cap can bump further.
     memory: 1G
-    disk_quota: 1G
+    disk_quota: 2G
     instances: 1
     buildpacks:
       - python_buildpack
@@ -57,7 +64,14 @@ applications:
       - cf-knowledge-kiln-db
 
   - name: cf-knowledge-kiln-worker
-    memory: 1G
+    # memory 2G (#242): the worker loads the embedding model
+    # (~134 MB e5 / ~500 MB Nomic), plus the torch+cpu runtime
+    # (~500 MB resident), plus batch activations, plus Python.
+    # At the previous default of KILN_INGEST_CONCURRENCY=4 the peak
+    # hit 1.0-1.4 GB and the 1G cgroup fired with exit 137 on the
+    # first batch. 2G clears the embed pass with headroom for a
+    # future swap to a larger embedder.
+    memory: 2G
     disk_quota: 2G
     instances: 1
     buildpacks:
@@ -68,7 +82,12 @@ applications:
     env:
       KILN_ENV: production
       KILN_LOG_LEVEL: INFO
-      KILN_INGEST_CONCURRENCY: "4"
+      # concurrency 1 (#242): CPU-bound batches don't benefit from
+      # concurrency — bandwidth isn't the bottleneck, the model
+      # inference is. Higher concurrency just multiplies peak RAM
+      # under the 2G cap. Bump back to 4 for high-throughput corpora
+      # deployed with more memory.
+      KILN_INGEST_CONCURRENCY: "1"
       PYTHONUNBUFFERED: "1"
     services:
       - cf-knowledge-kiln-db

@@ -64,4 +64,19 @@
 # (cloudfoundry/python-buildpack tracking issue) this file should be
 # deleted in favor of a buildpack-detected pyproject.toml install.
 
+# CPU-only torch index (#242). PyPI's default ``torch`` wheel is the
+# CUDA build (~2.7 GB of NVIDIA libs); the CF buildpack staging
+# container can't fit it and fails with ``OSError: [Errno 28] No
+# space left on device`` while extracting ``nvidia_cufft``. Adding
+# this extra index lets pip resolve ``torch`` (and the rest of the
+# real-embeddings extra) to the ~200 MB CPU-only wheels published by
+# PyTorch at download.pytorch.org/whl/cpu — sufficient for the
+# local-sentence-transformers provider's e5/Nomic models, which never
+# touch CUDA on CF cells (no GPU).
+#
+# Local-dev users with GPUs install via ``pip install -e .[real-embeddings]``
+# directly against pyproject.toml — they do NOT go through this file,
+# so this index doesn't affect their CUDA install.
+--extra-index-url https://download.pytorch.org/whl/cpu
+
 .[db,ingestion,real-embeddings]

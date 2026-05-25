@@ -92,6 +92,22 @@ This deploys two apps:
 Both apps are bound to `cf-knowledge-kiln-db` per the manifest. They
 read connection info from `VCAP_SERVICES` at startup (Phase 2+).
 
+### Sizing notes (#242)
+
+The shipped manifest sizes are tuned for the `local-sentence-transformers`
+provider on a typical CF cell with no GPU. Three things drive the
+numbers:
+
+| App | Setting | Why |
+| --- | --- | --- |
+| api | `disk_quota: 2G` | The droplet stages sentence-transformers + torch+cpu + the kiln package (~1.3 GB installed). 1G fails on `libtorch_cpu.so` extraction during the copy-in step. |
+| worker | `memory: 2G` | At peak the worker holds the embedding model (~134 MB e5 / ~500 MB Nomic) + torch+cpu runtime (~500 MB resident) + batch activations. At the previous 1G the cgroup fired with exit 137 on the first batch. |
+| worker | `disk_quota: 2G` | Same staging reason as the api. |
+| worker | `KILN_INGEST_CONCURRENCY: 1` | Higher concurrency just multiplies peak RAM under the 2G cap. Raise for high-throughput corpora deployed with more memory. |
+| both | `--extra-index-url` for CPU torch | `requirements.txt` adds the PyTorch CPU index so pip resolves `torch+cpu` (~200 MB) instead of the default CUDA build (~2.7 GB of NVIDIA libs that won't fit the staging container). Local-dev installs via `pip install -e .[real-embeddings]` go through pyproject.toml and are unaffected. |
+
+A foundation with a `default_app_disk_in_mb` lower than 2048 will refuse this manifest — escalation in that case is to bump the foundation default. Tracked in homelab-iac#700 for the homelab CF foundation.
+
 ## Environment variables
 
 Set sensitive values via `cf set-env`, never in the manifest:
