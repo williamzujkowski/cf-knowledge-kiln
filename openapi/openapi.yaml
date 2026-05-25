@@ -207,6 +207,64 @@ paths:
 
 components:
   schemas:
+    ErrorResponse:
+      # #258: every non-2xx response carries this shape. Agents
+      # switch on `error_code`; `request_id` matches the
+      # `X-Request-ID` response header so operators can correlate
+      # complaints to log lines + telemetry rows (see #260).
+      type: object
+      required: [error_code, message, retry_safe]
+      properties:
+        error_code:
+          type: string
+          description: |
+            Closed-set machine-readable code. Stable across releases
+            within /v1/.
+          enum:
+            # Client errors (4xx)
+            - auth_required
+            - invalid_request
+            - query_too_long
+            - invalid_filter_value
+            - token_budget_too_low
+            - rate_limited
+            # Server errors (5xx)
+            - db_unreachable
+            - embedding_unavailable
+            - generator_unavailable
+            - internal_error
+        message:
+          type: string
+          description: Human-readable explanation. Not stable; do not parse.
+        retry_safe:
+          type: boolean
+          description: |
+            true when retrying the same request might succeed
+            (rate limit cleared, transient upstream came back). false
+            when the operator must intervene (auth, malformed request,
+            generator-not-configured).
+        retry_after_seconds:
+          type: integer
+          nullable: true
+          description: |
+            Concrete delay when known. Mirrors the Retry-After response
+            header for HTTP-aware clients. null when retry_safe is true
+            but we don't have a specific delay.
+        request_id:
+          type: string
+          nullable: true
+          description: |
+            Matches the X-Request-ID response header. Quote this in
+            user complaints so an operator can correlate to log lines
+            + telemetry rows (#260).
+        detail:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: |
+            Free-form context. Shape depends on error_code; for
+            invalid_request from Pydantic validation, carries
+            {"errors": [...]} with per-field validation errors.
     HealthResponse:
       type: object
       required: [status, service]

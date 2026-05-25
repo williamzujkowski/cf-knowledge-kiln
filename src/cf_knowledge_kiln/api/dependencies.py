@@ -35,9 +35,14 @@ def get_db(request: Request) -> Database:
     """Return the live :class:`Database` from app.state or 503."""
     db = getattr(request.app.state, "db", None)
     if db is None:
-        raise HTTPException(
+        from cf_knowledge_kiln.api.error_handlers import raise_with_code
+
+        raise_with_code(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Database not configured; bind a Postgres service or set KILN_DATABASE_URL.",
+            error_code="db_unreachable",
+            message=("Database not configured; bind a Postgres service or set KILN_DATABASE_URL."),
+            retry_after_seconds=30,
+            headers={"Retry-After": "30"},
         )
     assert isinstance(db, Database)
     return db
@@ -82,9 +87,15 @@ def get_generator_provider(request: Request) -> GeneratorProvider:
     """
     provider = getattr(request.app.state, "generator_provider", None)
     if provider is None:
-        raise HTTPException(
+        from cf_knowledge_kiln.api.error_handlers import raise_with_code
+
+        # Operator-action-required failure: NOT retry_safe (the agent
+        # retrying won't help; the operator has to enable the
+        # generator). No Retry-After.
+        raise_with_code(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=(
+            error_code="generator_unavailable",
+            message=(
                 "Generator not configured. Enable models.generator in "
                 "config/models.yaml and set KILN_GENERATOR_BASE_URL + "
                 "KILN_GENERATOR_API_KEY to bring up /v1/answer."

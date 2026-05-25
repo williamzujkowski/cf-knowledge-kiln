@@ -32,6 +32,7 @@ from cf_knowledge_kiln import __version__
 from cf_knowledge_kiln.api.answer import router as answer_router
 from cf_knowledge_kiln.api.auth import configure_auth
 from cf_knowledge_kiln.api.csp import install_csp_middleware
+from cf_knowledge_kiln.api.error_handlers import install_error_handlers
 from cf_knowledge_kiln.api.health import router as health_router
 from cf_knowledge_kiln.api.observability import configure_observability
 from cf_knowledge_kiln.api.preview import router as preview_router
@@ -202,6 +203,13 @@ def create_app() -> FastAPI:
     # generates a fresh UUID4; the value is echoed on every response
     # so callers can correlate the line in their own logs.
     install_request_id_middleware(app)
+    # #258: global exception handlers that produce ErrorResponse
+    # envelopes. Installed after middleware so request_id_for() can
+    # read the value the request-id middleware stamped. Handles
+    # HTTPException, RequestValidationError, and the generic
+    # Exception catch-all so every non-2xx response carries the same
+    # machine-readable shape.
+    install_error_handlers(app)
     # #178: per-request observability. Installed last so it is the
     # outermost middleware — the logged duration covers the whole
     # request, including auth + CSP. Includes request_id from above.

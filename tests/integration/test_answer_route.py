@@ -157,13 +157,20 @@ def client_with_mock_generator(database_url: str, tmp_path: Path) -> Iterator[Te
 
 
 def test_answer_503_when_no_generator(client_no_generator: TestClient) -> None:
-    """MVP default: /v1/answer returns 503 with a clear "no generator" hint."""
+    """MVP default: /v1/answer returns 503 with a clear "no generator" hint.
+
+    Post-#258: the response is the ErrorResponse envelope, not FastAPI's
+    prose-detail shape. Operator-action-required failure → not retry_safe,
+    no Retry-After.
+    """
     response = client_no_generator.post("/v1/answer", json={"query": "anything", "max_chunks": 3})
     assert response.status_code == 503, response.text
     body = response.json()
-    # FastAPI default error envelope.
-    assert "generator" in body["detail"].lower()
-    assert "KILN_GENERATOR" in body["detail"]
+    assert body["error_code"] == "generator_unavailable"
+    assert "generator" in body["message"].lower()
+    assert "KILN_GENERATOR" in body["message"]
+    assert body["retry_safe"] is False
+    assert body["retry_after_seconds"] is None
 
 
 # ─── Happy path ──────────────────────────────────────────────────────
