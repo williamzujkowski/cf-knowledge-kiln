@@ -81,6 +81,20 @@ class Settings(BaseSettings):
     # OMP_NUM_THREADS=2.
     ingest_embed_batch_size: int = 32
     ingest_embed_concurrency: int = 4
+    # #253: private-repo ingestion. All four default to off / safe —
+    # public-repo deployments don't set anything. See
+    # docs/deployment-cloud-foundry.md#private-git-sources.
+    #   git_token: GitHub PAT injected via GIT_ASKPASS at clone time.
+    #     Scoped to github.com URLs only.
+    #   git_ssh_private_key: raw PEM or base64-encoded PEM. Worker
+    #     writes ~/.ssh/id_rsa (0600) at startup.
+    #   git_ssh_known_hosts: operator-supplied known_hosts. REPLACES
+    #     the bundled GitHub entries when set.
+    #   git_ssh_strict_host_key_checking: leave true in production.
+    git_token: str | None = None
+    git_ssh_private_key: str | None = None
+    git_ssh_known_hosts: str | None = None
+    git_ssh_strict_host_key_checking: bool = True
 
     # Retrieval defaults.
     default_max_chunks: int = 8

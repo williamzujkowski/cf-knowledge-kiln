@@ -27,6 +27,10 @@ the manifest.
 | `KILN_EMBEDDING_BASE_URL`             | —                        | Override the OpenAI-compatible embedding base URL.                 |
 | `KILN_GENERATOR_API_KEY`              | —                        | Secret.                                                            |
 | `KILN_GENERATOR_BASE_URL`             | —                        | Override.                                                          |
+| `KILN_GIT_TOKEN`                      | —                        | Fine-grained GitHub PAT for HTTPS clones of private repos. Worker-only; injected via `GIT_ASKPASS` so the token never appears in argv. Only applied to `github.com` URLs. See `deployment-cloud-foundry.md#private-git-sources` (#253). |
+| `KILN_GIT_SSH_PRIVATE_KEY`            | —                        | SSH private key for git clones over SSH. Accepts raw PEM or base64-encoded PEM (auto-detected). Worker startup writes `~/.ssh/id_rsa` mode 0600. (#253) |
+| `KILN_GIT_SSH_KNOWN_HOSTS`            | bundled github.com keys  | Operator-supplied `known_hosts` content. When set, **replaces** the bundled GitHub host keys — supply every host you need to reach. (#253) |
+| `KILN_GIT_SSH_STRICT_HOST_KEY_CHECKING` | `true`                 | Leave at `true` in production. Setting `false` disables MITM protection on SSH clones; the worker logs a WARNING when overridden. (#253) |
 | `KILN_INGEST_CONCURRENCY`             | `4`                      | Worker concurrency.                                                |
 | `KILN_INGEST_MAX_FILE_BYTES`          | `1048576`                | Files larger than this are skipped with `too_large`.               |
 | `KILN_INGEST_EMBED_BATCH_SIZE`        | `32`                     | Chunks per `provider.embed()` call during the ingestion embed pass.|

@@ -146,6 +146,51 @@ cf restage cf-knowledge-kiln-api
 
 Full env reference: [configuration.md](./configuration.md).
 
+## Private git sources (#253)
+
+Public repos work out of the box; private repos need credentials. The worker supports two opt-in mechanisms — pick whichever fits your case.
+
+### Option A: GitHub PAT over HTTPS (recommended for github.com)
+
+```bash
+cf set-env cf-knowledge-kiln-worker KILN_GIT_TOKEN '<fine-grained-PAT>'
+cf restage cf-knowledge-kiln-worker
+```
+
+The worker injects the token via `GIT_ASKPASS`, so the credential never appears on the git command line (`/proc/<pid>/cmdline` stays clean). The rewrite is scoped to `github.com` URLs — the worker will never forward your GitHub PAT to a non-GitHub host.
+
+Use a fine-grained PAT with the minimum required scope: **Contents: Read** on the specific private repos you allowlist in `config/sources.yaml`.
+
+### Option B: SSH key (required for non-GitHub or deploy keys)
+
+Generate or reuse a deploy key, then push the PEM via `cf set-env`. The CF env-var pipeline accepts multi-line values but is shell-fragile; base64-encoding is friendlier:
+
+```bash
+base64 -w 0 ~/.ssh/id_kiln_deploy_key \
+  | xargs -I{} cf set-env cf-knowledge-kiln-worker KILN_GIT_SSH_PRIVATE_KEY {}
+cf restage cf-knowledge-kiln-worker
+```
+
+The worker auto-detects base64 vs raw PEM. At startup it writes `~/.ssh/id_rsa` (0600), `~/.ssh` (0700), and `~/.ssh/known_hosts` with the bundled GitHub host keys (`StrictHostKeyChecking=yes` is enforced).
+
+For non-GitHub hosts, supply your own `known_hosts`:
+
+```bash
+ssh-keyscan gitlab.internal \
+  | xargs -I{} cf set-env cf-knowledge-kiln-worker KILN_GIT_SSH_KNOWN_HOSTS {}
+```
+
+`KILN_GIT_SSH_KNOWN_HOSTS` **replaces** the bundled GitHub entries — list every host you need. Disabling `StrictHostKeyChecking` (`KILN_GIT_SSH_STRICT_HOST_KEY_CHECKING=false`) is supported but should only be used to diagnose a host-key change; the worker logs a WARNING at startup when the override is on.
+
+### Trade-offs
+
+| Choice | Pro | Con |
+| --- | --- | --- |
+| PAT (HTTPS) | No filesystem state; one secret to rotate; scope per-repo on github.com. | GitHub-only; the token is in process env (visible via `cf ssh` + `env`). |
+| SSH key | Works for any git host; deploy keys can be scoped to one repo. | More setup (`known_hosts`), filesystem state, key sits at rest in the container. |
+
+Either is enough on its own. Setting both is harmless: `github.com` URLs use the PAT, everything else falls through to SSH.
+
 ## Rate limiting
 
 The API has an in-process per-IP token-bucket gate on `/v1/search`,

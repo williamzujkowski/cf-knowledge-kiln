@@ -8,9 +8,12 @@ ingestion job should refuse the source rather than partially indexing.
 
 The git connector uses ``git clone --depth=1`` into a temp directory
 and reads files from there. It does not retain the cloned repo across
-calls. Authentication is whatever the local ``git`` credential helper
-provides; this module does not handle credentials directly. Local file
-URLs (``file://``) work for tests without a network.
+calls. Authentication for private repos is opt-in via
+:class:`cf_knowledge_kiln.ingestion.git_credentials.GitCredentials`
+(threaded through ``GitConnector(caps, credentials=...)``); without
+credentials the clone relies on whatever the local ``git`` credential
+helper provides — fine for public repos. Local file URLs (``file://``)
+work for tests without a network.
 
 Only Markdown files (``.md`` / ``.markdown``) are fetched. Other file
 types are skipped with reason ``unsupported_file_type``. Future Phase 3
@@ -30,6 +33,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final, Literal
 
+from cf_knowledge_kiln.ingestion.git_credentials import (
+    GitCredentials,
+    redact_credentials,
+    should_inject_oauth_userinfo,
+    subprocess_env,
+)
 from cf_knowledge_kiln.ingestion.sources import GitSource, HttpSource, LocalSource, Source
 
 logger = logging.getLogger(__name__)
@@ -218,10 +227,23 @@ class LocalConnector:
 
 
 class GitConnector:
-    """Shallow-clone a git source and walk the working tree."""
+    """Shallow-clone a git source and walk the working tree.
 
-    def __init__(self, caps: IngestionCaps) -> None:
+    ``credentials`` is opt-in. When ``None`` (the default), public
+    repos clone fine and private repos fail fast — ``GIT_TERMINAL_PROMPT=0``
+    in the env prevents the worker from hanging on a TTY prompt that
+    will never arrive in CF. When set, the connector wires the
+    credential into the subprocess env (NOT argv) so the token /
+    SSH key never lands in ``/proc/<pid>/cmdline``. See #253.
+    """
+
+    def __init__(
+        self,
+        caps: IngestionCaps,
+        credentials: GitCredentials | None = None,
+    ) -> None:
         self._caps = caps
+        self._credentials = credentials
 
     def fetch(self, source: GitSource) -> FetchResult:
         with tempfile.TemporaryDirectory(prefix="kiln-git-") as tmpdir:
@@ -230,10 +252,21 @@ class GitConnector:
             commit_sha = self._head_sha(workdir)
             return _walk(workdir, source, self._caps, commit_sha=commit_sha)
 
-    @staticmethod
-    def _clone(source: GitSource, target: Path) -> None:
-        # The trailing `--` terminates git's option parsing, so even if a
-        # repo URL or path starts with `-` (Pydantic refuses this today
+    def _clone(self, source: GitSource, target: Path) -> None:
+        url = _resolve_repo_url(source.repo)
+        # #253: for github.com HTTPS URLs with a token configured, hint
+        # git that the username is "oauth2" up-front so the askpass
+        # helper only handles the password prompt (one fewer round-
+        # trip). The actual token NEVER appears on argv — it's read
+        # from KILN_GIT_TOKEN via GIT_ASKPASS in the child env.
+        if (
+            self._credentials is not None
+            and self._credentials.token is not None
+            and should_inject_oauth_userinfo(url)
+        ):
+            url = _inject_username(url, "oauth2")
+        # The trailing `--` terminates git's option parsing, so even if
+        # a repo URL or path starts with `-` (Pydantic refuses this today
         # via the source schema) git won't interpret it as an option.
         cmd = [
             "git",
@@ -244,24 +277,29 @@ class GitConnector:
             "--single-branch",
             "--no-tags",
             "--",
-            _resolve_repo_url(source.repo),
+            url,
             str(target),
         ]
+        env = subprocess_env(self._credentials)
         # cmd args come from a Pydantic-validated source spec; subprocess
         # input is not untrusted in the OWASP sense.
-        proc = subprocess.run(cmd, check=False, capture_output=True, text=True)  # noqa: S603
+        proc = subprocess.run(  # noqa: S603
+            cmd, check=False, capture_output=True, text=True, env=env
+        )
         if proc.returncode != 0:
+            token = self._credentials.token if self._credentials else None
             raise RuntimeError(
-                f"git clone failed for source {source.name!r}: {proc.stderr.strip()}"
+                f"git clone failed for source {source.name!r}: "
+                f"{redact_credentials(proc.stderr.strip(), token)}"
             )
 
-    @staticmethod
-    def _head_sha(workdir: Path) -> str:
+    def _head_sha(self, workdir: Path) -> str:
         proc = subprocess.run(  # noqa: S603
             ["git", "-C", str(workdir), "rev-parse", "HEAD"],  # noqa: S607
             check=True,
             capture_output=True,
             text=True,
+            env=subprocess_env(self._credentials),
         )
         return proc.stdout.strip()
 
@@ -273,10 +311,36 @@ def _resolve_repo_url(repo: str) -> str:
     return f"https://github.com/{repo}.git"
 
 
-def fetch_source(source: Source, caps: IngestionCaps) -> FetchResult:
-    """Dispatch on ``source.type`` and return the matching connector's result."""
+def _inject_username(url: str, username: str) -> str:
+    """Insert ``username@`` after the scheme of an HTTPS URL.
+
+    Used only when a GitHub token is configured — see ``GitConnector._clone``.
+    No password / token is included; that's supplied via GIT_ASKPASS
+    at clone time so the secret stays out of /proc/<pid>/cmdline.
+
+    ``https://github.com/org/repo.git`` → ``https://oauth2@github.com/org/repo.git``
+    Already has userinfo? Leave it unchanged (caller has been more
+    explicit about credentials than we'd be).
+    """
+    scheme, _, rest = url.partition("://")
+    if not rest or "@" in rest.split("/", 1)[0]:
+        return url
+    return f"{scheme}://{username}@{rest}"
+
+
+def fetch_source(
+    source: Source,
+    caps: IngestionCaps,
+    credentials: GitCredentials | None = None,
+) -> FetchResult:
+    """Dispatch on ``source.type`` and return the matching connector's result.
+
+    ``credentials`` flows through to :class:`GitConnector` only —
+    local + http connectors don't need them. ``None`` preserves the
+    pre-#253 public-repo path.
+    """
     if isinstance(source, GitSource):
-        return GitConnector(caps).fetch(source)
+        return GitConnector(caps, credentials=credentials).fetch(source)
     if isinstance(source, LocalSource):
         return LocalConnector(caps).fetch(source)
     if isinstance(source, HttpSource):

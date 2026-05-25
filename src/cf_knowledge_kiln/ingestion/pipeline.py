@@ -47,6 +47,7 @@ from cf_knowledge_kiln.ingestion.connectors import (
 )
 from cf_knowledge_kiln.ingestion.embedding import EmbeddingProvider
 from cf_knowledge_kiln.ingestion.embedding.pipeline import embed_touched_documents
+from cf_knowledge_kiln.ingestion.git_credentials import GitCredentials
 from cf_knowledge_kiln.ingestion.sources import Source
 
 
@@ -66,6 +67,7 @@ async def run_source(
     embedding_provider: EmbeddingProvider | None = None,
     prompt_injection_phrases: list[str] | None = None,
     sensitive_patterns: list[Any] | None = None,
+    git_credentials: GitCredentials | None = None,
 ) -> IngestionSummary:
     """Run the full pipeline for a single source. Writes an ingestion_runs row.
 
@@ -104,7 +106,7 @@ async def run_source(
     # with the embed phase.
     await session.commit()
     try:
-        fetch = fetch_source(source, _caps_from_settings(settings))
+        fetch = fetch_source(source, _caps_from_settings(settings), credentials=git_credentials)
     except IngestionCapExceeded as exc:
         summary.errors.append(str(exc))
         await session.execute(
