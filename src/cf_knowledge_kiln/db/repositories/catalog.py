@@ -7,6 +7,7 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from cf_knowledge_kiln.db.models import DataSource, ModelRegistryEntry
 from cf_knowledge_kiln.db.repositories._base import BaseRepository, apply_eq_filters
@@ -25,6 +26,48 @@ class DataSourcesRepository(BaseRepository):
         return await self._persist(
             DataSource(name=name, type=type, location=location, status=status, config=config or {})
         )
+
+    async def get_or_create(
+        self,
+        *,
+        name: str,
+        type: str,
+        location: str,
+        status: str = "active",
+        config: dict[str, Any] | None = None,
+    ) -> DataSource:
+        """Idempotent INSERT-or-fetch for the row keyed by ``name``.
+
+        Uses ``INSERT ... ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+        RETURNING *`` so we always get a populated row regardless of
+        whether the INSERT actually inserted. The no-op SET on the
+        conflict path is what makes RETURNING fire — ``DO NOTHING``
+        does NOT return a row and would require a second SELECT.
+
+        Solves #239: the previous ``list()`` → ``create()`` pattern
+        opened a long-held row-level lock on ``data_sources`` (held
+        until the surrounding session committed, which only happened
+        AFTER the entire embed phase — minutes later). A concurrent
+        worker upserting the same source name would block for the
+        full duration. The UPSERT here is one statement; the lock is
+        released as soon as the caller commits, which the pipeline
+        now does immediately after the catalog setup.
+        """
+        stmt = (
+            pg_insert(DataSource)
+            .values(name=name, type=type, location=location, status=status, config=config or {})
+            .on_conflict_do_update(
+                index_elements=["name"],
+                # No-op SET — required for RETURNING to fire on conflict.
+                # The existing row's other fields are NOT overwritten; if
+                # operators want type/location/status drift to update on
+                # re-ingest, that's a separate policy choice (today we
+                # leave existing-row fields untouched).
+                set_={"name": pg_insert(DataSource).excluded.name},
+            )
+            .returning(DataSource)
+        )
+        return (await self._session.execute(stmt)).scalar_one()
 
     async def get(self, id: UUID) -> DataSource | None:
         return await self._session.get(DataSource, id)

@@ -90,6 +90,19 @@ async def run_source(
     src_row = await _ensure_data_source_row(sources_repo, source)
     run = await runs_repo.create(source_id=src_row.id, status="running")
     summary.run_id = run.id
+    # #239: commit the catalog setup BEFORE the long embed phase.
+    # The data_sources INSERT (or UPSERT, since _ensure_data_source_row
+    # now uses ON CONFLICT) holds a row-level lock on the unique-by-
+    # `name` constraint until commit. The embed phase runs for minutes
+    # on CPU, so without this commit a concurrent worker processing
+    # any job for the same source name blocks indefinitely waiting for
+    # the lock — observed in homelab CF deploy as "ingestion_jobs
+    # attempts climbs to 10 with zero rows landing in documents". Same
+    # logic for `ingestion_runs` (running status is what we want
+    # durable for the recovery sweep anyway). Both rows are reference/
+    # audit data, not work-in-progress that should rollback together
+    # with the embed phase.
+    await session.commit()
     try:
         fetch = fetch_source(source, _caps_from_settings(settings))
     except IngestionCapExceeded as exc:
@@ -149,12 +162,26 @@ async def run_source(
 
 
 async def _ensure_data_source_row(repo: DataSourcesRepository, source: Source) -> Any:
-    """Insert the data_sources row if missing; return the live row."""
-    existing = await repo.list()
-    for row in existing:
-        if row.name == source.name:
-            return row
-    return await repo.create(
+    """Idempotent upsert of the row for ``source.name``; returns the live row.
+
+    Uses :meth:`DataSourcesRepository.get_or_create` rather than the
+    historical ``list()`` → ``create()`` pattern, which had two bugs:
+
+    1. **Race window** between the list and the create: two workers
+       starting the same source ingest concurrently could both find no
+       existing row, then both INSERT, with the loser hitting the
+       UNIQUE-on-name constraint and crashing.
+    2. **Long-held lock**: the INSERT held a row-level lock on the
+       new row until the surrounding transaction committed, which
+       only happened minutes later after the embed phase. A second
+       worker upserting the SAME name blocked for the entire embed
+       duration. Combined with the structural deadlock from #239,
+       this manifested as worker spin loops with zero progress on
+       multi-instance CF deploys.
+
+    The UPSERT keeps both behaviors atomic + lock-short.
+    """
+    return await repo.get_or_create(
         name=source.name,
         type=source.__class__.__name__.replace("Source", "").lower(),
         location=_repo_label(source),
