@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import os
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -34,7 +35,22 @@ from cf_knowledge_kiln.ingestion.worker import serve as _serve_worker
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_CONFIG = Path("config/sources.yaml")
+_DEFAULT_CONFIG_FALLBACK = Path("config/sources.yaml")
+
+
+def _default_config_path() -> Path:
+    """Resolve the source-allowlist default at parse time (#243).
+
+    Honors ``KILN_SOURCE_ALLOWLIST_PATH`` so the worker daemon, the
+    API, and ``make ingest`` all read the same setting. Previously the
+    CLI hardcoded ``config/sources.yaml`` and ignored the env var,
+    forcing CF deploys to pass ``--config`` explicitly in the manifest
+    command — a footgun homelab-iac hit in #243.
+
+    Resolved at call time (not import time) so tests that set the env
+    var via ``monkeypatch.setenv`` after import still see the change.
+    """
+    return Path(os.environ.get("KILN_SOURCE_ALLOWLIST_PATH", str(_DEFAULT_CONFIG_FALLBACK)))
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -42,11 +58,15 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="cf_knowledge_kiln.ingestion",
         description="Ingest documentation from allowlisted sources.",
     )
+    default_config = _default_config_path()
     parser.add_argument(
         "--config",
         type=Path,
-        default=_DEFAULT_CONFIG,
-        help=f"Path to sources.yaml (default: {_DEFAULT_CONFIG})",
+        default=default_config,
+        help=(
+            f"Path to sources.yaml (default: {default_config}; "
+            "overridable via KILN_SOURCE_ALLOWLIST_PATH env var)."
+        ),
     )
     parser.add_argument(
         "--dry-run",
