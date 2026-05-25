@@ -36,6 +36,7 @@ from cf_knowledge_kiln.api.health import router as health_router
 from cf_knowledge_kiln.api.observability import configure_observability
 from cf_knowledge_kiln.api.preview import router as preview_router
 from cf_knowledge_kiln.api.rate_limit import TokenBucketLimiter
+from cf_knowledge_kiln.api.request_id import install_request_id_middleware
 from cf_knowledge_kiln.api.request_log import install_request_logging
 from cf_knowledge_kiln.api.retrieval import router as retrieval_router
 from cf_knowledge_kiln.api.web import router as web_router
@@ -195,9 +196,15 @@ def create_app() -> FastAPI:
     # render. Rate-limit is a per-route Depends, not an ASGI
     # middleware, so there's nothing else to sequence against.
     install_csp_middleware(app)
+    # #260: per-request correlation ID. Installed before the logger
+    # so request_id is on request.state when the logger pulls it. The
+    # middleware honors an inbound X-Request-ID (sanitized) OR
+    # generates a fresh UUID4; the value is echoed on every response
+    # so callers can correlate the line in their own logs.
+    install_request_id_middleware(app)
     # #178: per-request observability. Installed last so it is the
     # outermost middleware — the logged duration covers the whole
-    # request, including auth + CSP.
+    # request, including auth + CSP. Includes request_id from above.
     install_request_logging(app)
     # OpenTelemetry tracing — no-op unless KILN_OTEL_EXPORTER_OTLP_ENDPOINT
     # is set AND the [otel] extra is installed. See api/observability.py.
