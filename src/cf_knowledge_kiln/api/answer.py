@@ -108,6 +108,10 @@ async def _log_answer_query(
     try:
         async with session.begin_nested():
             await AnswersRepository(session).create(
+                # #256: persist the response-visible UUID as the row
+                # PK so an operator looking up a complaint by
+                # ``answer_id`` finds the audit row.
+                id=response.answer_id,
                 query=body.query,
                 task=body.task,
                 filters=(body.filters.model_dump(exclude_none=True) if body.filters else {}),
