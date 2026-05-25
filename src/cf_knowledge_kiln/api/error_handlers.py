@@ -100,7 +100,7 @@ def _default_message_for(code: ErrorCode) -> str:
         "invalid_request": "The request was invalid.",
         "query_too_long": "Query exceeds the maximum length.",
         "invalid_filter_value": "One or more filter values were invalid.",
-        "token_budget_too_low": "The requested token budget is too small.",
+        "token_budget_too_low": "The requested token budget is too small.",  # nosec B105 — error message, not a credential; bandit pattern-matches on the substring 'token'
         "rate_limited": "Too many requests. Please slow down.",
         "db_unreachable": "Database is temporarily unavailable.",
         "embedding_unavailable": "Embedding provider is temporarily unavailable.",
