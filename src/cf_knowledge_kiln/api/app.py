@@ -41,6 +41,7 @@ from cf_knowledge_kiln.api.retrieval import router as retrieval_router
 from cf_knowledge_kiln.api.web import router as web_router
 from cf_knowledge_kiln.config import get_settings
 from cf_knowledge_kiln.db import Database, resolve_database_url
+from cf_knowledge_kiln.db.migrations import run_upgrade_head
 from cf_knowledge_kiln.generation import GeneratorProvider
 from cf_knowledge_kiln.generation.factory import build_generator_from_settings
 from cf_knowledge_kiln.ingestion.embedding import EmbeddingProvider
@@ -111,6 +112,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     url = resolve_database_url(settings)
     db: Database | None = None
     if url is not None:
+        # #244: auto-apply migrations BEFORE opening the pool. The
+        # pool would otherwise warm up against a missing
+        # ``alembic_version`` table on a fresh deploy and the API
+        # would 500 every request that touches a real table.
+        # Migration failure crashes the lifespan — that's intentional;
+        # running against an unmigrated DB is worse than not running.
+        if settings.auto_migrate_on_startup:
+            logger.info("auto-migrate enabled; running alembic upgrade head before opening pool")
+            await run_upgrade_head(url)
         db = Database(
             url,
             pool_size=settings.pg_pool_size,

@@ -47,6 +47,15 @@ class Settings(BaseSettings):
     # raising the worker count.
     pg_pool_size: int = 5
     pg_pool_max_overflow: int = 10
+    # #244: auto-apply Alembic migrations at app startup. Default ON
+    # so a fresh ``cf push`` against an empty DB just works — the API
+    # and worker run ``alembic upgrade head`` against the resolved DB
+    # URL before opening their connection pool. A Postgres
+    # transaction-level advisory lock serializes concurrent starts.
+    # Operators with shared-DB deployments where another process owns
+    # the schema (or who prefer the explicit ``make migrate`` flow)
+    # set this to ``false`` and migrate out-of-band.
+    auto_migrate_on_startup: bool = True
 
     # Embedding provider — see config/models.yaml for the swappable registry.
     embedding_api_key: str | None = None

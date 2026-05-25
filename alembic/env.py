@@ -32,6 +32,23 @@ if config.config_file_name is not None:
 # migrations can introduce ORM models without changing this pattern.
 target_metadata = None
 
+# #244: stable 64-bit key for the cross-process advisory lock that
+# serializes concurrent auto-migrate starts. Without this, two app
+# instances starting against a freshly-provisioned DB both see an
+# empty alembic_version, both try to apply revision 0001, and one
+# fails loudly when the CREATE TABLE collides. The transaction-level
+# variant (``pg_advisory_xact_lock``) auto-releases on commit/rollback,
+# so a crashed migrator can't leak the lock.
+#
+# Derived once via:
+#   int.from_bytes(blake2b(b"cf-knowledge-kiln-alembic",
+#                          digest_size=8).digest(),
+#                  "big") & 0x7FFFFFFFFFFFFFFF
+# and pasted as a literal so the value is git-grep-able. The high
+# bit is masked off to fit Postgres's signed bigint advisory-lock
+# parameter type.
+_ALEMBIC_LOCK_KEY = 8678464225276111240
+
 
 def _database_url() -> str:
     settings = get_settings()
@@ -63,6 +80,11 @@ def run_migrations_offline() -> None:
 def _do_run_migrations(connection: Connection) -> None:
     context.configure(connection=connection, target_metadata=target_metadata)
     with context.begin_transaction():
+        # #244: take a transaction-scoped advisory lock so two app
+        # instances racing to apply migrations serialize cleanly. The
+        # lock is auto-released when this transaction commits/rolls
+        # back — no leak risk even if alembic raises mid-run.
+        connection.exec_driver_sql(f"SELECT pg_advisory_xact_lock({_ALEMBIC_LOCK_KEY})")
         context.run_migrations()
 
 
