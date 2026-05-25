@@ -48,7 +48,8 @@ make ingest           # run a one-off ingestion pass
 ```
 
 See [HANDOFF.md](./HANDOFF.md) for repo-state context (phase progress, recent slices),
-and [docs/deployment-cloud-foundry.md](./docs/deployment-cloud-foundry.md) for CF deployment.
+[docs/deployment-cloud-foundry.md](./docs/deployment-cloud-foundry.md) for CF deployment,
+and [docs/agent-integration-guide.md](./docs/agent-integration-guide.md) for connecting an external agent to a deployed kiln.
 
 ## Architecture
 
