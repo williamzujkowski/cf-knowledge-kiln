@@ -51,7 +51,12 @@ from cf_knowledge_kiln.api.forms import (
     selected_statuses,
 )
 from cf_knowledge_kiln.api.rate_limit import TokenBucketLimiter, client_ip
-from cf_knowledge_kiln.api.views import humanize_warning, log_human_query, split_warnings
+from cf_knowledge_kiln.api.views import (
+    humanize_warning,
+    log_human_query,
+    score_tier,
+    split_warnings,
+)
 from cf_knowledge_kiln.db.repositories import FeedbackRepository
 from cf_knowledge_kiln.retrieval import HybridRetriever
 from cf_knowledge_kiln.retrieval.types import MAX_QUERY_LENGTH
@@ -347,6 +352,11 @@ def _result_card_view(
         "status": chunk.status,
         "last_reviewed": chunk.last_reviewed,
         "score": chunk.score,
+        # #259 5-dot visualization tier. The Jinja template renders the
+        # dots from this integer instead of recomputing the threshold
+        # ladder per cell, so the tier policy lives in one Python
+        # function (api.views.score_tier) that's unit-tested.
+        "score_tier": score_tier(chunk.score),
     }
 
 
