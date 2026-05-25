@@ -229,9 +229,13 @@ def build_generator_from_settings(settings: Settings) -> GeneratorProvider | Non
 
     Path comes from :attr:`Settings.models_config_path` (default
     ``config/models.yaml``); operators override via
-    ``KILN_MODELS_CONFIG_PATH``.
+    ``KILN_MODELS_CONFIG_PATH``. #241: when the configured filename
+    is missing, fall back to ``config/models.example.yaml`` so a
+    fresh deploy is inspectable instead of dying on a missing path.
     """
-    path = Path(settings.models_config_path)
+    from cf_knowledge_kiln.config import resolve_with_example_fallback
+
+    path = resolve_with_example_fallback(settings.models_config_path)
     try:
         config = load_generator_config(path)
     except GeneratorConfigError:

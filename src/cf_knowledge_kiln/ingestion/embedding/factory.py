@@ -290,9 +290,15 @@ def build_provider_from_settings(settings: Settings) -> EmbeddingProvider | None
 
     Path comes from :attr:`Settings.models_config_path` (default
     ``config/models.yaml``); operators override via
-    ``KILN_MODELS_CONFIG_PATH``.
+    ``KILN_MODELS_CONFIG_PATH``. #241: when the configured filename
+    is missing, fall back to ``config/models.example.yaml`` (the
+    template that ships with the repo) so a fresh deploy is
+    inspectable and the API stays up — a one-time WARNING tells the
+    operator to customize.
     """
-    path = Path(settings.models_config_path)
+    from cf_knowledge_kiln.config import resolve_with_example_fallback
+
+    path = resolve_with_example_fallback(settings.models_config_path)
     if not path.exists():
         logger.warning(
             "no embedding config at %s; this process will not generate embeddings",
