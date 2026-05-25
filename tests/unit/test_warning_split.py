@@ -127,9 +127,7 @@ class TestSplitWarnings:
             humanize_warning(_Warning("conflicting_sources")),  # global
             humanize_warning(_Warning("sensitive_content", source_id=doc_b)),  # to B
         ]
-        global_warnings, per_doc = split_warnings(
-            warnings, {str(doc_a), str(doc_b)}
-        )
+        global_warnings, per_doc = split_warnings(warnings, {str(doc_a), str(doc_b)})
         assert {w["type"] for w in global_warnings} == {
             "weak_evidence",
             "conflicting_sources",
