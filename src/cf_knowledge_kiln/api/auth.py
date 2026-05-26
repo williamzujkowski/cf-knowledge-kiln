@@ -556,8 +556,8 @@ class OIDCAuthMiddleware:
         Raises :class:`_JWTValidationError` on any failure so the caller
         can render a single 401 envelope.
         """
-        from authlib.jose import JsonWebKey, JsonWebToken
-        from authlib.jose.errors import JoseError
+        from authlib.jose import JsonWebKey, JsonWebToken  # type: ignore[import-untyped]
+        from authlib.jose.errors import JoseError  # type: ignore[import-untyped]
 
         jwks = await self._ensure_jwks()
         try:
