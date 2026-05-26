@@ -18,6 +18,12 @@ Two opt-in mechanisms, both off by default (settings fields default to
    ``~/.ssh/known_hosts`` so ``StrictHostKeyChecking=yes`` works
    out of the box. Operator-supplied ``KILN_GIT_SSH_KNOWN_HOSTS``
    replaces the bundled entries (no merging — explicit contract).
+   ``~`` here is the **passwd-home** (``pwd.getpwuid(os.getuid()).
+   pw_dir``), not ``$HOME``: CF's Diego launcher sets
+   ``HOME=/home/vcap/app`` but vcap's passwd-home is ``/home/vcap``,
+   and ssh itself resolves ``~`` via ``getpwuid``. Writing to the
+   passwd-home keeps interactive ``cf ssh ... git clone`` working
+   alongside the kiln's own ``GIT_SSH_COMMAND``-driven clones (#275).
 
 The PEM field auto-detects base64 vs raw — homelab-iac discovered the
 hard way that multi-line values through ``cf set-env`` work but are
@@ -47,6 +53,29 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+
+def _passwd_home() -> Path:
+    """Resolve the current user's home directory the same way ssh does.
+
+    ssh resolves ``$HOME`` via ``getpwuid`` (``/etc/passwd``), not the
+    env var. CF's Diego launcher sets ``HOME=/home/vcap/app`` for the
+    app process, but vcap's passwd-home is ``/home/vcap`` — they
+    diverge in CF, agree on dev workstations. Using ``getpwuid`` here
+    keeps ssh's view of ``~/.ssh`` aligned with where we actually
+    write the key + known_hosts, so an operator-driven ``cf ssh ...
+    git clone`` (which doesn't inherit our ``GIT_SSH_COMMAND``) finds
+    the files where ssh looks for them. See cf-knowledge-kiln#275.
+
+    Falls back to :meth:`Path.home` on platforms without ``pwd``
+    (Windows — unlikely for a CF worker, but covers test runs and
+    keeps the module importable).
+    """
+    try:
+        import pwd  # POSIX-only; absent on Windows
+    except ImportError:  # pragma: no cover - non-POSIX fallback
+        return Path.home()
+    return Path(pwd.getpwuid(os.getuid()).pw_dir)
 
 
 # Bundled GitHub host keys. Sourced from https://api.github.com/meta
@@ -179,7 +208,9 @@ def install_at_startup(
     """Write SSH key / known_hosts / askpass helper to the home dir.
 
     Idempotent — safe to call on every worker restart. ``home``
-    defaults to ``Path.home()``; tests pass a tmp dir.
+    defaults to the passwd-home (``pwd.getpwuid(os.getuid()).pw_dir``),
+    NOT ``$HOME`` — see :func:`_passwd_home` for the CF Diego launcher
+    rationale (#275). Tests pass a tmp dir.
 
     Returns a NEW :class:`GitCredentials` with the path fields
     populated so :func:`subprocess_env` can reference them.
@@ -190,7 +221,7 @@ def install_at_startup(
     if not creds.has_any():
         return creds
 
-    home = home or Path.home()
+    home = home or _passwd_home()
     ssh_dir = home / ".ssh"
     ssh_key_path: Path | None = None
     known_hosts_path: Path | None = None
@@ -335,7 +366,7 @@ def redact_credentials(text: str, token: str | None = None) -> str:
 
     Two passes:
 
-    1. URL userinfo: ``https://user:pwd@host/...`` → ``https://REDACTED@host/...``.
+    1. URL userinfo: ``https://user:pwd@host/...`` → ``https://REDACTED@host/...``.  # pragma: allowlist secret
        Catches accidentally-pre-rewritten URLs that show up in git
        stderr from non-askpass code paths.
     2. Token substring: if ``token`` is set and appears anywhere in

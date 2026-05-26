@@ -33,8 +33,8 @@ from cf_knowledge_kiln.ingestion.git_credentials import (
 # The decoded bytes are obviously a placeholder ('fakekeybodyfortest')
 # and never authenticate against any real service.
 _FAKE_PEM = base64.b64decode(
-    "LS0tLS1CRUdJTiBPUEVOU1NIIFBSSVZBVEUgS0VZLS0tLS0KZmFrZWtleWJv"
-    "ZHlmb3J0ZXN0Ci0tLS0tRU5EIE9QRU5TU0ggUFJJVkFURSBLRVktLS0tLQo="
+    "LS0tLS1CRUdJTiBPUEVOU1NIIFBSSVZBVEUgS0VZLS0tLS0KZmFrZWtleWJv"  # pragma: allowlist secret
+    "ZHlmb3J0ZXN0Ci0tLS0tRU5EIE9QRU5TU0ggUFJJVkFURSBLRVktLS0tLQo="  # pragma: allowlist secret
 )
 _PEM_BEGIN = _FAKE_PEM.split(b"\n", 1)[0]  # the first line, for tests
 
@@ -64,7 +64,7 @@ class TestDecodePem:
         # Decoded from base64 to keep the source file free of any PEM
         # marker substring that secret scanners might match on.
         weird = base64.b64decode(
-            "LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCiFAIyQlXiYqKCkKLS0t"
+            "LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCiFAIyQlXiYqKCkKLS0t"  # pragma: allowlist secret
             "LS1FTkQgUFJJVkFURSBLRVktLS0tLQo="
         ).decode("utf-8")
         out = _decode_pem(weird)
@@ -212,6 +212,66 @@ class TestInstallAtStartup:
         )
         assert p.stdout.strip() == "testtoken"
 
+    def test_default_home_is_passwd_home_not_env_home(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Regression for #275 — the CF Diego launcher sets
+        ``HOME=/home/vcap/app`` for the app process, but ssh itself
+        resolves ``~`` via ``getpwuid(os.getuid()).pw_dir`` (vcap's
+        passwd-home, ``/home/vcap``). Writing to ``$HOME/.ssh`` puts
+        the key where ssh isn't looking, so an interactive
+        ``cf ssh ... git clone`` fails Host-key-verification even
+        though the kiln's own GIT_SSH_COMMAND-driven clones work.
+
+        Simulate the divergence: point ``HOME`` at a *wrong* tmp dir
+        and confirm ``install_at_startup`` (called with no explicit
+        ``home=``) resolves the passwd-home as its default, not
+        ``$HOME``.
+        """
+        import pwd
+
+        from cf_knowledge_kiln.ingestion import git_credentials as gc_mod
+
+        passwd_home = Path(pwd.getpwuid(os.getuid()).pw_dir)
+        wrong_home = tmp_path / "env-home-wrong"
+        wrong_home.mkdir()
+        monkeypatch.setenv("HOME", str(wrong_home))
+
+        # Capture what install_at_startup resolves as the default
+        # home, without actually writing to the real passwd-home
+        # (which would clobber the test user's ~/.ssh/id_rsa).
+        recorded: dict[str, Path] = {}
+        real_install = gc_mod.install_at_startup
+
+        def _spy(creds: GitCredentials, *, home: Path | None = None) -> GitCredentials:
+            resolved = home if home is not None else gc_mod._passwd_home()
+            recorded["resolved_home"] = resolved
+            # Redirect actual writes to a hermetic sandbox.
+            sandbox = tmp_path / "passwd-home-sandbox"
+            sandbox.mkdir(exist_ok=True)
+            return real_install(creds, home=sandbox)
+
+        monkeypatch.setattr(gc_mod, "install_at_startup", _spy)
+
+        out = gc_mod.install_at_startup(GitCredentials(ssh_key_pem=_FAKE_PEM))
+
+        # The invariant: the default-resolved home is the passwd-home,
+        # NOT $HOME (which we set to wrong_home above).
+        assert recorded["resolved_home"] == passwd_home
+        assert recorded["resolved_home"] != wrong_home
+        # And the sandboxed write succeeded.
+        assert out.ssh_key_path is not None
+        assert out.ssh_key_path.read_bytes() == _FAKE_PEM
+
+    def test_passwd_home_helper_returns_pw_dir(self) -> None:
+        """The helper must return what ssh would use — getpwuid's
+        pw_dir for the current uid, not ``$HOME``."""
+        import pwd
+
+        from cf_knowledge_kiln.ingestion.git_credentials import _passwd_home
+
+        assert _passwd_home() == Path(pwd.getpwuid(os.getuid()).pw_dir)
+
 
 # ─── subprocess_env ──────────────────────────────────────────────────
 
@@ -285,7 +345,7 @@ class TestShouldInjectOauthUserinfo:
 
 class TestRedactCredentials:
     def test_strips_userinfo_from_https_url(self) -> None:
-        text = "fatal: clone https://oauth2:ghp_abc@github.com/x.git failed"
+        text = "fatal: clone https://oauth2:ghp_abc@github.com/x.git failed"  # pragma: allowlist secret
         out = redact_credentials(text, token=None)
         assert "ghp_abc" not in out
         assert "oauth2" not in out  # full userinfo replaced
