@@ -26,6 +26,17 @@
         {% if doc.status %}
           <span class="preview-status status-{{ doc.status }}">{{ doc.status }}</span>
         {% endif %}
+        {# #282: owner + last_reviewed inline so users don't scroll
+           back to the result card for the ownership / freshness
+           signal. Each renders only when the Document carries the
+           value — empty 'by ' or 'Reviewed —' ghosts read worse
+           than nothing. #}
+        {% if doc.owner %}
+          <span class="preview-owner">by <em>{{ doc.owner }}</em></span>
+        {% endif %}
+        {% if doc.last_reviewed %}
+          <time class="preview-freshness" datetime="{{ doc.last_reviewed }}">Reviewed {{ doc.last_reviewed }}</time>
+        {% endif %}
       </p>
       {% if target.heading_path %}
         <p class="preview-heading-path">

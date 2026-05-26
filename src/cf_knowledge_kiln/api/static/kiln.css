@@ -1788,6 +1788,28 @@ a.source-link:focus-visible {
   padding: 0.05rem 0.4rem;
 }
 
+/* #282: owner + last_reviewed in the preview meta line so the
+   ownership + freshness signals are visible without scrolling back
+   to the result card. Type echoes the result-card .owner and
+   .freshness styling so a user reading both surfaces gets a
+   consistent voice. */
+.preview-owner {
+  font-family: var(--serif);
+  font-size: 0.82rem;
+  color: var(--ink-faded);
+}
+.preview-owner em {
+  font-style: italic;
+  color: var(--ink-soft);
+}
+.preview-freshness {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 0.82rem;
+  color: var(--ink-faded);
+  font-variation-settings: "opsz" 14;
+}
+
 .preview-heading-path {
   margin: 0 0 0.7rem;
   font-family: var(--mono);
