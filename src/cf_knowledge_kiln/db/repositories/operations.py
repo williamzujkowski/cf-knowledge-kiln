@@ -175,6 +175,7 @@ class ContextPacksRepository(BaseRepository):
         requires_human_review: bool = False,
         id: UUID | None = None,
         request_id: str | None = None,
+        requester: str | None = None,
     ) -> ContextPack:
         """Insert one ``context_packs`` row.
 
@@ -207,6 +208,7 @@ class ContextPacksRepository(BaseRepository):
                 warnings=warnings or [],
                 requires_human_review=requires_human_review,
                 request_id=request_id,
+                requester=requester,
             )
         )
 
@@ -265,6 +267,7 @@ class AnswersRepository(BaseRepository):
         total_tokens: int | None = None,
         id: UUID | None = None,
         request_id: str | None = None,
+        requester: str | None = None,
     ) -> RagAnswer:
         """Insert one ``rag_answers`` row.
 
@@ -298,6 +301,7 @@ class AnswersRepository(BaseRepository):
                 total_tokens=total_tokens,
                 requested_max_answer_tokens=requested_max_answer_tokens,
                 request_id=request_id,
+                requester=requester,
             )
         )
 

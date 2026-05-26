@@ -236,6 +236,10 @@ class ContextPack(Base):
     )
     # #260 second half: X-Request-ID correlation key. See RagQuery.
     request_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # #315: identity of the requester (OIDC username claim). Nullable
+    # because non-OIDC modes don't surface an identity. Indexed via
+    # partial btree on the non-NULL subset (migration 0006).
+    requester: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = _ts()
 
 
@@ -292,6 +296,10 @@ class RagAnswer(Base):
     requested_max_answer_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
     # #260 second half: X-Request-ID correlation key. See RagQuery.
     request_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # #315: identity of the requester (OIDC username claim). Nullable
+    # because non-OIDC modes don't surface an identity. Indexed via
+    # partial btree on the non-NULL subset (migration 0006).
+    requester: Mapped[str | None] = mapped_column(Text, nullable=True)
     # #202: use clock_timestamp() at write time, not now() (which
     # returns the transaction start). Each row is one-shot — no
     # started/finished pair — so a single created_at is enough.
