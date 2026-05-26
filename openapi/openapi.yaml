@@ -730,6 +730,11 @@ components:
             # off a cliff — one chunk happens to surface-match the
             # query without comparable supporting evidence.
             - isolated_match
+            # #310: generator hit max_answer_tokens mid-stream —
+            # replaces the prior misuse of weak_evidence for the
+            # ``/v1/answer`` truncation path. Additive enum
+            # widening per ADR-0011.
+            - answer_truncated
         message:
           type: string
         source_id:

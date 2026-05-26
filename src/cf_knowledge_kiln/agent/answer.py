@@ -54,7 +54,10 @@ from cf_knowledge_kiln.retrieval.types import (
     ContextPackResponse,
     EvidenceChunk,
     RetrievalFilters,
-    Warning,
+)
+from cf_knowledge_kiln.retrieval.warning_variants import (
+    AnswerTruncatedWarning,
+    downgrade_to_flat,
 )
 
 logger = logging.getLogger(__name__)
@@ -251,17 +254,20 @@ async def synthesize_answer(
         )
 
     # Length truncation is not a refusal — surface as a warning so
-    # the caller knows the answer may be incomplete.
+    # the caller knows the answer may be incomplete. #310: use the
+    # discriminated ``answer_truncated`` variant (not the prior
+    # weak_evidence misuse), then downgrade to the flat wire shape
+    # so the response stays byte-identical against the OpenAPI
+    # contract.
     warnings = list(pack.warnings)
     if result.finish_reason == "length":
-        warnings.append(
-            Warning(
-                type="weak_evidence",
-                message=(
-                    "Answer was truncated at max_answer_tokens; the response may be incomplete."
-                ),
-            )
+        truncation_variant = AnswerTruncatedWarning(
+            type="answer_truncated",
+            message=("Answer was truncated at max_answer_tokens; the response may be incomplete."),
+            finish_reason="length",
+            max_answer_tokens=request.max_answer_tokens,
         )
+        warnings.append(downgrade_to_flat(truncation_variant))
 
     return AnswerResponse(
         answer_id=answer_id,
