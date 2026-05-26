@@ -85,6 +85,34 @@ def test_anchor_target_exists(env: jinja2.Environment) -> None:
     assert 'tabindex="-1"' in body
 
 
+def test_anchor_target_is_not_aria_hidden(env: jinja2.Environment) -> None:
+    """ARIA 1.2: 'authors MUST NOT focus an element with
+    aria-hidden=true'. The anchor is programmatically focused by
+    the skip-link, so aria-hidden would create silent focus on the
+    AT tree (the user lands on a hidden element with no announcement,
+    losing context). Blind-review caught this; pin the fix.
+
+    The anchor must instead carry a label so AT announces something
+    informative when focus lands ('After search results'), preserving
+    the user's sense of place after the jump."""
+    body = _render(env)
+    # Isolate JUST the opening tag of the after-results anchor:
+    # walk back from id="after-results" to the most recent '<', then
+    # forward to the first '>' that closes the tag.
+    idx = body.index('id="after-results"')
+    open_lt = body.rfind("<", 0, idx)
+    close_gt = body.find(">", idx)
+    around = body[open_lt : close_gt + 1]
+    assert 'aria-hidden="true"' not in around, (
+        "after-results anchor MUST NOT have aria-hidden=true — "
+        "programmatically-focused elements stay in the AT tree."
+    )
+    assert "aria-label" in around, (
+        "after-results anchor MUST carry an aria-label so AT announces "
+        "where the user has been jumped to after the skip-link is activated."
+    )
+
+
 def test_skip_link_renders_before_results_section(env: jinja2.Environment) -> None:
     """The link MUST come before the results region in DOM order;
     otherwise the user has already tabbed past every card by the
