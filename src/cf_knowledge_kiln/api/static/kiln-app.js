@@ -95,9 +95,24 @@
   // error instead of a silent no-op. 404 covers the preview panel's
   // not-found fragment. Status comes back via detail.xhr.status
   // because HX-Retarget on the server is too coarse here.
+  // #293: widened from {400, 404, 429, 503} to include 500, 502,
+  // 504. A 5xx from a sluggish DB or transient upstream failure
+  // was being swallowed silently by HTMX's default isError
+  // behavior, leaving the user with no visible signal of the
+  // failure (and no chance to retry intentionally vs reflexively).
+  // The server-side error fragments now render uniformly across
+  // the 4xx + 5xx range.
   document.addEventListener("htmx:beforeSwap", (e) => {
     const s = e.detail.xhr.status;
-    if (s === 429 || s === 503 || s === 400 || s === 404) {
+    if (
+      s === 400 ||
+      s === 404 ||
+      s === 429 ||
+      s === 500 ||
+      s === 502 ||
+      s === 503 ||
+      s === 504
+    ) {
       e.detail.shouldSwap = true;
       e.detail.isError = false;
     }

@@ -1,7 +1,14 @@
-{# HTMX swaps this in place of the feedback form when validation
-   fails or the write errors out. Keeps the disclosure open so the
-   user can see + retry. #}
-<details class="feedback feedback-failed" open>
-  <summary>Feedback &mdash; failed</summary>
-  <p class="fb-error" role="alert">{{ message }}</p>
-</details>
+{# #293: refactored from <details open> chrome (which mirrored the
+   unfilled feedback prompt and let users mistake the error for a
+   fresh prompt → retry loop) to the editorial .notice .notice-alert
+   shape from _error.html. All error fragments now share one voice:
+   oxblood left rule, italic body, role='alert' so AT users hear
+   it as an error event rather than ordinary swapped content.
+
+   The fragment is still the HTMX swap target for the feedback form
+   (outerHTML swap), so the role='alert' on the wrapper announces
+   the failure exactly once when it lands. #}
+<aside class="feedback-error notice notice-alert" role="alert">
+  <span class="notice-label" aria-hidden="true">Feedback failed</span>
+  <em class="error-message">{{ message }}</em>
+</aside>
