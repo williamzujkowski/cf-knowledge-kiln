@@ -216,8 +216,14 @@ Every request is correlated by a `X-Request-ID` UUID. The kiln honors an inbound
 - Echoed on the response `X-Request-ID` header.
 - Included in the response body as `request_id`.
 - Stamped on the per-request log line server-side.
+- Persisted on the `rag_queries` / `rag_answers` / `context_packs`
+  telemetry row for the request (with a partial index for fast lookup).
 
-Quote it in user complaints. An operator can join your `request_id` to log lines + (soon) telemetry rows to reconstruct what happened.
+Quote it in user complaints. An operator can join your `request_id`
+to log lines and telemetry rows to reconstruct exactly what
+chunks the agent was fed — see
+[runbooks/audit-trail.md](./runbooks/audit-trail.md) for the
+end-to-end recipe.
 
 ### Retry policy
 

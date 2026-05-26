@@ -5,6 +5,13 @@ endpoint is configured AND the optional `[otel]` extra is installed.
 Tracing is off by default — call sites are no-ops, no spans are
 created, no overhead is paid.
 
+> **For per-request audit-trail reconstruction** (tracing a
+> `request_id` / `answer_id` / `context_pack_id` from a user
+> complaint to the chunks the agent saw), see the dedicated
+> [runbooks/audit-trail.md](./runbooks/audit-trail.md). This page
+> covers the OTel trace surface; that runbook covers the SQL +
+> `cf logs` recipe for the operator-on-call.
+
 ## Turning tracing on
 
 Two things must be true together:
