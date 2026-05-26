@@ -326,10 +326,37 @@ def agent_guide_url() -> str | None:
     module-level constant) so tests + runtime overrides of the
     env var pick up immediately. The Jinja template registration
     in ``api/web.py`` wires this into the global namespace.
+
+    Security: the value goes into an ``href`` attribute, so we reject
+    anything that isn't a safe URL scheme. Operator misconfiguration
+    or an env-injection attack that sets the var to ``javascript:…``
+    or ``data:…`` would otherwise execute attacker JS on every
+    rendered page (Jinja autoescape doesn't sanitize URL schemes).
+    Allowed: ``https://``, ``http://``, and same-origin paths
+    starting with ``/``. Anything else → log + return None (link is
+    silently dropped, NOT rendered as a broken/dangerous link).
     """
     from cf_knowledge_kiln.config import get_settings
 
-    return get_settings().agent_guide_url
+    raw = get_settings().agent_guide_url
+    if raw is None:
+        return None
+    candidate = raw.strip()
+    if not candidate:
+        return None
+    # Same-origin absolute path is always safe.
+    if candidate.startswith("/") and not candidate.startswith("//"):
+        return candidate
+    # Otherwise require an explicit http(s) scheme. Anything else
+    # (javascript:, data:, vbscript:, mailto:, custom-scheme:) is
+    # refused so the template can't render a hostile href.
+    if candidate.startswith(("https://", "http://")):
+        return candidate
+    logger.warning(
+        "agent_guide_url: refusing non-http(s) scheme %r; check KILN_AGENT_GUIDE_URL",
+        candidate[:32],
+    )
+    return None
 
 
 def split_warnings(

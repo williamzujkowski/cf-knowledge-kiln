@@ -60,7 +60,10 @@ def test_agent_link_rendered_when_helper_returns_url(
     body = _render(env)
     assert "https://example.com/agent-guide" in body
     assert "/v1/agent/context-pack" in body
-    assert 'rel="noopener"' in body
+    # rel must include both noopener (no window.opener handle for the
+    # destination page) AND noreferrer (no Referer header leak to a
+    # potentially external operator-configured URL).
+    assert 'rel="noopener noreferrer"' in body
 
 
 def test_agent_link_inside_developer_resources_nav(
@@ -90,3 +93,78 @@ def test_agent_link_adds_third_separator_when_present(
     assert nav_match is not None
     middots = nav_match.group(1).count("·")
     assert middots == 3, f"expected 3 middots (4 links), got {middots}"
+
+
+# ─── URL-scheme validation (blind-review HIGH finding) ─────────
+
+
+class TestAgentGuideUrlSchemeValidation:
+    """The colophon renders the configured URL directly into an
+    ``href`` attribute. Operator misconfiguration or an env-injection
+    attack could set the value to ``javascript:`` / ``data:`` and turn
+    the link into an XSS vector — Jinja's autoescape sanitizes HTML,
+    not URL schemes. Pin the allow-list behavior."""
+
+    def _agent_url(self, raw: str | None) -> str | None:
+        """Drive the real implementation by patching the setting and
+        calling the production helper — proves the validation lives
+        in the helper, not in test stubs."""
+        from cf_knowledge_kiln.api.views import agent_guide_url
+        from cf_knowledge_kiln.config import get_settings
+
+        get_settings.cache_clear()
+        try:
+            import os
+
+            if raw is None:
+                os.environ.pop("KILN_AGENT_GUIDE_URL", None)
+            else:
+                os.environ["KILN_AGENT_GUIDE_URL"] = raw
+            return agent_guide_url()
+        finally:
+            os.environ.pop("KILN_AGENT_GUIDE_URL", None)
+            get_settings.cache_clear()
+
+    def test_unset_returns_none(self) -> None:
+        assert self._agent_url(None) is None
+
+    def test_https_url_is_accepted(self) -> None:
+        url = "https://docs.example/agent-guide"
+        assert self._agent_url(url) == url
+
+    def test_http_url_is_accepted(self) -> None:
+        url = "http://docs.example/agent-guide"
+        assert self._agent_url(url) == url
+
+    def test_absolute_path_is_accepted(self) -> None:
+        # Same-origin absolute paths are safe — no scheme to abuse.
+        url = "/docs/agent-integration"
+        assert self._agent_url(url) == url
+
+    def test_javascript_scheme_is_refused(self) -> None:
+        # The headline XSS vector.
+        assert self._agent_url("javascript:alert(1)") is None
+
+    def test_data_scheme_is_refused(self) -> None:
+        assert self._agent_url("data:text/html,<script>alert(1)</script>") is None
+
+    def test_vbscript_scheme_is_refused(self) -> None:
+        assert self._agent_url("vbscript:msgbox(1)") is None
+
+    def test_protocol_relative_url_is_refused(self) -> None:
+        # ``//evil.example/x`` inherits the page's scheme but jumps to
+        # an attacker host — refuse and let the operator be explicit.
+        assert self._agent_url("//evil.example/agent-guide") is None
+
+    def test_mailto_scheme_is_refused(self) -> None:
+        assert self._agent_url("mailto:agent@example.com") is None
+
+    def test_whitespace_only_returns_none(self) -> None:
+        assert self._agent_url("   ") is None
+
+    def test_leading_whitespace_is_trimmed(self) -> None:
+        # An operator pasting a URL might leave whitespace; we honor
+        # the URL once it's stripped — without revisiting the scheme
+        # check.
+        url = "  https://docs.example/agent-guide  "
+        assert self._agent_url(url) == "https://docs.example/agent-guide"
