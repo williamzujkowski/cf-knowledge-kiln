@@ -52,6 +52,7 @@ from cf_knowledge_kiln.api.forms import (
 )
 from cf_knowledge_kiln.api.rate_limit import TokenBucketLimiter, client_ip
 from cf_knowledge_kiln.api.views import (
+    deprecation_label,
     humanize_warning,
     log_human_query,
     score_tier,
@@ -357,6 +358,10 @@ def _result_card_view(
         # ladder per cell, so the tier policy lives in one Python
         # function (api.views.score_tier) that's unit-tested.
         "score_tier": score_tier(chunk.score),
+        # #268 editorial stamp text for non-current statuses. None for
+        # active/approved/draft so the template can conditionally
+        # render the stamp without a per-status switch.
+        "deprecation_label": deprecation_label(chunk.status),
     }
 
 

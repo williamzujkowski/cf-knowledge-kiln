@@ -43,8 +43,12 @@
   --gold:         #904b1a;
   --gold-tint:    #f1dec8;
   /* Deprecation-stripe carries the oxblood RGB so the dark-mode
-     override can boost the alpha for visibility against #212121. */
-  --oxblood-stripe: rgba(165, 36, 48, 0.06);
+     override can boost the alpha for visibility against #212121.
+     #268: bumped from 0.06 → 0.14 so the hatched pattern is
+     actually visible against the cool-white #f4f7fd paper at scan
+     speed (frontend audit flagged the 0.06 version as 'invisible
+     on 20-card lists'). */
+  --oxblood-stripe: rgba(165, 36, 48, 0.14);
 
   /* Type */
   --serif: "Fraunces", "Iowan Old Style", "Palatino Linotype", Palatino,
@@ -87,7 +91,9 @@
     --gold:         #ffcb6b;
     --gold-tint:    #3a2e1f;
     /* Dark-mode stripe uses the bright dracula red RGB so the
-       deprecation pattern remains visible against #212121. */
-    --oxblood-stripe: rgba(255, 85, 85, 0.06);
+       deprecation pattern remains visible against #212121.
+       #268: bumped 0.06 → 0.12 (dark theme can carry less alpha
+       than light before the stripe overwhelms text). */
+    --oxblood-stripe: rgba(255, 85, 85, 0.12);
   }
 }
