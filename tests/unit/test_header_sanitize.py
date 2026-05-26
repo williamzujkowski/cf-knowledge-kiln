@@ -37,10 +37,7 @@ class TestSanitizeOpaqueHeader:
     def test_dotted_passes_through(self) -> None:
         """Versioned ids like 'kiln.untrusted-content.v1' (PR #305)
         survive the sanitizer."""
-        assert (
-            sanitize_opaque_header("kiln.untrusted-content.v1")
-            == "kiln.untrusted-content.v1"
-        )
+        assert sanitize_opaque_header("kiln.untrusted-content.v1") == "kiln.untrusted-content.v1"
 
     def test_underscores_pass_through(self) -> None:
         assert sanitize_opaque_header("my_pipeline_42") == "my_pipeline_42"
@@ -92,7 +89,7 @@ class TestSanitizeOpaqueHeader:
     @pytest.mark.parametrize(
         "value,expected",
         [
-            ("Idempotency-Key-1", "Idempotency-Key-1"),
+            ("dash-shaped-value-7", "dash-shaped-value-7"),
             ("req_abc.123", "req_abc.123"),
             ("foo bar", "foo_bar"),
             (" \t leading-trim", "leading-trim"),
