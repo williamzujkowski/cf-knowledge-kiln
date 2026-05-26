@@ -21,11 +21,7 @@ from cf_knowledge_kiln.api.views import feedback_categories
 @pytest.fixture
 def env() -> jinja2.Environment:
     templates_dir = (
-        Path(__file__).resolve().parents[2]
-        / "src"
-        / "cf_knowledge_kiln"
-        / "api"
-        / "templates"
+        Path(__file__).resolve().parents[2] / "src" / "cf_knowledge_kiln" / "api" / "templates"
     )
     return jinja2.Environment(
         loader=jinja2.FileSystemLoader(str(templates_dir)),
@@ -55,9 +51,7 @@ def test_ack_carries_data_feedback_ack_marker(env: jinja2.Environment) -> None:
 
 
 @pytest.mark.parametrize("signal", [c[0] for c in feedback_categories()])
-def test_ack_carries_raw_signal_in_data_signal(
-    env: jinja2.Environment, signal: str
-) -> None:
+def test_ack_carries_raw_signal_in_data_signal(env: jinja2.Environment, signal: str) -> None:
     """data-signal is the RAW signal enum value (e.g.
     'duplicate_or_conflicting'), not the display label
     ('duplicate'). The JS announcement reformats it

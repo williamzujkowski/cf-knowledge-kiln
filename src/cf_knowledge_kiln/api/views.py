@@ -399,8 +399,8 @@ async def log_human_query(
 
 
 __all__ = [
-    "deprecation_label",
     "agent_guide_url",
+    "deprecation_label",
     "feedback_categories",
     "humanize_warning",
     "log_human_query",

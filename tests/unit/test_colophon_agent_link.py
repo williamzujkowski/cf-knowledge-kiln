@@ -12,11 +12,7 @@ import pytest
 @pytest.fixture
 def env() -> jinja2.Environment:
     templates_dir = (
-        Path(__file__).resolve().parents[2]
-        / "src"
-        / "cf_knowledge_kiln"
-        / "api"
-        / "templates"
+        Path(__file__).resolve().parents[2] / "src" / "cf_knowledge_kiln" / "api" / "templates"
     )
     env = jinja2.Environment(
         loader=jinja2.FileSystemLoader(str(templates_dir)),
