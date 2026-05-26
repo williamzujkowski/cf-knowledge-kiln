@@ -36,11 +36,7 @@ def _escape(s: str) -> str:
 @pytest.fixture
 def env() -> jinja2.Environment:
     templates_dir = (
-        Path(__file__).resolve().parents[2]
-        / "src"
-        / "cf_knowledge_kiln"
-        / "api"
-        / "templates"
+        Path(__file__).resolve().parents[2] / "src" / "cf_knowledge_kiln" / "api" / "templates"
     )
     env = jinja2.Environment(
         loader=jinja2.FileSystemLoader(str(templates_dir)),
@@ -91,9 +87,7 @@ def test_widget_aria_label_combines_label_and_tooltip(
     body = _render_widget(env)
     for _signal, label, tooltip in feedback_categories():
         aria = _escape(f"{label}: {tooltip}")
-        assert f'aria-label="{aria}"' in body, (
-            f"missing combined aria-label {aria!r}"
-        )
+        assert f'aria-label="{aria}"' in body, f"missing combined aria-label {aria!r}"
 
 
 def test_widget_keeps_visible_label_text(env: jinja2.Environment) -> None:
