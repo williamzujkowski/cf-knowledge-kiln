@@ -65,6 +65,149 @@ class TestHighlightExcerpt:
         assert "&amp;" in text
         assert "<mark>widgets</mark>" in text
 
+    # ─── #291: phrase-level highlighting when terms co-occur ─────────
+
+    def test_full_query_phrase_wraps_in_single_mark(self) -> None:
+        """When the excerpt contains the exact ordered query phrase,
+        ONE wrapping <mark> covers the whole span — not three separate
+        marks for three separate terms (the pre-#291 behavior). Reads
+        as 'this is the phrase you searched for', not 'three unrelated
+        terms happened to land near each other'."""
+        out = _highlight_excerpt(
+            "The postgres connection pool is configured here.",
+            "postgres connection pool",
+        )
+        text = str(out)
+        # Exact phrase wrapped as a single mark.
+        assert "<mark>postgres connection pool</mark>" in text
+        # And explicitly NOT split into three sibling marks.
+        assert "<mark>postgres</mark> <mark>connection</mark> <mark>pool</mark>" not in text
+
+    def test_phrase_match_tolerates_whitespace_variants(self) -> None:
+        """The phrase regex uses \\s+ between terms so multiple spaces,
+        tabs, or newlines between the words still match. Without this,
+        any text that wrapped the phrase across line breaks would
+        silently fall back to per-term marks."""
+        out = _highlight_excerpt(
+            "The postgres   connection\tpool spans whitespace.",
+            "postgres connection pool",
+        )
+        text = str(out)
+        # One mark covering 'postgres   connection\tpool' with the
+        # original whitespace preserved between the terms.
+        assert "<mark>postgres   connection\tpool</mark>" in text
+
+    def test_partial_subsequence_marks_subsequence_only(self) -> None:
+        """If the full phrase isn't present but a 2-of-3 contiguous
+        subsequence is (e.g. 'connection pool' appears in order, but
+        'postgres' is elsewhere), the subsequence wraps as one mark
+        and 'postgres' gets its own per-term mark. The longest match
+        wins at each scan position."""
+        out = _highlight_excerpt(
+            "Postgres tuning is fine; just check the connection pool size.",
+            "postgres connection pool",
+        )
+        text = str(out)
+        # 'Postgres' (single term, separately) wrapped.
+        assert "<mark>Postgres</mark>" in text
+        # 'connection pool' (2-term subsequence) wrapped as ONE mark.
+        assert "<mark>connection pool</mark>" in text
+
+    def test_phrase_absent_falls_back_to_per_term(self) -> None:
+        """Backward-compat: when no contiguous subsequence of ≥2 terms
+        matches, the per-term highlighter (the pre-#291 behavior)
+        carries the result. Pins that the phrase pass is additive,
+        not a replacement."""
+        out = _highlight_excerpt(
+            "pool here, connection elsewhere, postgres way over there",
+            "postgres connection pool",
+        )
+        text = str(out)
+        assert "<mark>postgres</mark>" in text
+        assert "<mark>connection</mark>" in text
+        assert "<mark>pool</mark>" in text
+
+    def test_single_term_query_unchanged_behavior(self) -> None:
+        """A 1-term query has no phrase semantics — the new pass
+        is a no-op. Pins backward compat for the most common
+        query shape."""
+        out = _highlight_excerpt("the widgets are here", "widgets")
+        text = str(out)
+        assert text.count("<mark>") == 1
+        assert "<mark>widgets</mark>" in text
+
+    def test_phrase_with_regex_metachars_is_escaped(self) -> None:
+        """A query phrase containing regex metachars (., +, *, etc.)
+        must not slip into the alternation pattern un-escaped — that
+        would change the meaning of the regex and could ReDoS. The
+        existing per-term path uses re.escape; the phrase path must
+        too."""
+        # `.` is regex metachar; `+` is regex metachar.
+        out = _highlight_excerpt("The file.ext+suffix lives here.", "file.ext+suffix")
+        text = str(out)
+        # Literal '.' and '+' are matched; nothing weird like the
+        # regex `.` matching any char or `+` causing quantifier errors.
+        assert "<mark>file.ext+suffix</mark>" in text
+
+    def test_phrase_html_safety_property(self) -> None:
+        """End-to-end XSS guard: a query and a text BOTH carrying
+        HTML metachars cannot produce a real tag in output. Pins
+        the escape-then-inject pattern survives the phrase code
+        path too."""
+        out = _highlight_excerpt("Search <img src=x> tag results", "<img src=x>")
+        text = str(out)
+        # No real <img tag.
+        assert "<img" not in text
+        # Escaped form appears.
+        assert "&lt;img" in text
+
+    def test_long_query_skips_phrase_pass_but_still_marks_per_term(self) -> None:
+        """Reviewer-flagged defensive cap: a 50-term adversarial query
+        would generate ~1,275 subsequence alternatives and blow regex
+        compile time. Past the _PHRASE_TERM_CAP (12), the phrase pass
+        is skipped — per-term highlighting carries the result so the
+        user still gets a useful mark on each term, just no phrase
+        wrapping. Pins the safety valve so a future bypass attempt
+        doesn't quietly remove the cap."""
+        # 20 distinct non-prefix-colliding terms — use shapes like
+        # 'alpha', 'bravo' rather than 'term1'/'term19' (which would
+        # have per-term match consume prefixes and confuse the
+        # assertion).
+        terms = [
+            "alpha",
+            "bravo",
+            "charlie",
+            "delta",
+            "echo",
+            "foxtrot",
+            "golf",
+            "hotel",
+            "india",
+            "juliet",
+            "kilo",
+            "lima",
+            "mike",
+            "november",
+            "oscar",
+            "papa",
+            "quebec",
+            "romeo",
+            "sierra",
+            "tango",
+        ]
+        query = " ".join(terms)
+        text = " ".join(terms)
+        out = _highlight_excerpt(text, query)
+        result = str(out)
+        # Every term still gets a per-term mark (per-term path is
+        # always taken regardless of the cap).
+        assert "<mark>alpha</mark>" in result
+        assert "<mark>tango</mark>" in result
+        # And NO multi-term phrase-wrapping mark appears (the phrase
+        # pass was skipped past the cap). A wrapping mark would look
+        # like "<mark>alpha bravo</mark>" — assert it's absent.
+        assert "<mark>alpha bravo</mark>" not in result
+
 
 class TestHumanizeWarning:
     def test_known_type_uses_spec_copy(self) -> None:
