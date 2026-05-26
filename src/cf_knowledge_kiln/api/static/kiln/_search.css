@@ -225,6 +225,41 @@
   font-variation-settings: "opsz" 14;
 }
 
+/* #273: active-filter count chip on the summary. Editorial dot +
+   number ("· 2 active") in small-caps to read as a margin note, not
+   a notification badge. Color shifts to --ink (full ink) so the
+   active-count is the strongest signal on the closed rail summary;
+   when the rail is open the count still renders but the rail's grid
+   below it carries the detail. Hidden in print (--print-text below
+   handles desktop fallback). */
+.filter-rail-count {
+  font-family: var(--serif);
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  font-variant-caps: all-small-caps;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--ink);
+  /* The leading "· " is part of the text content so it reflows with
+     the label and disappears in screen-reader output via aria-label
+     on the span. */
+}
+
+/* When the rail is collapsed AND has active filters, draw the dashed
+   top rule in oxblood-tint so the visual signal stacks: caret + label
+   + count + a colored rule. With the rail open, the existing
+   .filter-rail[open] block keeps the neutral dashed rules so the
+   detail surface reads as the focus. */
+.filter-rail-active:not([open]) {
+  border-block-start-color: var(--oxblood-tint);
+  /* A subtle paint shift on the count so the chip reads as "the
+     reason this rule changed color" without needing a separate hover. */
+}
+
+.filter-rail-active:not([open]) .filter-rail-count {
+  color: var(--oxblood);
+}
+
 .filter-rail-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

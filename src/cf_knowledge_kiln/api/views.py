@@ -178,6 +178,60 @@ def deprecation_label(status: str) -> str | None:
     return _DEPRECATION_LABELS.get(status)
 
 
+# Rail-filter field set (#273). Order doesn't matter for the count,
+# but pinning the list here means a future field addition lands in
+# both the helper AND its tests (the unit suite uses these names).
+# Each value is one of:
+#   * a string  — treated as active iff .strip() is truthy (matches
+#     forms.split_csv which returns [] for whitespace-only input)
+#   * a list    — treated as active iff non-empty
+_RAIL_FIELDS: tuple[str, ...] = (
+    "repo",
+    "doc_type",
+    "owner",
+    "last_reviewed_after",
+    "tags",
+)
+
+
+def rail_filters_active_count(filters_view: dict[str, Any]) -> int:
+    """Count how many rail filter fields carry a real constraint (#273).
+
+    A field counts iff its value would propagate as a non-None
+    constraint to the retrieval engine. Mirrors :func:`forms.split_csv`
+    and :func:`forms.filters_from_form` so the visual badge can't
+    drift from what the engine actually sees.
+
+    The template reads the return value twice:
+
+    * ``{% if rail_filters_active_count(...) %}<details open>`` so a
+      filter is never hidden behind a default-closed rail.
+    * ``"· N active"`` suffix on the summary label so the count is
+      visible while the rail is collapsed.
+
+    Safe against missing keys / ``None`` values so a future template
+    fixture or partial view dict doesn't KeyError.
+    """
+    count = 0
+    for field in _RAIL_FIELDS:
+        value = filters_view.get(field)
+        if value is None:
+            continue
+        if isinstance(value, list):
+            if value:
+                count += 1
+        elif isinstance(value, str):
+            if value.strip():
+                count += 1
+        else:
+            # Defensive: an unexpected type (int? date?) is treated as
+            # truthy iff bool() agrees. Never silently drops a
+            # constraint a future field type might carry.
+            if value:
+                count += 1
+    return count
+
+
 def split_warnings(
     warnings: list[dict[str, Any]],
     result_document_ids: set[str],
@@ -242,6 +296,7 @@ __all__ = [
     "deprecation_label",
     "humanize_warning",
     "log_human_query",
+    "rail_filters_active_count",
     "score_tier",
     "split_warnings",
     "warning_severity",

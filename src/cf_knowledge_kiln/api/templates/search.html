@@ -68,10 +68,31 @@
 
     {# #118: expanded filter rail. Closed by default — the dominant
        flow is query + status. Power users open it once; the browser
-       remembers the open state for the session. #}
-    <details class="filter-rail" aria-label="More filters">
+       remembers the open state for the session.
+
+       #273: when ANY rail field has a value, render the rail open so
+       active filters are visible at-a-glance, AND tack a "· N active"
+       count onto the summary so the closed state still surfaces the
+       fact. The count is server-rendered via rail_filters_active_count
+       in api.views — same predicate the engine uses, so the badge
+       can't drift from what actually constrains retrieval. #}
+    {% set _rail_active = rail_active_count | default(0) %}
+    {# aria-label is dynamic so a screen reader announces the active
+       count along with the disclosure name. A static "More filters"
+       label would override the visible "· N active" badge for AT
+       users — sighted users would see the count, screen-reader users
+       wouldn't. The aria-label on the count span is now redundant
+       (the dynamic details label covers it) so it's dropped to
+       prevent double-announcement. #}
+    <details
+      class="filter-rail{% if _rail_active %} filter-rail-active{% endif %}"
+      aria-label="More filters{% if _rail_active %} · {{ _rail_active }} active filter{% if _rail_active != 1 %}s{% endif %}{% endif %}"
+      {% if _rail_active %}open{% endif %}>
       <summary class="filter-rail-toggle">
         <span class="filter-rail-label">More filters</span>
+        {% if _rail_active %}
+          <span class="filter-rail-count" aria-hidden="true">· {{ _rail_active }} active</span>
+        {% endif %}
         <span class="filter-rail-hint" aria-hidden="true">repo · doc_type · owner · reviewed after · tags</span>
       </summary>
 

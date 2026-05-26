@@ -111,6 +111,30 @@ def test_search_page_renders_form(client: TestClient) -> None:
     assert "What are you trying to remember?" in body
 
 
+def test_filter_rail_closed_with_no_active_filters(client: TestClient) -> None:
+    """#273: default render has no active filters → rail collapsed,
+    no active-count badge. Pins the negative case so a regression
+    that always opens the rail (or always shows the badge) trips."""
+    import re
+
+    response = client.get("/")
+    body = response.text
+    # `<details class="filter-rail" ...>` without the `open` attribute
+    # and without the active modifier class.
+    assert 'class="filter-rail"' in body
+    assert 'class="filter-rail filter-rail-active"' not in body
+    # The "open" attribute appears ONLY when rail filters are active.
+    # Whitespace-insensitive match against the details tag — any
+    # template re-indent stays green; an unconditional `open` on
+    # filter-rail trips it.
+    rail_tag = re.search(r"<details\b[^>]*class=\"filter-rail[^\"]*\"[^>]*>", body, re.DOTALL)
+    assert rail_tag is not None
+    assert "open" not in rail_tag.group(0)
+    # No active-count chip in the markup.
+    assert "filter-rail-count" not in body
+    assert "active filter" not in body
+
+
 def test_static_css_is_served(client: TestClient) -> None:
     response = client.get("/static/kiln.css")
     assert response.status_code == 200

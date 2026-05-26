@@ -56,6 +56,7 @@ from cf_knowledge_kiln.api.views import (
     deprecation_label,
     humanize_warning,
     log_human_query,
+    rail_filters_active_count,
     score_tier,
     split_warnings,
 )
@@ -74,10 +75,20 @@ router = APIRouter(tags=["web"], include_in_schema=False)
 @router.get("/", response_class=HTMLResponse)
 async def search_page(request: Request) -> HTMLResponse:
     """Render the search page shell. No query yet → empty results."""
+    filters_view = empty_filters_view()
+    # #273: filters are always empty on this entry, so the count is
+    # 0; the template renders the rail closed with no badge. Threaded
+    # uniformly with the POST path so a future URL-state restore PR
+    # only has to populate filters_view to light up the open + badge.
     return templates.TemplateResponse(
         request,
         "search.html",
-        {"query": "", "initial_results": None, "filters": empty_filters_view()},
+        {
+            "query": "",
+            "initial_results": None,
+            "filters": filters_view,
+            "rail_active_count": rail_filters_active_count(filters_view),
+        },
     )
 
 
