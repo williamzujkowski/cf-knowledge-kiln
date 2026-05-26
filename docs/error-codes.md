@@ -149,7 +149,7 @@ The enum is closed by design. Adding a code is a deliberate API change:
 
 The semver implication: adding an enum value is **backward-compatible for consumers that switch on `error_code` with a default branch**. Consumers that exhaustively pattern-match (Rust `match`, Python's `match`+`case` with no wildcard) will need to update. Document any addition in the PR description as "API additive" so downstream agents can grep their releases.
 
-Removing or renaming a code is a **semver-major** change and goes through the API compatibility policy (planned ADR-0012 under epic [#270](https://github.com/williamzujkowski/cf-knowledge-kiln/issues/270)).
+Removing or renaming a code is a **semver-major** change and goes through the [API compatibility policy](./adr/0011-api-compatibility-policy.md) — pre-announce with `deprecated: true` and a `Deprecation`/`Sunset` header for ≥ 1 minor before removal.
 
 ---
 

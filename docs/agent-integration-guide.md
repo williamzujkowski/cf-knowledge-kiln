@@ -159,6 +159,8 @@ Always present. Always include the prose (or a paraphrase) in your system prompt
 
 The `untrusted_content_notice_id` is the stable handle a codegen consumer should switch on (`kiln.untrusted-content.v1` today). Shape: `kiln.untrusted-content.vN`. The kiln may bump the prose text without changing the id when the edit is cosmetic; changing the id is a semver-major signal that the meaning changed (e.g., a new constraint was added). Agents that don't recognize the id should fall back to the safe default — refuse to treat source text as instructions — until they're updated to handle the new contract.
 
+This is the canonical "stable handle for prose that may evolve" pattern — see [ADR-0011: API compatibility and schema evolution policy](./adr/0011-api-compatibility-policy.md) for the full set of rules the kiln holds itself to (additive vs breaking changes, `Deprecation`/`Sunset` headers, the `extra=forbid` round-trip hazard).
+
 ---
 
 ## 5. Warnings
