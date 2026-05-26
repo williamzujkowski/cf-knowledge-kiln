@@ -54,6 +54,7 @@ from cf_knowledge_kiln.api.forms import (
 from cf_knowledge_kiln.api.rate_limit import TokenBucketLimiter, client_ip
 from cf_knowledge_kiln.api.request_id import request_id_for
 from cf_knowledge_kiln.api.views import (
+    agent_guide_url,
     deprecation_label,
     feedback_categories,
     humanize_warning,
@@ -76,6 +77,10 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 # any render context without each route having to thread it through
 # the per-call dict.
 templates.env.globals["feedback_categories"] = feedback_categories
+# #314: agent guide URL helper for the colophon link. Returns None
+# when KILN_AGENT_GUIDE_URL is unset, in which case the template
+# conditional skips rendering the link entirely.
+templates.env.globals["agent_guide_url"] = agent_guide_url
 
 router = APIRouter(tags=["web"], include_in_schema=False)
 

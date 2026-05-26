@@ -34,6 +34,10 @@ def env() -> jinja2.Environment:
     # full FastAPI test client. We only assert on the filter rail
     # markup, not the head <link> output.
     env.globals["url_for"] = lambda *_a, **_kw: "/static/stub.css"
+    # #314: base.html calls agent_guide_url() in the colophon; stub
+    # to None so the conditional skips rendering the link entirely
+    # (matches the default-unset stock-deploy behavior).
+    env.globals["agent_guide_url"] = lambda: None
     return env
 
 

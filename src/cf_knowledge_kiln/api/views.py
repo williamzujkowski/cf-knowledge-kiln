@@ -313,6 +313,52 @@ def feedback_categories() -> tuple[tuple[str, str, str], ...]:
     return _FEEDBACK_CATEGORIES
 
 
+def agent_guide_url() -> str | None:
+    """Return the configured agent-integration-guide URL, or None (#314).
+
+    Reads ``KILN_AGENT_GUIDE_URL`` (optional setting). When set, the
+    colophon renders an "Agents → /v1/agent/context-pack" link so a
+    visiting engineer discovers the agent surface without grepping
+    docs. When unset (default), the link is omitted entirely — no
+    placeholder, no env-var-pollution on stock deployments.
+
+    Returned via the live ``get_settings()`` lookup (not a cached
+    module-level constant) so tests + runtime overrides of the
+    env var pick up immediately. The Jinja template registration
+    in ``api/web.py`` wires this into the global namespace.
+
+    Security: the value goes into an ``href`` attribute, so we reject
+    anything that isn't a safe URL scheme. Operator misconfiguration
+    or an env-injection attack that sets the var to ``javascript:…``
+    or ``data:…`` would otherwise execute attacker JS on every
+    rendered page (Jinja autoescape doesn't sanitize URL schemes).
+    Allowed: ``https://``, ``http://``, and same-origin paths
+    starting with ``/``. Anything else → log + return None (link is
+    silently dropped, NOT rendered as a broken/dangerous link).
+    """
+    from cf_knowledge_kiln.config import get_settings
+
+    raw = get_settings().agent_guide_url
+    if raw is None:
+        return None
+    candidate = raw.strip()
+    if not candidate:
+        return None
+    # Same-origin absolute path is always safe.
+    if candidate.startswith("/") and not candidate.startswith("//"):
+        return candidate
+    # Otherwise require an explicit http(s) scheme. Anything else
+    # (javascript:, data:, vbscript:, mailto:, custom-scheme:) is
+    # refused so the template can't render a hostile href.
+    if candidate.startswith(("https://", "http://")):
+        return candidate
+    logger.warning(
+        "agent_guide_url: refusing non-http(s) scheme %r; check KILN_AGENT_GUIDE_URL",
+        candidate[:32],
+    )
+    return None
+
+
 def split_warnings(
     warnings: list[dict[str, Any]],
     result_document_ids: set[str],
@@ -380,6 +426,7 @@ async def log_human_query(
 
 
 __all__ = [
+    "agent_guide_url",
     "deprecation_label",
     "feedback_categories",
     "humanize_warning",

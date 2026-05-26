@@ -167,6 +167,15 @@ class Settings(BaseSettings):
     otel_exporter_otlp_endpoint: str | None = None
     otel_service_name: str = "cf-knowledge-kiln"
 
+    # #314: optional URL to the agent integration guide, surfaced as a
+    # "Agents → /v1/agent/context-pack" link in the colophon so a
+    # visiting engineer discovers the agent endpoint surface (UX-audit
+    # finding: undiscoverable from the human UI). Default-None means
+    # the link is omitted entirely on stock deployments — fork
+    # operators set this to their published guide URL (typically the
+    # GitHub blob URL of docs/agent-integration-guide.md).
+    agent_guide_url: str | None = None
+
     # #198: upper bound on the one-shot embedding-provider health probe
     # run at startup. 90 s gives ~3x the previous 30 s headroom for
     # cold first-call HuggingFace weight pulls, while leaving a 30 s
