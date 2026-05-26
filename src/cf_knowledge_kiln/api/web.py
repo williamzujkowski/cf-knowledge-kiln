@@ -54,6 +54,7 @@ from cf_knowledge_kiln.api.rate_limit import TokenBucketLimiter, client_ip
 from cf_knowledge_kiln.api.request_id import request_id_for
 from cf_knowledge_kiln.api.views import (
     deprecation_label,
+    feedback_categories,
     humanize_warning,
     log_human_query,
     rail_filters_active_count,
@@ -68,6 +69,11 @@ logger = logging.getLogger(__name__)
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+# #278: register the feedback-categories helper as a Jinja global so
+# the included ``_feedback_widget.html`` partial can iterate it from
+# any render context without each route having to thread it through
+# the per-call dict.
+templates.env.globals["feedback_categories"] = feedback_categories
 
 router = APIRouter(tags=["web"], include_in_schema=False)
 
