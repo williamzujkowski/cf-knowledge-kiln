@@ -106,7 +106,7 @@ def test_oidc_bearer_fallback_requires_static_token() -> None:
         auth_mode="oidc",
         oidc_issuer="https://issuer.example",
         oidc_client_id="kiln",
-        oidc_client_secret="shh",  # noqa: S106
+        oidc_client_secret="shh",
         oidc_allow_bearer_fallback=True,
     )
     app = FastAPI()
@@ -120,7 +120,7 @@ def test_oidc_session_secret_default_warning(caplog: pytest.LogCaptureFixture) -
         auth_mode="oidc",
         oidc_issuer="https://issuer.example",
         oidc_client_id="kiln",
-        oidc_client_secret="shh",  # noqa: S106
+        oidc_client_secret="shh",
     )
     app = FastAPI()
     with caplog.at_level("WARNING"):
@@ -136,7 +136,7 @@ def test_oidc_minimal_config_wires_middleware() -> None:
         auth_mode="oidc",
         oidc_issuer="https://issuer.example",
         oidc_client_id="kiln",
-        oidc_client_secret="shh",  # noqa: S106
+        oidc_client_secret="shh",
         oidc_session_secret="signing-key-x" * 4,
     )
     app = FastAPI()
@@ -220,9 +220,7 @@ def test_browser_get_without_session_redirects_to_login(
     assert qs["next"] == ["/"]
 
 
-def test_api_get_without_token_returns_401(
-    monkeypatch: pytest.MonkeyPatch, oidc_env: None
-) -> None:
+def test_api_get_without_token_returns_401(monkeypatch: pytest.MonkeyPatch, oidc_env: None) -> None:
     """A non-browser request → 401 JSON envelope."""
     monkeypatch.setattr(OIDCAuthMiddleware, "_ensure_discovery", _stub_ensure_discovery)
     with TestClient(create_app(), follow_redirects=False) as c:
@@ -232,9 +230,7 @@ def test_api_get_without_token_returns_401(
     assert body["error_code"] == "auth_required"
 
 
-def test_login_emits_pkce_state_cookie(
-    monkeypatch: pytest.MonkeyPatch, oidc_env: None
-) -> None:
+def test_login_emits_pkce_state_cookie(monkeypatch: pytest.MonkeyPatch, oidc_env: None) -> None:
     """``/auth/login`` redirects to the issuer with a PKCE S256 challenge.
 
     Verifies the request lands on ``authorization_endpoint``, the

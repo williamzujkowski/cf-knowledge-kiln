@@ -37,7 +37,7 @@ fire on a real deploy and now catches the regression in seconds.
 from __future__ import annotations
 
 import shutil
-import subprocess  # noqa: S404 — sandboxed, explicit args
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -214,7 +214,7 @@ def check_example_configs(failures: list[str]) -> None:
         try:
             load_embedding_config(models_example)
             _ok("models.example.yaml loads via load_embedding_config (#241)")
-        except Exception as exc:  # noqa: BLE001 — surface all loader errors
+        except Exception as exc:
             _fail(f"models.example.yaml fails to load: {exc}", failures)
 
     sources_example = REPO_ROOT / "config" / "sources.example.yaml"
@@ -224,7 +224,7 @@ def check_example_configs(failures: list[str]) -> None:
         try:
             SourceAllowlist.from_yaml(sources_example)
             _ok("sources.example.yaml loads via SourceAllowlist.from_yaml (#241)")
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             _fail(f"sources.example.yaml fails to load: {exc}", failures)
 
 

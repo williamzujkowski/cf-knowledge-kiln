@@ -214,6 +214,7 @@ action, the contract for adding a code), see
 | `invalid_filter_value`    | 400    | No          | An unknown enum value in `filters`. Check the [registry](#registry-of-allowed-values) (planned: GET endpoint). |
 | `token_budget_too_low`    | 400    | No          | Increase `max_tokens` so at least one chunk fits.               |
 | `rate_limited`            | 429    | Yes         | Honor `retry_after_seconds` / `Retry-After` header.            |
+| `idempotency_conflict`    | 422    | No          | Idempotency-Key reused with a different body. See §6.5. Use a fresh key. |
 | `db_unreachable`          | 503    | Yes         | Transient. Retry after `retry_after_seconds` (default 30).      |
 | `embedding_unavailable`   | 503    | Yes         | Embedding provider down; FTS-only retrieval may still be available on a different request. |
 | `generator_unavailable`   | 503    | No          | The kiln has no generator configured. Switch to `/v1/agent/context-pack` and synthesize on your side. |
@@ -251,6 +252,64 @@ delay = envelope.get("retry_after_seconds") or resp.headers.get("Retry-After") o
 sleep(int(delay) + jitter())
 # Retry; bound the loop with a max attempt count.
 ```
+
+---
+
+## 6.5. Idempotent retries — `Idempotency-Key`
+
+`/v1/search`, `/v1/agent/context-pack`, and `/v1/answer` honor the industry-standard `Idempotency-Key` header (#309). Use it to make retries replay-safe:
+
+```python
+# Pseudocode for a retry-safe agent caller
+import uuid
+
+call_key = str(uuid.uuid4())  # one key per LOGICAL operation
+for attempt in range(5):
+    resp = http.post(
+        url,
+        json=body,
+        headers={
+            "Authorization": auth,
+            "Idempotency-Key": call_key,  # SAME across retries
+        },
+    )
+    if resp.headers.get("Idempotency-Replayed") == "true":
+        # Server returned the original response, byte-identical.
+        # No new retriever invocation, no telemetry row, no
+        # rate-limit token burned. Safe to use exactly like a
+        # first-attempt success.
+        ...
+    if resp.status_code < 500 or not envelope_says_retry_safe(resp):
+        break
+    backoff(attempt)
+```
+
+### Contract
+
+| Inbound | Server behavior |
+|---|---|
+| Header absent | Current non-idempotent behavior — normal request flow |
+| Header present, first request | Normal response; cached for **24 hours** keyed on `(Idempotency-Key, route)` |
+| Header present, same key + **same body** | Byte-identical cached response + `Idempotency-Replayed: true` response header. No retriever invocation, no telemetry write, no rate-limit token burn. |
+| Header present, same key + **different body** | 422 with `error_code: "idempotency_conflict"` — agent changed its mind mid-retry |
+
+Cached: 2xx + 4xx responses. **NOT cached**: 5xx (transient — the retry contract says re-execute). Cache TTL: 24h, swept periodically.
+
+### Key shape
+
+Opaque string, **≤ 200 chars**, charset `[A-Za-z0-9._-]`. Anything else gets sanitized to `_` before storage. Pick whatever shape your operation tooling produces — UUIDs, deterministic hashes of `(task + query + timestamp-bucket)`, hierarchical pipeline IDs like `pipeline-42/step-7`, all work.
+
+### When to use a fresh key vs reuse
+
+- **One key per logical operation.** All retry attempts within that operation reuse the same key. The dispatcher recognizes them as the same intent.
+- **Two different operations: two different keys.** Even if the bodies happen to be identical (e.g. "summarize widget docs" submitted by two unrelated workflows), use different keys. The 24h cache window means the second caller would get the first caller's response.
+- **Per-route isolation.** The same key against `/v1/answer` and `/v1/agent/context-pack` are independent — the storage PK is `(key, route)`. Reuse a single key across an entire pipeline if that's convenient.
+
+### What's stored vs not
+
+Stored: the response body (verbatim, for replay), status code, and a SHA-256 of the request body (for conflict detection). **Not** stored: the agent's bearer token, the agent's identity, anything beyond the request body itself.
+
+If your operation passes PII or evidence-bearing content as part of the request, that content lives in the cache for 24h. For PII-sensitive workloads, prefer short cache windows (file a feature request) or skip the header.
 
 ---
 

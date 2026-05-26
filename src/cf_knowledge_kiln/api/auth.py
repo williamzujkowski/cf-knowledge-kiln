@@ -735,7 +735,7 @@ class OIDCAuthMiddleware:
         response.delete_cookie(_STATE_COOKIE, path="/")
         return response
 
-    async def _handle_logout(self, request: Request) -> Response:
+    async def _handle_logout(self, _request: Request) -> Response:
         """Clear the session cookie and redirect to the IdP logout (if any)."""
         discovery = await self._ensure_discovery()
         end_session = discovery.get("end_session_endpoint")

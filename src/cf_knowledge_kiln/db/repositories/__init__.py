@@ -16,6 +16,7 @@ from cf_knowledge_kiln.db.repositories.documents import (
     DocumentsRepository,
     EmbeddingsRepository,
 )
+from cf_knowledge_kiln.db.repositories.idempotency import IdempotencyRepository
 from cf_knowledge_kiln.db.repositories.operations import (
     AnswersRepository,
     ContextPacksRepository,
@@ -33,6 +34,7 @@ __all__ = [
     "DocumentsRepository",
     "EmbeddingsRepository",
     "FeedbackRepository",
+    "IdempotencyRepository",
     "IngestionJobsRepository",
     "IngestionRunsRepository",
     "ModelRegistryRepository",

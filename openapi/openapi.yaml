@@ -117,6 +117,8 @@ paths:
         Response is UI-friendly: result cards with previews, freshness,
         and source links.
       operationId: humanSearch
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -174,6 +176,8 @@ paths:
         `weak_evidence` warning. Same untrusted-content notice as
         `/v1/agent/context-pack`.
       operationId: answer
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -232,6 +236,8 @@ paths:
         token budgets. Always includes `warnings` and
         `requires_human_review`. Retrieved text is labeled untrusted.
       operationId: agentContextPack
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -325,6 +331,31 @@ components:
             email: Email claim
 
   # #294: reusable error responses, each wired to the ErrorResponse
+  # #309: reusable Idempotency-Key request header parameter. Agent
+  # POST endpoints honor this header to make retries replay-safe.
+  # Operations $ref this from their `parameters:` block; the dispatch
+  # logic in api/idempotency.py wires it to the request path.
+  parameters:
+    IdempotencyKey:
+      in: header
+      name: Idempotency-Key
+      required: false
+      description: |
+        Opaque per-operation idempotency key, ≤200 chars after
+        sanitization to `[A-Za-z0-9._-]`. When present, a retry with
+        the same key + same request body returns the original cached
+        response byte-identically with `Idempotency-Replayed: true`
+        on the response — no retriever invocation, no telemetry
+        write, no rate-limit token burn. A retry with the same key
+        but DIFFERENT body returns 422 `idempotency_conflict`.
+        Cached responses live for 24 h. When the header is absent
+        the endpoint uses its normal non-idempotent behavior.
+      schema:
+        type: string
+        pattern: "^[A-Za-z0-9._-]+$"
+        maxLength: 200
+        example: 4b3f1c8e-0d2a-4f3e-9c1b-7a5b8e2d4f6a
+
   # envelope with a representative example. Operations $ref these
   # by status so adding a new error response on an endpoint is one
   # line instead of a full block.
@@ -418,6 +449,20 @@ components:
         retry_safe: false
         request_id: 4b3f1c8e-0d2a-4f3e-9c1b-7a5b8e2d4f6a
         detail: null
+    IdempotencyConflictError:
+      summary: 422 — Idempotency-Key reused with a different body
+      description: |
+        Returned when a request reuses an `Idempotency-Key` from a
+        prior request within the 24h cache window but sends a
+        body that doesn't match the canonicalized hash of the
+        original. Indicates the agent changed its mind mid-retry
+        — fail loudly so the operator notices.
+      value:
+        error_code: idempotency_conflict
+        message: Idempotency-Key reuse with different body.
+        retry_safe: false
+        request_id: 4b3f1c8e-0d2a-4f3e-9c1b-7a5b8e2d4f6a
+        detail: null
 
   schemas:
     ErrorResponse:
@@ -441,6 +486,7 @@ components:
             - invalid_filter_value
             - token_budget_too_low
             - rate_limited
+            - idempotency_conflict
             # Server errors (5xx)
             - db_unreachable
             - embedding_unavailable

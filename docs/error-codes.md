@@ -83,6 +83,14 @@ This page is the canonical reference: the closed-set `error_code` enum, what eac
 - **Detail shape:** `null` (the bucket name isn't surfaced — it'd let a probing client map the limit topology).
 - **Operator action:** Wait `retry_after_seconds` (also in the `Retry-After` header). Exponential back-off on repeated 429s.
 
+#### `idempotency_conflict`
+
+- **Status:** 422
+- **Retry-safe:** **No.** (Body mismatch is a deterministic client bug, not a transient failure.)
+- **When it fires:** A request reused an `Idempotency-Key` from the prior 24h cache window but the canonicalized SHA-256 of the body doesn't match the cached original. The agent changed its mind mid-retry — the dispatcher fails loudly so the operator notices.
+- **Detail shape:** `null`.
+- **Operator action:** Pick a fresh `Idempotency-Key` for the changed body. The original cached response stays intact (a retry with the original body still replays normally). See [agent-integration-guide.md §6.5](./agent-integration-guide.md#65-idempotent-retries--idempotency-key).
+
 ### Server errors (5xx)
 
 #### `db_unreachable`
