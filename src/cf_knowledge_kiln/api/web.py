@@ -434,10 +434,38 @@ def _highlight_excerpt(text: str, query: str) -> Markup:
     if not terms:
         return escape(text)
     escaped = str(escape(text))
-    pattern = re.compile(
-        r"(" + "|".join(re.escape(t) for t in terms) + r")",
-        re.IGNORECASE,
-    )
+    # #291: build a regex alternation that tries contiguous
+    # subsequences of ≥2 query terms FIRST (longest-first), then
+    # falls back to individual terms. When the excerpt contains the
+    # full phrase, the longest alternative wins at that scan position
+    # and a single wrapping <mark> covers the whole span — reads as
+    # 'this is the phrase you searched for' instead of three
+    # unrelated terms that happened to land near each other.
+    #
+    # Whitespace BETWEEN phrase terms is matched as \s+ so the
+    # phrase regex still works across tabs / newlines / multi-spaces
+    # the autoescape preserves verbatim.
+    #
+    # Subsequences are O(N²) in query length — for typical 2-5 term
+    # queries that's 6-15 alternatives, well within regex budget. A
+    # 50-term adversarial query would generate 1,275 alternatives and
+    # blow regex-compile time (~500ms). _PHRASE_TERM_CAP guards the
+    # tail of that curve — past the cap, the phrase pass is skipped
+    # and per-term highlighting carries the result. The cap is
+    # generous enough that no realistic human query trips it.
+    _PHRASE_TERM_CAP = 12
+    alts: list[str] = []
+    if 2 <= len(terms) <= _PHRASE_TERM_CAP:
+        # Longest subsequences first so the leftmost-longest match
+        # rule of `|` alternation produces the maximum-span mark.
+        for length in range(len(terms), 1, -1):
+            for start in range(len(terms) - length + 1):
+                subseq = terms[start : start + length]
+                alts.append(r"\s+".join(re.escape(t) for t in subseq))
+    # Individual terms come last so per-term matches only happen
+    # where no subsequence matched at that scan position.
+    alts.extend(re.escape(t) for t in terms)
+    pattern = re.compile("(" + "|".join(alts) + ")", re.IGNORECASE)
     # The only literal HTML we inject is the <mark> tag. Everything
     # else flowing through this Markup() is the output of escape(),
     # so the result is XSS-safe by construction.
