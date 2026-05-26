@@ -41,7 +41,10 @@ from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from cf_knowledge_kiln.agent.serializers import UNTRUSTED_CONTENT_NOTICE
+from cf_knowledge_kiln.agent.serializers import (
+    UNTRUSTED_CONTENT_NOTICE,
+    UNTRUSTED_CONTENT_NOTICE_ID,
+)
 from cf_knowledge_kiln.generation import GeneratorProvider
 from cf_knowledge_kiln.retrieval.engine import HybridRetriever
 from cf_knowledge_kiln.retrieval.types import (
@@ -149,6 +152,7 @@ def _no_evidence_refusal(
         generator_provider=None,
         generator_model=None,
         untrusted_content_notice=UNTRUSTED_CONTENT_NOTICE,
+        untrusted_content_notice_id=UNTRUSTED_CONTENT_NOTICE_ID,
     )
 
 
@@ -172,6 +176,7 @@ def _upstream_review_refusal(
         generator_provider=None,
         generator_model=None,
         untrusted_content_notice=UNTRUSTED_CONTENT_NOTICE,
+        untrusted_content_notice_id=UNTRUSTED_CONTENT_NOTICE_ID,
     )
 
 
@@ -242,6 +247,7 @@ async def synthesize_answer(
             generator_provider=generator.provider,
             generator_model=result.model,
             untrusted_content_notice=UNTRUSTED_CONTENT_NOTICE,
+            untrusted_content_notice_id=UNTRUSTED_CONTENT_NOTICE_ID,
         )
 
     # Length truncation is not a refusal — surface as a warning so
@@ -278,6 +284,7 @@ async def synthesize_answer(
         generator_provider=generator.provider,
         generator_model=result.model,
         untrusted_content_notice=UNTRUSTED_CONTENT_NOTICE,
+        untrusted_content_notice_id=UNTRUSTED_CONTENT_NOTICE_ID,
     )
 
 

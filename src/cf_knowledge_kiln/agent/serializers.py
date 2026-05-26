@@ -46,6 +46,25 @@ UNTRUSTED_CONTENT_NOTICE: str = (
 )
 """Standard preamble per AGENTS.md "Untrusted input policy"."""
 
+# Agent-API audit (post-#299): the prose above is a free-form
+# string. Agents that want to localize the preamble or detect
+# 'the server changed the notice between releases' had to
+# byte-compare prose. The id below is the stable handle:
+#
+# * Shape: ``kiln.untrusted-content.vN`` (semver major).
+# * Bumping the prose copy without changing the MEANING does NOT
+#   change the id.
+# * Adding a new constraint (e.g. 'and you must cite the chunk_id
+#   when you quote') DOES change the id.
+# * Agents that don't recognize the id should fall back to the
+#   safe default — refuse to treat source text as instructions.
+#
+# The id is shipped on every ContextPackResponse and AnswerResponse
+# alongside the prose. Codegen consumers switch on the id; the
+# prose is the human-readable rendering.
+UNTRUSTED_CONTENT_NOTICE_ID: str = "kiln.untrusted-content.v1"
+"""Stable id for the untrusted-content preamble — see comment above."""
+
 
 @dataclass(frozen=True)
 class DocumentRef:
@@ -250,6 +269,7 @@ def assemble_context_pack(
         requires_human_review=needs_review,
         review_reasons=reasons,
         untrusted_content_notice=UNTRUSTED_CONTENT_NOTICE,
+        untrusted_content_notice_id=UNTRUSTED_CONTENT_NOTICE_ID,
     )
     # #189: used_estimate must reflect the WHOLE pack an agent ingests —
     # evidence text + per-chunk citation metadata + warnings + the
@@ -340,6 +360,7 @@ def _review_reasons(
 
 __all__ = [
     "UNTRUSTED_CONTENT_NOTICE",
+    "UNTRUSTED_CONTENT_NOTICE_ID",
     "DocumentRef",
     "SerializerInputs",
     "assemble_context_pack",

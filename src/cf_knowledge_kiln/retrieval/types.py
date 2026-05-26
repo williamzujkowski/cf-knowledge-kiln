@@ -277,6 +277,12 @@ class ContextPackResponse(BaseModel):
     # means it cannot be omitted at construction or stripped by
     # response_model_exclude_none.
     untrusted_content_notice: str
+    # Agent-API audit (post-#299): stable semver id for the prose above
+    # so codegen consumers can switch on the handle instead of byte-
+    # comparing the prose. Shape: kiln.untrusted-content.vN. Bumping
+    # the prose without changing the meaning does NOT change the id;
+    # changing the meaning DOES bump it.
+    untrusted_content_notice_id: str
 
 
 # ─── /v1/answer shapes (#192 Phase B+C) ────────────────────────────────
@@ -356,6 +362,9 @@ class AnswerResponse(BaseModel):
     generator_model: str | None = None
     # Same required preamble as ContextPackResponse (#188).
     untrusted_content_notice: str
+    # Same stable id pattern as ContextPackResponse (agent-API audit
+    # post-#299) — see the field above for the contract.
+    untrusted_content_notice_id: str
 
 
 __all__ = [
