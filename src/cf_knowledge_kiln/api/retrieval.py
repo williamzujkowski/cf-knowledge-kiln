@@ -30,6 +30,7 @@ from cf_knowledge_kiln.api.rate_limit import (
     TokenBucketLimiter,
     raise_429_if_limited,
 )
+from cf_knowledge_kiln.api.request_id import request_id_for
 from cf_knowledge_kiln.db.repositories import ContextPacksRepository, QueriesRepository
 from cf_knowledge_kiln.retrieval import (
     ContextPackRequest,
@@ -98,6 +99,7 @@ async def human_search(
         consumer_type="human",
         filters=filters.model_dump(exclude_none=True),
         chunk_ids=[c.chunk_id for c in result.chunks],
+        request_id=request_id_for(request),
     )
     return response
 
@@ -143,7 +145,7 @@ async def agent_context_pack(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
-    await _log_context_pack(session, body=body, pack=pack)
+    await _log_context_pack(session, body=body, pack=pack, request_id=request_id_for(request))
     return pack
 
 
@@ -192,6 +194,7 @@ async def _log_rag_query(
     consumer_type: str,
     filters: dict[str, Any],
     chunk_ids: list[Any],
+    request_id: str | None = None,
 ) -> None:
     """Append a row to ``rag_queries``. Failures are logged, NOT raised.
 
@@ -202,6 +205,11 @@ async def _log_rag_query(
     a successful retrieval into a 500 for the caller. We catch and
     rollback the savepoint; the outer transaction stays alive so the
     handler can still return its 200 response.
+
+    ``request_id`` (#260): the X-Request-ID correlation key, threaded
+    from the handler via :func:`request_id_for`. Optional — bare test
+    harnesses that hit the function directly without the middleware
+    installed still work; the column is nullable.
     """
     try:
         async with session.begin_nested():
@@ -210,15 +218,26 @@ async def _log_rag_query(
                 consumer_type=consumer_type,
                 filters=filters,
                 retrieved_chunk_ids=chunk_ids,
+                request_id=request_id,
             )
     except Exception:
         logger.exception("rag_queries telemetry write failed (non-fatal)")
 
 
 async def _log_context_pack(
-    session: AsyncSession, *, body: ContextPackRequest, pack: ContextPackResponse
+    session: AsyncSession,
+    *,
+    body: ContextPackRequest,
+    pack: ContextPackResponse,
+    request_id: str | None = None,
 ) -> None:
-    """Append a row to ``context_packs``. Failures are logged, NOT raised."""
+    """Append a row to ``context_packs``. Failures are logged, NOT raised.
+
+    ``request_id`` (#260): see :func:`_log_rag_query`. Persisted
+    alongside the wire-visible ``context_pack_id`` (#256) so an audit
+    of a user complaint can match both the request and the response
+    to a single row.
+    """
     try:
         async with session.begin_nested():
             await ContextPacksRepository(session).create(
@@ -237,6 +256,7 @@ async def _log_context_pack(
                 # round-trip through the JSONB column cleanly.
                 warnings=[w.model_dump(mode="json") for w in pack.warnings],
                 requires_human_review=pack.requires_human_review,
+                request_id=request_id,
             )
     except Exception:
         logger.exception("context_packs telemetry write failed (non-fatal)")

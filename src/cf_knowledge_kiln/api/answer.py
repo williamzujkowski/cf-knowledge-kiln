@@ -37,6 +37,7 @@ from cf_knowledge_kiln.api.rate_limit import (
     TokenBucketLimiter,
     raise_429_if_limited,
 )
+from cf_knowledge_kiln.api.request_id import request_id_for
 from cf_knowledge_kiln.db.repositories import AnswersRepository
 from cf_knowledge_kiln.generation import GeneratorProvider
 from cf_knowledge_kiln.retrieval import HybridRetriever
@@ -85,12 +86,18 @@ async def answer(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
-    await _log_answer_query(session, body=body, response=response)
+    await _log_answer_query(
+        session, body=body, response=response, request_id=request_id_for(request)
+    )
     return response
 
 
 async def _log_answer_query(
-    session: AsyncSession, *, body: AnswerRequest, response: AnswerResponse
+    session: AsyncSession,
+    *,
+    body: AnswerRequest,
+    response: AnswerResponse,
+    request_id: str | None = None,
 ) -> None:
     """Append a ``rag_answers`` row with the full response classification (#221).
 
@@ -127,6 +134,7 @@ async def _log_answer_query(
                 completion_tokens=response.token_budget.completion_tokens,
                 total_tokens=response.token_budget.total_tokens,
                 requested_max_answer_tokens=response.token_budget.requested_max_answer_tokens,
+                request_id=request_id,
             )
     except Exception:
         logger.exception("rag_answers telemetry write for /v1/answer failed (non-fatal)")

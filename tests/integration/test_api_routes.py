@@ -199,6 +199,41 @@ def test_search_persists_rag_query_row(
     assert n == 1
 
 
+def test_search_persists_request_id_from_header(
+    client: TestClient, session: AsyncSession, small_corpus: Path, engine: AsyncEngine
+) -> None:
+    """#260 second half: an inbound X-Request-ID lands on the telemetry row.
+
+    The audit story (HANDOFF #260): operator receives a complaint
+    quoting ``request_id: req_xyz``, runs
+    ``SELECT * FROM rag_queries WHERE request_id = 'req_xyz'``, and
+    finds the retrieved_chunk_ids that produced the bad result.
+    Pins the full request-to-row threading.
+    """
+    import asyncio
+
+    asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
+
+    response = client.post(
+        "/v1/search",
+        json={"query": "widgets"},
+        headers={"X-Request-ID": "req_audit_trail_demo"},
+    )
+    assert response.status_code == 200
+    # The middleware also echoes the header back on the response, so
+    # any drift (e.g. silent sanitization) would be visible here too.
+    assert response.headers["X-Request-ID"] == "req_audit_trail_demo"
+
+    async def _fetch_request_ids() -> list[str | None]:
+        maker = async_sessionmaker(engine, expire_on_commit=False)
+        async with maker() as s:
+            rows = (await s.execute(select(RagQuery))).scalars().all()
+            return [r.request_id for r in rows]
+
+    request_ids = asyncio.get_event_loop().run_until_complete(_fetch_request_ids())
+    assert request_ids == ["req_audit_trail_demo"]
+
+
 def test_search_returns_200_when_telemetry_write_fails(
     client: TestClient,
     session: AsyncSession,

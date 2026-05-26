@@ -51,6 +51,7 @@ from cf_knowledge_kiln.api.forms import (
     selected_statuses,
 )
 from cf_knowledge_kiln.api.rate_limit import TokenBucketLimiter, client_ip
+from cf_knowledge_kiln.api.request_id import request_id_for
 from cf_knowledge_kiln.api.views import (
     deprecation_label,
     humanize_warning,
@@ -180,7 +181,11 @@ async def search_partial(
         query_id: object | None = None
     else:
         query_id = await log_human_query(
-            session, query=query, filters=filters, chunk_ids=[c.chunk_id for c in result.chunks]
+            session,
+            query=query,
+            filters=filters,
+            chunk_ids=[c.chunk_id for c in result.chunks],
+            request_id=request_id_for(request),
         )
     cards = [
         _result_card_view(

@@ -190,6 +190,10 @@ class RagQuery(Base):
     retrieved_chunk_ids: Mapped[list[UUID]] = mapped_column(
         ARRAY(PG_UUID(as_uuid=True)), nullable=False, server_default="{}"
     )
+    # #260 second half: the X-Request-ID correlation key (PR #265 added
+    # the middleware; this column persists it). Nullable so pre-migration
+    # rows and bare-app test harnesses without the middleware still work.
+    request_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = _ts()
 
 
@@ -230,6 +234,8 @@ class ContextPack(Base):
     requires_human_review: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false"
     )
+    # #260 second half: X-Request-ID correlation key. See RagQuery.
+    request_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = _ts()
 
 
@@ -284,6 +290,8 @@ class RagAnswer(Base):
     completion_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     total_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     requested_max_answer_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
+    # #260 second half: X-Request-ID correlation key. See RagQuery.
+    request_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     # #202: use clock_timestamp() at write time, not now() (which
     # returns the transaction start). Each row is one-shot — no
     # started/finished pair — so a single created_at is enough.

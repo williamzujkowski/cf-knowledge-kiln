@@ -209,6 +209,7 @@ async def log_human_query(
     query: str,
     filters: RetrievalFilters,
     chunk_ids: list[Any],
+    request_id: str | None = None,
 ) -> object | None:
     """Append a row to ``rag_queries`` and return its id (or None on failure).
 
@@ -217,6 +218,10 @@ async def log_human_query(
     the chunk. Non-fatal: telemetry failure logs + returns None,
     which the template renders without feedback widgets (rather
     than 500'ing the user's search).
+
+    ``request_id`` (#260): the X-Request-ID correlation key from the
+    middleware. Optional so a bare test harness that calls this
+    function without installing the middleware still works.
     """
     try:
         async with session.begin_nested():
@@ -225,6 +230,7 @@ async def log_human_query(
                 consumer_type="human",
                 filters=filters.model_dump(exclude_none=True),
                 retrieved_chunk_ids=chunk_ids,
+                request_id=request_id,
             )
         return row.id
     except Exception:
