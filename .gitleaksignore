@@ -19,3 +19,4 @@
 # PR #254 (feat/253-private-repo-credentials) — intermediate commits
 # carried PEM marker test fixtures before the base64 rewrite landed.
 f3336c052abfb9f3d8bb4c1b994effa2b2cb1af7:tests/unit/test_git_credentials.py:private-key:31
+9bca83ec422caedd08db920eccb7e23f42c0d45f:tests/unit/test_header_sanitize.py:generic-api-key:95
