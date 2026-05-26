@@ -36,6 +36,14 @@ tags:
   - name: agent
     description: AI-agent retrieval and context packs (Phase 5+).
 
+# #294: Document-level default that every operation requires
+# bearerAuth when KILN_AUTH_MODE=bearer. Health, readiness, and
+# version probes override with `security: []` so probes can run
+# unauthenticated even when bearer is enforced (matches
+# api/auth.py's public-path allowlist).
+security:
+  - bearerAuth: []
+
 paths:
   /healthz:
     get:
@@ -43,6 +51,7 @@ paths:
       summary: Liveness probe
       description: Cheap, no-I/O liveness check.
       operationId: healthz
+      security: []
       responses:
         "200":
           description: Service is live.
@@ -62,6 +71,7 @@ paths:
         traffic away from the instance; the body always carries the
         per-check details.
       operationId: readyz
+      security: []
       responses:
         "200":
           description: All dependency checks pass.
@@ -81,6 +91,7 @@ paths:
       tags: [health]
       summary: Service version
       operationId: version
+      security: []
       responses:
         "200":
           description: Package version.
@@ -112,6 +123,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SearchResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
         "429":
           description: |
             Rate limit exceeded. Per-IP token bucket (default 60 req/min,
@@ -123,6 +138,15 @@ paths:
                 type: integer
                 minimum: 1
               description: Seconds until the next token is available.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                rateLimited:
+                  $ref: "#/components/examples/RateLimitedError"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
   /v1/answer:
     post:
@@ -156,6 +180,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AnswerResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
         "429":
           description: |
             Rate limit exceeded. Shares the search limiter (default
@@ -166,11 +194,27 @@ paths:
                 type: integer
                 minimum: 1
               description: Seconds until the next token is available.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                rateLimited:
+                  $ref: "#/components/examples/RateLimitedError"
+        "500":
+          $ref: "#/components/responses/InternalError"
         "503":
           description: |
             No generator configured. `/v1/answer` is opt-in — enable
             `models.generator` in `config/models.yaml` and set the
             `KILN_GENERATOR_*` env vars to bring it up.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                generatorUnavailable:
+                  $ref: "#/components/examples/GeneratorUnavailableError"
 
   /v1/agent/context-pack:
     post:
@@ -194,6 +238,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ContextPackResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
         "429":
           description: |
             Rate limit exceeded. Shares the search limiter (default
@@ -204,8 +252,127 @@ paths:
                 type: integer
                 minimum: 1
               description: Seconds until the next token is available.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                rateLimited:
+                  $ref: "#/components/examples/RateLimitedError"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
 components:
+  # #294: bearer-token auth, gated by KILN_AUTH_MODE in api/auth.py.
+  # When mode='none' (default) the middleware short-circuits and the
+  # token is accepted-by-absence; when mode='bearer' the token is
+  # validated against KILN_AUTH_TOKEN. The doc-level `security:`
+  # block above declares bearer as the default; per-operation
+  # `security: []` opts probes out.
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: |
+        Static bearer token from `KILN_AUTH_TOKEN`. Enforced only
+        when `KILN_AUTH_MODE=bearer`. Public paths (/healthz,
+        /readyz, /version, /openapi.json, /docs) ignore the token.
+
+  # #294: reusable error responses, each wired to the ErrorResponse
+  # envelope with a representative example. Operations $ref these
+  # by status so adding a new error response on an endpoint is one
+  # line instead of a full block.
+  responses:
+    Unauthorized:
+      description: |
+        Missing or invalid bearer token. Only emitted when
+        `KILN_AUTH_MODE=bearer`. `WWW-Authenticate` header carries
+        the realm.
+      headers:
+        WWW-Authenticate:
+          schema:
+            type: string
+          description: |
+            HTTP auth challenge — e.g. `Bearer realm="kiln"`.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            authRequired:
+              $ref: "#/components/examples/AuthRequiredError"
+    UnprocessableEntity:
+      description: |
+        Pydantic request validation failed. The `detail.errors` array
+        carries per-field validation errors in the FastAPI shape.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            invalidRequest:
+              $ref: "#/components/examples/InvalidRequestError"
+    InternalError:
+      description: |
+        Unhandled server error. `retry_safe: true` when the underlying
+        cause may be transient (DB blip, upstream timeout); false when
+        a fix is required. Always carries a `request_id` for audit
+        correlation.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            internalError:
+              $ref: "#/components/examples/InternalErrorExample"
+
+  examples:
+    AuthRequiredError:
+      summary: 401 — missing or invalid bearer token
+      value:
+        error_code: auth_required
+        message: Missing or invalid bearer token.
+        retry_safe: false
+        request_id: 4b3f1c8e-0d2a-4f3e-9c1b-7a5b8e2d4f6a
+        detail: null
+    InvalidRequestError:
+      summary: 422 — Pydantic validation
+      value:
+        error_code: invalid_request
+        message: 1 validation error for SearchRequest
+        retry_safe: false
+        request_id: 4b3f1c8e-0d2a-4f3e-9c1b-7a5b8e2d4f6a
+        detail:
+          errors:
+            - loc: [body, query]
+              msg: String should have at least 1 character
+              type: string_too_short
+    RateLimitedError:
+      summary: 429 — per-IP token bucket exhausted
+      value:
+        error_code: rate_limited
+        message: Per-IP rate limit exceeded.
+        retry_safe: true
+        retry_after_seconds: 47
+        request_id: 4b3f1c8e-0d2a-4f3e-9c1b-7a5b8e2d4f6a
+        detail: null
+    InternalErrorExample:
+      summary: 500 — unhandled server error (retry safe if transient)
+      value:
+        error_code: internal_error
+        message: An internal error occurred.
+        retry_safe: true
+        request_id: 4b3f1c8e-0d2a-4f3e-9c1b-7a5b8e2d4f6a
+        detail: null
+    GeneratorUnavailableError:
+      summary: 503 — no generator configured
+      value:
+        error_code: generator_unavailable
+        message: No generator is configured. Set KILN_GENERATOR_BASE_URL.
+        retry_safe: false
+        request_id: 4b3f1c8e-0d2a-4f3e-9c1b-7a5b8e2d4f6a
+        detail: null
+
   schemas:
     ErrorResponse:
       # #258: every non-2xx response carries this shape. Agents
