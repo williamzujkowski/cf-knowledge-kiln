@@ -35,6 +35,7 @@ from fastapi.templating import Jinja2Templates
 from markupsafe import Markup, escape
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from cf_knowledge_kiln.api.auth import username_for
 from cf_knowledge_kiln.api.dependencies import (
     get_feedback_limiter,
     get_hybrid_retriever,
@@ -50,7 +51,6 @@ from cf_knowledge_kiln.api.forms import (
     parse_uuid,
     selected_statuses,
 )
-from cf_knowledge_kiln.api.auth import username_for
 from cf_knowledge_kiln.api.rate_limit import TokenBucketLimiter, client_ip
 from cf_knowledge_kiln.api.request_id import request_id_for
 from cf_knowledge_kiln.api.views import (

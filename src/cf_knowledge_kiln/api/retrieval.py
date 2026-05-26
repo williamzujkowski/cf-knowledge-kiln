@@ -21,13 +21,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from cf_knowledge_kiln.api.auth import username_for
 from cf_knowledge_kiln.api.dependencies import (
     get_hybrid_retriever,
     get_search_limiter,
     get_session,
     get_trust_xff,
 )
-from cf_knowledge_kiln.api.auth import username_for
 from cf_knowledge_kiln.api.error_handlers import raise_with_code
 from cf_knowledge_kiln.api.idempotency import (
     REPLAY_HEADER,

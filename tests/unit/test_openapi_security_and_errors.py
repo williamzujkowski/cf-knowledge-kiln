@@ -79,9 +79,7 @@ class TestSecurityScheme:
         sec = spec.get("security", [])
         # bearer must be present + first (highest-priority scheme).
         assert sec, f"expected at least one doc-level security scheme, got {sec!r}"
-        assert {"bearerAuth": []} in sec, (
-            f"expected bearerAuth in doc-level security, got {sec!r}"
-        )
+        assert {"bearerAuth": []} in sec, f"expected bearerAuth in doc-level security, got {sec!r}"
 
     @pytest.mark.parametrize("path", _PUBLIC_OPERATIONS)
     def test_public_operations_opt_out_of_security(self, spec: dict[str, Any], path: str) -> None:

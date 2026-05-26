@@ -19,6 +19,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 import pytest
+from pydantic import ValidationError
 
 from cf_knowledge_kiln.config import Settings, get_settings
 
@@ -69,7 +70,9 @@ def test_auth_mode_accepts_oidc(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_auth_mode_rejects_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
     """Pydantic still rejects unknown auth modes."""
     monkeypatch.setenv("KILN_AUTH_MODE", "saml")
-    with pytest.raises(Exception):  # noqa: PT011 — pydantic.ValidationError
+    # Pydantic v2 raises a ValidationError on enum-mismatch; check the
+    # error class directly rather than blind Exception (B017).
+    with pytest.raises(ValidationError):
         Settings()
 
 
@@ -77,7 +80,7 @@ def test_oidc_env_vars_round_trip(monkeypatch: pytest.MonkeyPatch) -> None:
     """All seven OIDC env vars round-trip via the KILN_ prefix."""
     monkeypatch.setenv("KILN_OIDC_ISSUER", "https://auth.example/application/o/kiln/")
     monkeypatch.setenv("KILN_OIDC_CLIENT_ID", "kiln")
-    monkeypatch.setenv("KILN_OIDC_CLIENT_SECRET", "shh")  # noqa: S105 — test value
+    monkeypatch.setenv("KILN_OIDC_CLIENT_SECRET", "shh")
     monkeypatch.setenv("KILN_OIDC_AUDIENCE", "kiln-aud")
     monkeypatch.setenv("KILN_OIDC_REQUIRED_GROUPS", "admins,kiln-users")
     monkeypatch.setenv("KILN_OIDC_USERNAME_CLAIM", "sub")
@@ -87,7 +90,7 @@ def test_oidc_env_vars_round_trip(monkeypatch: pytest.MonkeyPatch) -> None:
     settings = Settings()
     assert settings.oidc_issuer == "https://auth.example/application/o/kiln/"
     assert settings.oidc_client_id == "kiln"
-    assert settings.oidc_client_secret == "shh"  # noqa: S105
+    assert settings.oidc_client_secret == "shh"
     assert settings.oidc_audience == "kiln-aud"
     assert settings.oidc_required_groups == "admins,kiln-users"
     assert settings.oidc_username_claim == "sub"
