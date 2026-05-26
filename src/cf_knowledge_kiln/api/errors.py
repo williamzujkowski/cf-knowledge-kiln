@@ -53,6 +53,7 @@ ErrorCode = Literal[
     "invalid_filter_value",
     "token_budget_too_low",
     "rate_limited",
+    "idempotency_conflict",
     # Server errors (5xx)
     "db_unreachable",
     "embedding_unavailable",
