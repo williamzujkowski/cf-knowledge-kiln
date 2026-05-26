@@ -61,11 +61,25 @@
         _setStatus("");
       }
     }
+    // #314 fix-2: preview swap AT announcement. Desktop-rail users
+    // had no AT signal on preview load; mobile got panel.focus()
+    // but desktop got nothing. Route the announcement through the
+    // same #search-status live region used for search counts —
+    // single live region avoids the textbook double-announce trap.
+    const panel = e.detail.target;
+    if (panel && panel.id === "preview") {
+      const title = panel.querySelector(".preview-title")?.textContent?.trim();
+      const missing = panel.querySelector(".preview-missing");
+      if (missing) {
+        _setStatus("Preview unavailable");
+      } else if (title) {
+        _setStatus("Preview loaded: " + title);
+      }
+    }
     // Mobile drawer focus (#120 / #130 review): only on closed→open
     // transition. Re-grabbing focus on every chunk-swap was a UX
     // trap — repeated preview-card clicks kept yanking focus from
     // wherever the user had tabbed to (#132 reviewer MED).
-    const panel = e.detail.target;
     if (
       panel &&
       panel.id === "preview" &&
@@ -75,6 +89,16 @@
     ) {
       panel.setAttribute("data-focus-grabbed", "true");
       panel.focus();
+    }
+    // #314 fix-1: feedback ack AT announcement. The swapped ack
+    // fragment used to carry role="status" but that doesn't fire
+    // reliably for live regions born WITH the role at swap-time;
+    // route through the persistent #search-status region instead.
+    // matches?() is the HTMX 2.x-friendly null-safe check.
+    const target = e.detail.target;
+    if (target && target.matches?.("[data-feedback-ack]")) {
+      const sig = target.getAttribute("data-signal") || "feedback";
+      _setStatus("Feedback recorded: " + sig.replace(/_/g, " "));
     }
   });
 

@@ -1,6 +1,13 @@
-{# HTMX swaps this in place of the feedback form after a successful
-   write. Compact + accessible. #}
-<div class="feedback feedback-ack" role="status">
+{# #314 fix-1: this fragment was carrying `role="status"`, but
+   it's a SWAPPED fragment — the AT live-region must exist at
+   swap-time to be observed; a fragment born WITH role="status"
+   may not get announced reliably. The fragment is now pure
+   visual chrome; the kiln-app.js htmx:afterSwap handler reads
+   data-feedback-ack + data-signal and pushes the announcement
+   into the persistent #search-status live region instead. #}
+<div class="feedback feedback-ack"
+     data-feedback-ack
+     data-signal="{{ signal }}">
   <span class="fb-ack-icon" aria-hidden="true">✓</span>
   Thanks &mdash; logged as <em>{{ signal | replace("_", " ") }}</em>.
 </div>
