@@ -14,6 +14,8 @@ runs :func:`pipeline.run_source` against it, and asserts:
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import textwrap
 from collections.abc import AsyncIterator
 from datetime import date
@@ -22,7 +24,12 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 from sqlalchemy import select, text
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from cf_knowledge_kiln.config import Settings
 from cf_knowledge_kiln.db.models import (
@@ -64,6 +71,26 @@ class _WrongLengthMockProvider(MockEmbeddingProvider):
         # Return one fewer vector than requested.
         truncated = texts[:-1] if len(texts) > 1 else []
         return await super().embed(truncated)
+
+
+class _SlowMockProvider(MockEmbeddingProvider):
+    """Mock provider whose ``embed`` blocks long enough to observe.
+
+    Used by the #286 regression test to give a sidecar connection time
+    to snapshot ``pg_stat_activity`` while the embedding pass is mid-
+    flight. Production embedding providers (sentence-transformers,
+    OpenAI-compatible) routinely take seconds-to-minutes — the bug is
+    only observable when the embed phase actually overlaps with the
+    sidecar check, which a fast mock would never do.
+    """
+
+    def __init__(self, *, delay_seconds: float = 0.4, **kwargs: object) -> None:
+        super().__init__(**kwargs)  # type: ignore[arg-type]
+        self._delay = delay_seconds
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        await asyncio.sleep(self._delay)
+        return await super().embed(texts)
 
 
 class _FlakyOnceMockProvider(MockEmbeddingProvider):
@@ -287,6 +314,92 @@ async def test_pipeline_embeds_new_chunks_when_provider_supplied(
     assert len(embeddings) == summary.chunks_created
     assert all(e.provider == "mock" for e in embeddings)
     assert all(e.dimensions == 768 for e in embeddings)
+
+
+async def test_pipeline_does_not_hold_idle_in_transaction_during_embed_phase(
+    engine: AsyncEngine, fixture_corpus: Path
+) -> None:
+    """#286 regression: the embed phase must not run with an open dedup-check tx.
+
+    Original bug fingerprint: ``pg_stat_activity`` during the worker
+    hang showed one async-pool connection ``idle in transaction`` with
+    the chunks-JOIN-chunk_embeddings dedup SELECT as its last query
+    while the embedding pass was running. The fix commits that tx
+    BEFORE the embed phase; this test asserts that property end-to-end.
+
+    Approach: a slow mock embedding provider (each ``embed`` call
+    blocks ~400ms) keeps the embed phase observable. We run
+    :func:`run_source` and a sidecar ``pg_stat_activity`` poller as
+    sibling tasks. The poller takes a snapshot every 50ms over the
+    embed window and asserts NO ``cf_knowledge_kiln``-attributable
+    connection is ``idle in transaction`` while embedding is in
+    flight. Parallel to the #245 catalog-setup tx — that fix stays in
+    place; this one closes the dedup-check call site.
+    """
+    # Build a corpus with several chunks so the embed phase is non-trivial.
+    src = LocalSource(
+        name="idle-tx-guard", type="local", path=str(fixture_corpus), include=["**/*.md"]
+    )
+    provider = _SlowMockProvider(delay_seconds=0.4)
+    snapshots: list[list[dict[str, str]]] = []
+    stop_poller = asyncio.Event()
+
+    async def _poller() -> None:
+        """Snapshot pg_stat_activity until stop_poller fires.
+
+        Use a SEPARATE engine so the poller's own connection doesn't
+        share state with the run_source session's connection pool.
+        ``render_as_string(hide_password=False)`` preserves the
+        password (the default ``str(url)`` redacts it).
+        """
+        poll_engine = create_async_engine(engine.url.render_as_string(hide_password=False))
+        try:
+            while not stop_poller.is_set():
+                async with poll_engine.connect() as conn:
+                    rows = (
+                        (
+                            await conn.execute(
+                                text(
+                                    "SELECT pid, state, query "
+                                    "FROM pg_stat_activity "
+                                    "WHERE datname = current_database() "
+                                    "AND state IS NOT NULL "
+                                    "AND pid <> pg_backend_pid()"
+                                )
+                            )
+                        )
+                        .mappings()
+                        .all()
+                    )
+                snapshots.append([dict(r) for r in rows])
+                with contextlib.suppress(TimeoutError):
+                    await asyncio.wait_for(stop_poller.wait(), timeout=0.05)
+        finally:
+            await poll_engine.dispose()
+
+    async def _run() -> None:
+        maker = async_sessionmaker(engine, expire_on_commit=False)
+        async with maker() as s:
+            await run_source(s, source=src, settings=_settings(), embedding_provider=provider)
+        stop_poller.set()
+
+    await asyncio.gather(_run(), _poller())
+
+    # Across every snapshot, no connection touching the chunks/embeddings
+    # JOIN may be 'idle in transaction'. The poller itself uses simple
+    # SELECTs so its own connections appear as 'active' and short-lived.
+    offending: list[tuple[int, dict[str, str]]] = []
+    for i, snap in enumerate(snapshots):
+        for row in snap:
+            state = row.get("state") or ""
+            query = row.get("query") or ""
+            if state == "idle in transaction" and "document_chunks" in query:
+                offending.append((i, row))
+    assert not offending, (
+        "#286 regression: connection held 'idle in transaction' on the "
+        f"chunks-JOIN-chunk_embeddings dedup SELECT during the embed phase. "
+        f"Offending snapshots: {offending[:3]}"
+    )
 
 
 async def test_pipeline_skips_embeddings_on_unchanged_re_ingest(

@@ -80,6 +80,25 @@ async def embed_touched_documents(
     to_embed = await _gather_chunks_needing_embed(
         session, doc_ids=doc_ids, repo=embeds_repo, summary=summary
     )
+    # #286: commit the dedup-check tx BEFORE the embed phase. The two
+    # SELECTs inside ``_gather_chunks_needing_embed`` (the per-document
+    # chunk fetch and the chunks-JOIN-chunk_embeddings hash lookup) run
+    # under SQLAlchemy's autobegin: the session opens a transaction on
+    # the first SELECT and holds it until an explicit commit/rollback.
+    # The embed phase that follows is minutes of CPU-bound model work
+    # in an executor thread (no DB touches), so without this commit the
+    # connection sits ``idle in transaction`` for the entire embed
+    # duration. pg_stat_activity then shows one async-pool connection
+    # stuck on the JOIN SELECT as its last query, two siblings idle
+    # post-COMMIT, and the worker silent — the fingerprint reported in
+    # #286 (regression of the same pattern #245 closed for the
+    # data_sources lock site; that fix stays in place, this one closes
+    # the parallel leak at the dedup-check call site).
+    #
+    # _write_embeddings below opens a fresh transaction implicitly on
+    # its first upsert; the run_source caller's final commit then
+    # closes it as before.
+    await session.commit()
     if not to_embed:
         return
     result = await embed_chunks_concurrently(
