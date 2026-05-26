@@ -26,6 +26,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from cf_knowledge_kiln.agent.answer import synthesize_answer
+from cf_knowledge_kiln.api.auth import username_for
 from cf_knowledge_kiln.api.dependencies import (
     get_generator_provider,
     get_hybrid_retriever,
@@ -87,7 +88,11 @@ async def answer(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     await _log_answer_query(
-        session, body=body, response=response, request_id=request_id_for(request)
+        session,
+        body=body,
+        response=response,
+        request_id=request_id_for(request),
+        requester=username_for(request),
     )
     return response
 
@@ -98,6 +103,7 @@ async def _log_answer_query(
     body: AnswerRequest,
     response: AnswerResponse,
     request_id: str | None = None,
+    requester: str | None = None,
 ) -> None:
     """Append a ``rag_answers`` row with the full response classification (#221).
 
@@ -135,6 +141,7 @@ async def _log_answer_query(
                 total_tokens=response.token_budget.total_tokens,
                 requested_max_answer_tokens=response.token_budget.requested_max_answer_tokens,
                 request_id=request_id,
+                requester=requester,
             )
     except Exception:
         logger.exception("rag_answers telemetry write for /v1/answer failed (non-fatal)")

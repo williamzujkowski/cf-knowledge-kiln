@@ -26,6 +26,7 @@ from cf_knowledge_kiln.api.dependencies import (
     get_session,
     get_trust_xff,
 )
+from cf_knowledge_kiln.api.auth import username_for
 from cf_knowledge_kiln.api.rate_limit import (
     TokenBucketLimiter,
     raise_429_if_limited,
@@ -100,6 +101,7 @@ async def human_search(
         filters=filters.model_dump(exclude_none=True),
         chunk_ids=[c.chunk_id for c in result.chunks],
         request_id=request_id_for(request),
+        requester=username_for(request),
     )
     return response
 
@@ -145,7 +147,13 @@ async def agent_context_pack(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
-    await _log_context_pack(session, body=body, pack=pack, request_id=request_id_for(request))
+    await _log_context_pack(
+        session,
+        body=body,
+        pack=pack,
+        request_id=request_id_for(request),
+        requester=username_for(request),
+    )
     return pack
 
 
@@ -195,6 +203,7 @@ async def _log_rag_query(
     filters: dict[str, Any],
     chunk_ids: list[Any],
     request_id: str | None = None,
+    requester: str | None = None,
 ) -> None:
     """Append a row to ``rag_queries``. Failures are logged, NOT raised.
 
@@ -219,6 +228,7 @@ async def _log_rag_query(
                 filters=filters,
                 retrieved_chunk_ids=chunk_ids,
                 request_id=request_id,
+                requester=requester,
             )
     except Exception:
         logger.exception("rag_queries telemetry write failed (non-fatal)")
@@ -230,6 +240,7 @@ async def _log_context_pack(
     body: ContextPackRequest,
     pack: ContextPackResponse,
     request_id: str | None = None,
+    requester: str | None = None,
 ) -> None:
     """Append a row to ``context_packs``. Failures are logged, NOT raised.
 
@@ -257,6 +268,7 @@ async def _log_context_pack(
                 warnings=[w.model_dump(mode="json") for w in pack.warnings],
                 requires_human_review=pack.requires_human_review,
                 request_id=request_id,
+                requester=requester,
             )
     except Exception:
         logger.exception("context_packs telemetry write failed (non-fatal)")
