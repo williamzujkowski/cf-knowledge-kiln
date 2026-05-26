@@ -76,14 +76,17 @@
                 {{ r.title }}
               </button>
             </h2>
-            {# #280: hover tooltip + AT announcement explaining the
-               color-coded status. r.status_tooltip is None for
+            {# #280 / #296: hover + focus-visible tooltip + AT
+               announcement explaining the color-coded status. The
+               data-tooltip attribute drives the CSS [data-tooltip]
+               rule (keyboard-accessible on :focus-visible — title=
+               only fires on mouse hover, audit-flagged). aria-label
+               stays for AT. r.status_tooltip is None for
                corpus-native statuses outside the kiln-recommended
-               vocabulary (e.g. 'reference', 'canonical', 'running')
-               — those badges render without the tooltip rather than
-               with a guessed meaning. #}
+               vocabulary; the {% if %} guard keeps badges
+               tooltip-free in that case. #}
             <span class="status-badge status-{{ r.status }}"
-                  {% if r.status_tooltip %}title="{{ r.status_tooltip }}"
+                  {% if r.status_tooltip %}data-tooltip="{{ r.status_tooltip }}"
                   aria-label="{{ r.status }}: {{ r.status_tooltip }}"{% endif %}>{{ r.status }}</span>
             {# #268 editorial deprecation stamp. Verbal copy replaces
                the silent stripe-only signal — a security engineer
@@ -181,11 +184,17 @@
                    <span> below so a poisoned row can't become a
                    clickable XSS sink. #}
                 {% if r.source_url and (r.source_url.startswith('https://') or r.source_url.startswith('http://')) %}
+                  {# #296 review: aria-label MUST mirror data-tooltip
+                     so AT users get the same disambiguation sighted
+                     users get on hover/focus. Without it, the link's
+                     accessible name was just '{{ repo }}/{{ path }}'
+                     once the title= attribute went away. #}
                   <a class="source source-link"
                      href="{{ r.source_url }}"
                      target="_blank"
                      rel="noopener noreferrer"
-                     title="Open canonical source in a new tab">
+                     data-tooltip="Open canonical source in a new tab"
+                     aria-label="{{ r.repo }}/{{ r.path }} — open canonical source in a new tab">
                     {{ r.repo }}/{{ r.path }}<span class="source-link-icon" aria-hidden="true">&nbsp;↗</span>
                   </a>
                 {% else %}
@@ -218,9 +227,14 @@
                policy-free. data-score on the wrapper is a hook for
                power-user instrumentation (e.g. recording scores into
                a feedback comment). #}
+            {# #296 review: aria-label gives AT users the same scale
+               disambiguation sighted users get on hover/focus. Reads
+               the numeric score + tier so AT consumers don't have to
+               guess what 0.823 means against the visual dot scale. #}
             <span class="score score-tier-{{ r.score_tier }}"
-                  title="Hybrid retrieval score (0.0–1.0; higher is more relevant). {{ r.score_tier }} of 5."
-                  data-score="{{ '%.3f' % r.score }}">
+                  data-tooltip="Hybrid retrieval score (0.0–1.0; higher is more relevant). {{ r.score_tier }} of 5."
+                  data-score="{{ '%.3f' % r.score }}"
+                  aria-label="Hybrid retrieval score {{ '%.3f' % r.score }} — {{ r.score_tier }} of 5 on the relevance scale.">
               <span class="score-label">score</span>
               <span class="score-dots" aria-hidden="true">
                 {% for i in range(1, 6) %}<span class="score-dot{% if i <= r.score_tier %} score-dot-on{% endif %}"></span>{% endfor %}

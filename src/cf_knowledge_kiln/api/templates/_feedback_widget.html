@@ -16,11 +16,13 @@
 
   <em class="feedback-prompt">Was this useful?</em>
   <span class="feedback-row" role="group" aria-label="Quick feedback">
-    {# #278: each button carries a `title` attribute (native browser
-       hover tooltip for sighted-mouse users) AND an `aria-label` of
-       "label: tooltip" so AT users hear both the visible phrase and
-       its explanation. Categories come from api.views.feedback_categories
-       — the single source of truth shared with the engine's
+    {# #278 / #296: each button carries a data-tooltip attribute
+       (CSS-driven, fires on :hover AND :focus-visible so keyboard
+       users get the disambiguation — native title= was hover-only
+       and audit-flagged) AND an aria-label of "label: tooltip" so
+       AT users hear both the visible phrase and its explanation.
+       Categories come from api.views.feedback_categories — the
+       single source of truth shared with the engine's
        FEEDBACK_TYPES enum. Re-ordering or editing labels lives in
        views.py, not here. #}
     {% for signal, label, tooltip in feedback_categories() %}
@@ -29,7 +31,7 @@
         name="signal"
         value="{{ signal }}"
         class="feedback-link"
-        title="{{ tooltip }}"
+        data-tooltip="{{ tooltip }}"
         aria-label="{{ label }}: {{ tooltip }}">{{ label }}</button>{% if not loop.last %}<span class="feedback-sep" aria-hidden="true"> · </span>{% endif %}
     {% endfor %}
   </span>

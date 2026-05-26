@@ -86,15 +86,21 @@ def _render_results(env: jinja2.Environment, result: dict[str, Any]) -> str:
         ("superseded", "Superseded — see the linked successor."),
     ],
 )
-def test_known_status_renders_title_and_aria_label(
+def test_known_status_renders_data_tooltip_and_aria_label(
     env: jinja2.Environment, status: str, tooltip: str
 ) -> None:
     """Every kiln-recommended status renders both attributes. The
     conditional `{% if r.status_tooltip %}` block in the template
-    must emit both — never one without the other."""
+    must emit both — never one without the other.
+
+    PR #296 migrated `title=` → `data-tooltip=` so the CSS-driven
+    pattern surfaces on :focus-visible too (keyboard accessibility).
+    The aria-label path is unchanged."""
     body = _render_results(env, _result(status=status, status_tooltip=tooltip))
     escaped_tip = _escape(tooltip)
-    assert f'title="{escaped_tip}"' in body
+    assert f'data-tooltip="{escaped_tip}"' in body
+    # And NO regression to the keyboard-inaccessible native title=.
+    assert f'title="{escaped_tip}"' not in body
     aria = _escape(f"{status}: {tooltip}")
     assert f'aria-label="{aria}"' in body
 
