@@ -33,14 +33,23 @@ the manifest.
 | `KILN_GIT_SSH_STRICT_HOST_KEY_CHECKING` | `true`                 | Leave at `true` in production. Setting `false` disables MITM protection on SSH clones; the worker logs a WARNING when overridden. (#253) |
 | `KILN_INGEST_CONCURRENCY`             | `4`                      | Worker concurrency.                                                |
 | `KILN_INGEST_MAX_FILE_BYTES`          | `1048576`                | Files larger than this are skipped with `too_large`.               |
+| `KILN_INGEST_MAX_FILES`               | `10000`                  | Per-source hard cap on files indexed. Skipped beyond cap with `repo_too_big`. Raise carefully — combined with the chunker this multiplies pgvector index growth. |
+| `KILN_INGEST_MAX_REPO_BYTES`          | `104857600`              | Per-source hard cap (100 MiB default) on aggregate bytes ingested. Worker stops scanning when exceeded. Pair with `KILN_INGEST_MAX_FILES` as a defense against an accidentally-large source. |
+| `KILN_INGEST_POLL_INTERVAL_SECONDS`   | `5.0`                    | Worker queue poll cadence between `claim_one` attempts. Lower = lower job-pickup latency, higher DB read rate. |
 | `KILN_INGEST_EMBED_BATCH_SIZE`        | `32`                     | Chunks per `provider.embed()` call during the ingestion embed pass.|
 | `KILN_INGEST_EMBED_CONCURRENCY`       | `4`                      | Max embed batches in flight in parallel. Capped by a semaphore.    |
 | `KILN_DEFAULT_MAX_CHUNKS`             | `8`                      | Default retrieval result count.                                    |
 | `KILN_DEFAULT_MAX_TOKENS`             | `3000`                   | Default agent token budget.                                        |
 | `KILN_DEFAULT_STATUS_PREFERENCE`      | `active,approved`        | Comma-separated.                                                   |
+| `KILN_HNSW_EF_SEARCH`                 | `200`                    | pgvector HNSW recall knob applied per query via `SET LOCAL`. Higher = better recall, slower. Default tuned for the 9-signal hybrid ranker; tune down for very latency-sensitive setups. |
+| `KILN_MODELS_CONFIG_PATH`             | `config/models.yaml`     | Path to the model registry (embedding + generator). See [model-providers.md](./model-providers.md). |
 | `KILN_SOURCE_ALLOWLIST_PATH`          | `config/sources.yaml`    | Path to the source allowlist.                                      |
+| `KILN_SECURITY_CONFIG_PATH`           | `config/security.yaml`   | Path to the security config (sensitivity classifier, content filters, prompt-injection scanning toggles). Missing-file means scanning is disabled — the kiln logs a single WARNING at startup. See [security.md](./security.md). |
 | `KILN_AUTH_MODE`                      | `none`                   | `none` (dev only) / `bearer` / `mtls`.                             |
 | `KILN_BEARER_TOKEN`                   | —                        | Required when `KILN_AUTH_MODE=bearer`.                             |
+| `KILN_RATE_LIMIT_SEARCH_PER_MIN`      | `60`                     | Per-IP token-bucket cap for `/v1/search`, `/v1/agent/context-pack`, `/v1/answer`, and `/search`. Shared bucket — these endpoints have the same DB+generator cost profile from the rate-limiter's POV. |
+| `KILN_RATE_LIMIT_FEEDBACK_PER_MIN`    | `30`                     | Per-IP token-bucket cap for `/feedback`. Lower than the search limit because a feedback row is a write, not a read; abuse hurts the DB harder. |
+| `KILN_TRUST_FORWARDED_FOR`            | `false`                  | When `true`, the rate-limiter reads the client IP from `X-Forwarded-For` (first hop) instead of the socket. Only enable behind a trusted reverse proxy (CF gorouter, nginx) that strips forged headers. Leaving `false` means the immediate peer IP wins. |
 | `KILN_OTEL_EXPORTER_OTLP_ENDPOINT`    | —                        | OTLP-HTTP traces endpoint. Set + install the `[otel]` extra to enable tracing; unset = no tracing (zero overhead). See [docs/observability.md](./observability.md). |
 | `KILN_OTEL_SERVICE_NAME`              | `cf-knowledge-kiln`      | OpenTelemetry `service.name` reported with every span.             |
 | `KILN_EMBEDDING_PROBE_TIMEOUT_SECONDS`| `90`                     | Upper bound on the one-shot embedding-provider health probe at startup. Sits below the manifest's app startup `timeout: 120` so the lifespan can finish even when the probe burns its full budget. The probe pins `/readyz` to `embedding: failing` if it trips — bump (and the manifest `timeout` alongside) for very large local models or slow links, or pre-warm the model before first start (#198). |
