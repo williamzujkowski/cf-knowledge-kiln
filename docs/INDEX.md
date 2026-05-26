@@ -25,6 +25,7 @@ This is the starting point for all cf-knowledge-kiln documentation.
 - [troubleshooting.md](./troubleshooting.md) — symptom → diagnosis → action for common operator problems.
 - [observability.md](./observability.md) — OpenTelemetry trace surface.
 - [runbooks/audit-trail.md](./runbooks/audit-trail.md) — trace a `request_id` / `answer_id` from a user complaint to the chunks the agent saw.
+- [error-codes.md](./error-codes.md) — closed-set `error_code` enum reference; when each fires, operator action, the contract for adding a code.
 
 ## Plan and discovery
 

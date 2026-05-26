@@ -199,6 +199,11 @@ Every non-2xx response uses the structured envelope:
 
 ### `error_code` enum
 
+The table below is the quick-reference for agent consumers. For the
+full per-code reference (detail shape, when each fires, operator
+action, the contract for adding a code), see
+[error-codes.md](./error-codes.md).
+
 | Code                      | Status | Retry-safe? | What to do                                                       |
 | ------------------------- | ------ | ----------- | ---------------------------------------------------------------- |
 | `auth_required`           | 401    | No          | Fix your token / mTLS, then retry.                              |
