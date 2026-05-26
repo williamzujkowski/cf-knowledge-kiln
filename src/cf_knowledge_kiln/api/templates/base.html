@@ -80,6 +80,16 @@
       <a href="/openapi.json">OpenAPI</a>
       <span aria-hidden="true">·</span>
       <a href="/healthz">Health</a>
+      {# #314 agent-discoverability: conditional link to the agent
+         integration guide so a visiting engineer sees that
+         /v1/agent/context-pack exists without grepping docs. The
+         URL comes from KILN_AGENT_GUIDE_URL — default-unset means
+         no link rendered (no env-var-pollution on stock deploys). #}
+      {% set _agent_url = agent_guide_url() %}
+      {% if _agent_url %}
+        <span aria-hidden="true">·</span>
+        <a href="{{ _agent_url }}" rel="noopener" class="colophon-agent-link">Agents <span aria-hidden="true">→</span> /v1/agent/context-pack</a>
+      {% endif %}
     </nav>
     <p class="set-mark"><span aria-hidden="true">§</span> cf-knowledge-kiln</p>
   </footer>

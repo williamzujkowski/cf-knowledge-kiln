@@ -313,6 +313,25 @@ def feedback_categories() -> tuple[tuple[str, str, str], ...]:
     return _FEEDBACK_CATEGORIES
 
 
+def agent_guide_url() -> str | None:
+    """Return the configured agent-integration-guide URL, or None (#314).
+
+    Reads ``KILN_AGENT_GUIDE_URL`` (optional setting). When set, the
+    colophon renders an "Agents → /v1/agent/context-pack" link so a
+    visiting engineer discovers the agent surface without grepping
+    docs. When unset (default), the link is omitted entirely — no
+    placeholder, no env-var-pollution on stock deployments.
+
+    Returned via the live ``get_settings()`` lookup (not a cached
+    module-level constant) so tests + runtime overrides of the
+    env var pick up immediately. The Jinja template registration
+    in ``api/web.py`` wires this into the global namespace.
+    """
+    from cf_knowledge_kiln.config import get_settings
+
+    return get_settings().agent_guide_url
+
+
 def split_warnings(
     warnings: list[dict[str, Any]],
     result_document_ids: set[str],
@@ -381,6 +400,7 @@ async def log_human_query(
 
 __all__ = [
     "deprecation_label",
+    "agent_guide_url",
     "feedback_categories",
     "humanize_warning",
     "log_human_query",
