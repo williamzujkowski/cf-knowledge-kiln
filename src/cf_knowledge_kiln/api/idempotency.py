@@ -36,6 +36,7 @@ import hashlib
 import json
 import logging
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
@@ -159,6 +160,16 @@ async def check_or_replay(
     repo = IdempotencyRepository(session)
     cached = await repo.lookup(key=key, route=route)
     if cached is None:
+        return CheckResult(Outcome.MISS, key, request_hash, None, None)
+
+    # Expiry: rows past their ``expires_at`` must NOT replay, even
+    # if the sweeper hasn't reclaimed them yet. The repo's
+    # ``lookup()`` deliberately doesn't filter expired rows (so the
+    # sweeper itself can find them), so the request-path filter
+    # lives here. Treat an expired row as MISS — the handler will
+    # re-run, store() will UPSERT a fresh row (or fail-soft on the
+    # PK collision, which the next sweeper pass cleans up).
+    if cached.expires_at <= datetime.now(UTC):
         return CheckResult(Outcome.MISS, key, request_hash, None, None)
 
     # Body mismatch under the same key → conflict. The retry

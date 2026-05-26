@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from typing import Any
+
 import pytest
 
 from cf_knowledge_kiln.api.idempotency import (
@@ -9,6 +13,7 @@ from cf_knowledge_kiln.api.idempotency import (
     REPLAY_HEADER,
     Outcome,
     canonical_body_hash,
+    check_or_replay,
     extract_key,
     should_cache,
 )
@@ -117,3 +122,130 @@ class TestOutcomeEnum:
 
     def test_outcomes_are_distinct(self) -> None:
         assert len({Outcome.MISS, Outcome.HIT, Outcome.CONFLICT}) == 3
+
+
+# ─── Expiry semantics (review finding #1, BLOCKER) ──────────────
+
+
+@dataclass
+class _StubCached:
+    """Stand-in for the ORM row returned by IdempotencyRepository.lookup.
+
+    Only the fields check_or_replay touches matter for these tests.
+    """
+
+    request_hash: str
+    response_body: dict[str, Any]
+    response_status: int
+    expires_at: datetime
+
+
+class _StubRepo:
+    """Replaces IdempotencyRepository so check_or_replay can be exercised
+    without standing up a real DB. We only need lookup; create/store
+    live on a different code path."""
+
+    def __init__(self, row: _StubCached | None) -> None:
+        self.row = row
+        self.calls: list[tuple[str, str]] = []
+
+    async def lookup(self, *, key: str, route: str) -> _StubCached | None:
+        self.calls.append((key, route))
+        return self.row
+
+
+def _stub_request(headers: dict[str, str] | None = None) -> Any:
+    """Minimal Request stand-in: only .headers.get is touched here."""
+
+    class _H:
+        def __init__(self, h: dict[str, str]) -> None:
+            self._h = h
+
+        def get(self, name: str) -> str | None:
+            return self._h.get(name)
+
+    class _R:
+        def __init__(self, h: dict[str, str]) -> None:
+            self.headers = _H(h)
+
+    return _R(headers or {})
+
+
+class TestCheckOrReplayExpiry:
+    """An expired cached row must NOT replay — the documented 24h TTL is
+    the public contract and silently extending it is the bug-class the
+    blind review caught."""
+
+    @pytest.mark.asyncio
+    async def test_expired_row_returns_miss(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        body = {"q": "x"}
+        row = _StubCached(
+            request_hash=canonical_body_hash(body),
+            response_body={"echo": "x"},
+            response_status=200,
+            expires_at=datetime.now(UTC) - timedelta(seconds=1),  # one second past
+        )
+        stub = _StubRepo(row)
+        monkeypatch.setattr(
+            "cf_knowledge_kiln.api.idempotency.IdempotencyRepository",
+            lambda _session: stub,
+        )
+        result = await check_or_replay(
+            session=None,  # never touched; the repo is stubbed
+            request=_stub_request({HEADER: "key-1234567890"}),
+            route="/v1/search",
+            body=body,
+        )
+        # Expired → MISS so the handler re-runs; not HIT.
+        assert result.outcome == Outcome.MISS
+
+    @pytest.mark.asyncio
+    async def test_fresh_row_still_hits(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        body = {"q": "x"}
+        row = _StubCached(
+            request_hash=canonical_body_hash(body),
+            response_body={"echo": "x"},
+            response_status=200,
+            expires_at=datetime.now(UTC) + timedelta(hours=23),
+        )
+        stub = _StubRepo(row)
+        monkeypatch.setattr(
+            "cf_knowledge_kiln.api.idempotency.IdempotencyRepository",
+            lambda _session: stub,
+        )
+        result = await check_or_replay(
+            session=None,
+            request=_stub_request({HEADER: "key-1234567890"}),
+            route="/v1/search",
+            body=body,
+        )
+        assert result.outcome == Outcome.HIT
+        assert result.cached_body == {"echo": "x"}
+        assert result.cached_status == 200
+
+    @pytest.mark.asyncio
+    async def test_expired_row_with_body_mismatch_still_returns_miss(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Expired row + different body still misses — expiry wins. We
+        don't want to surface ``idempotency_conflict`` for a row that's
+        about to be reaped anyway; the user's retry is logically with a
+        fresh key."""
+        row = _StubCached(
+            request_hash=canonical_body_hash({"q": "old"}),
+            response_body={"echo": "old"},
+            response_status=200,
+            expires_at=datetime.now(UTC) - timedelta(seconds=1),
+        )
+        stub = _StubRepo(row)
+        monkeypatch.setattr(
+            "cf_knowledge_kiln.api.idempotency.IdempotencyRepository",
+            lambda _session: stub,
+        )
+        result = await check_or_replay(
+            session=None,
+            request=_stub_request({HEADER: "key-1234567890"}),
+            route="/v1/search",
+            body={"q": "new"},  # different body
+        )
+        assert result.outcome == Outcome.MISS
