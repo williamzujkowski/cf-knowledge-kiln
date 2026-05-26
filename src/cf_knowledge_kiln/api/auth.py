@@ -301,12 +301,19 @@ def _forbidden(
     message: str = "Forbidden.",
     request_id: str | None = None,
 ) -> Response:
-    """403 response — used for OIDC group-membership failures (#315)."""
+    """403 response — used for OIDC group-membership failures (#315).
+
+    Reuses ``error_code='auth_required'`` (the ``_STATUS_DEFAULTS`` map
+    in api/errors.py already maps 403 to that code) — agents retry the
+    same way as 401 (re-auth with broader scopes / different identity),
+    so the same machine code is correct here. The 403 status + the
+    ``message`` distinguish the case for humans.
+    """
     from cf_knowledge_kiln.api.errors import ErrorResponse
     from cf_knowledge_kiln.api.request_id import HEADER as REQUEST_ID_HEADER
 
     envelope = ErrorResponse(
-        error_code="forbidden",
+        error_code="auth_required",
         message=message,
         retry_safe=False,
         request_id=request_id,
