@@ -69,7 +69,15 @@ class QueriesRepository(BaseRepository):
         requester: str | None = None,
         filters: dict[str, Any] | None = None,
         retrieved_chunk_ids: Sequence[UUID] | None = None,
+        request_id: str | None = None,
     ) -> RagQuery:
+        """Insert one ``rag_queries`` row.
+
+        ``request_id`` (#260): the X-Request-ID correlation key from
+        the middleware. Optional so a bare test harness without the
+        middleware (or a pre-migration call site) still works; the
+        column is nullable and a non-indexed null incurs no cost.
+        """
         return await self._persist(
             RagQuery(
                 query=query,
@@ -77,6 +85,7 @@ class QueriesRepository(BaseRepository):
                 requester=requester,
                 filters=filters or {},
                 retrieved_chunk_ids=list(retrieved_chunk_ids or []),
+                request_id=request_id,
             )
         )
 
@@ -165,6 +174,7 @@ class ContextPacksRepository(BaseRepository):
         warnings: list[Any] | None = None,
         requires_human_review: bool = False,
         id: UUID | None = None,
+        request_id: str | None = None,
     ) -> ContextPack:
         """Insert one ``context_packs`` row.
 
@@ -177,6 +187,12 @@ class ContextPacksRepository(BaseRepository):
         When ``id`` is None the previous behavior holds: the model's
         ``_pk()`` default fires and the row gets a fresh UUID. Tests
         and pre-#256 callers continue to work.
+
+        ``request_id`` (#260): the X-Request-ID correlation key. With
+        both ``id`` and ``request_id`` persisted, an operator handed
+        a request_id from a user complaint can match the wire-visible
+        context_pack_id back to this row and reconstruct the exact
+        chunks the agent saw.
         """
         return await self._persist(
             ContextPack(
@@ -190,6 +206,7 @@ class ContextPacksRepository(BaseRepository):
                 confidence=confidence,
                 warnings=warnings or [],
                 requires_human_review=requires_human_review,
+                request_id=request_id,
             )
         )
 
@@ -247,6 +264,7 @@ class AnswersRepository(BaseRepository):
         completion_tokens: int | None = None,
         total_tokens: int | None = None,
         id: UUID | None = None,
+        request_id: str | None = None,
     ) -> RagAnswer:
         """Insert one ``rag_answers`` row.
 
@@ -254,6 +272,12 @@ class AnswersRepository(BaseRepository):
         it matches the response-visible ``answer_id``. See the
         ContextPacksRepository.create docstring for the audit-gap
         rationale this closes.
+
+        ``request_id`` (#260): the X-Request-ID correlation key from
+        the middleware. With both ``id`` and ``request_id`` persisted,
+        an operator handed a request_id from a user complaint can
+        match the wire-visible answer_id back to this row, see the
+        evidence chunks, and reconstruct what the generator saw.
         """
         return await self._persist(
             RagAnswer(
@@ -273,6 +297,7 @@ class AnswersRepository(BaseRepository):
                 completion_tokens=completion_tokens,
                 total_tokens=total_tokens,
                 requested_max_answer_tokens=requested_max_answer_tokens,
+                request_id=request_id,
             )
         )
 

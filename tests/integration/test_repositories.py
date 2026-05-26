@@ -428,6 +428,78 @@ async def test_context_packs_create_without_id_generates_one(
     assert row.id is not None  # model default fired
 
 
+# ─── #260 second half: request_id persistence ─────────────────────────
+
+
+async def test_queries_create_persists_request_id(session: AsyncSession) -> None:
+    """#260: an explicit ``request_id`` round-trips through the column.
+
+    The audit story is: operator gets a complaint quoting a request_id,
+    runs ``SELECT * FROM rag_queries WHERE request_id = ?``, and finds
+    the retrieved_chunk_ids that produced the bad result. This pins
+    the persistence step that unlocks that query.
+    """
+    repo = QueriesRepository(session)
+    row = await repo.create(
+        query="audit",
+        consumer_type="human",
+        request_id="req_abc123",
+    )
+    fetched = await repo.get(row.id)
+    assert fetched is not None
+    assert fetched.request_id == "req_abc123"
+
+
+async def test_queries_create_without_request_id_is_null(session: AsyncSession) -> None:
+    """Backward-compat: pre-migration callers + bare test harnesses
+    that don't pass request_id leave the column NULL. The column is
+    nullable specifically so they keep working without code changes."""
+    repo = QueriesRepository(session)
+    row = await repo.create(query="q", consumer_type="human")
+    fetched = await repo.get(row.id)
+    assert fetched is not None
+    assert fetched.request_id is None
+
+
+async def test_context_packs_create_persists_request_id(session: AsyncSession) -> None:
+    """#260: ``request_id`` round-trips on context_packs.
+
+    Paired with the wire-id PK (#256), the audit query becomes
+    ``WHERE id = answer_id OR request_id = req_id`` — either handle
+    finds the row.
+    """
+    repo = ContextPacksRepository(session)
+    row = await repo.create(
+        query="agent-q",
+        task="diagnose",
+        token_budget=1000,
+        request_id="req_def456",
+    )
+    fetched = await repo.get(row.id)
+    assert fetched is not None
+    assert fetched.request_id == "req_def456"
+
+
+async def test_answers_create_persists_request_id(session: AsyncSession) -> None:
+    """#260: ``request_id`` round-trips on rag_answers.
+
+    The /v1/answer telemetry path is the highest-leverage of the three
+    — a refused answer with no context_pack_id is the audit case
+    where request_id is the only handle.
+    """
+    repo = AnswersRepository(session)
+    row = await repo.create(
+        query="audit-answer",
+        answerable=True,
+        requires_human_review=False,
+        requested_max_answer_tokens=256,
+        request_id="req_ghi789",
+    )
+    fetched = await repo.get(row.id)
+    assert fetched is not None
+    assert fetched.request_id == "req_ghi789"
+
+
 # ─── ingestion_jobs mutations ───────────────────────────────────────
 
 
