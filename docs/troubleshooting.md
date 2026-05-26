@@ -3,7 +3,9 @@
 Operator runbook for cf-knowledge-kiln. Each section is **Symptom →
 Diagnosis → Action**. For deployment see
 [deployment-cloud-foundry.md](./deployment-cloud-foundry.md); for
-configuration see [configuration.md](./configuration.md).
+configuration see [configuration.md](./configuration.md). For
+user-complaint reconstruction (request_id / answer_id / etc.),
+see [runbooks/audit-trail.md](./runbooks/audit-trail.md).
 
 First stop for any "is it healthy?" question:
 

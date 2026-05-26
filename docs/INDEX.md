@@ -22,6 +22,9 @@ This is the starting point for all cf-knowledge-kiln documentation.
 - [model-providers.md](./model-providers.md) — model registry, provenance, allowlist.
 - [data-sources.md](./data-sources.md) — adding a new ingestion source.
 - [security.md](./security.md) — threat model, untrusted-input handling, prompt-injection notes.
+- [troubleshooting.md](./troubleshooting.md) — symptom → diagnosis → action for common operator problems.
+- [observability.md](./observability.md) — OpenTelemetry trace surface.
+- [runbooks/audit-trail.md](./runbooks/audit-trail.md) — trace a `request_id` / `answer_id` from a user complaint to the chunks the agent saw.
 
 ## Plan and discovery
 
