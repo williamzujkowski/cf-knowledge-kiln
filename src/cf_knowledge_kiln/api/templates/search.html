@@ -173,6 +173,15 @@
     aria-live="polite"
     aria-atomic="true"></div>
 
+  {# UX-audit MEDIUM: a full result page has 20 cards × ~6 inner
+     controls (title button + expand + copy + 6 feedback buttons) =
+     120+ tab stops. A keyboard user trying to reach the colophon
+     or the cheatsheet walks every one. This skip-link lets them
+     jump past the results to the after-results landmark in one Tab.
+     Same hidden-until-focus treatment as the existing 'Skip to
+     results' link (#base.css .skip-link). #}
+  <a class="skip-link" href="#after-results">Skip past results</a>
+
   <div class="search-grid">
     <section id="results" class="results" aria-busy="false">
       {% if initial_results is not none %}
@@ -204,6 +213,24 @@
       <p class="preview-empty"><em>Open a result to preview the chunk and its neighbors here.</em></p>
     </aside>
   </div>
+
+  {# Anchor target for the 'Skip past results' link above. Empty
+     element with tabindex=-1 so focus lands here programmatically
+     on link activation; the next Tab from here reaches the
+     colophon, cheatsheet, or another page-level control.
+
+     a11y note: blind-review caught that ``aria-hidden="true"`` on
+     a programmatically-focusable element is an ARIA-1.2 violation
+     ("authors MUST NOT focus an element with aria-hidden=true"),
+     because the element is removed from the AT tree but focus still
+     lands on it → silent focus. The fix is to drop ``aria-hidden``
+     and label the target instead; AT then announces the label on
+     focus, telling the user they've jumped past results. #}
+  <div
+    id="after-results"
+    tabindex="-1"
+    role="region"
+    aria-label="After search results"></div>
 
   {# Mobile-drawer backdrop (#120). CSS uses `:has(#preview[data-open])`
      on the parent to fade in. Clicking it clears the drawer; on
