@@ -54,6 +54,42 @@ def kiln_css(client: TestClient) -> str:
     return response.text
 
 
+def test_intermediate_breakpoint_641_960_present(kiln_css: str) -> None:
+    """#289: intermediate tier between full desktop and the 640px
+    mobile pass. Without it a tablet-portrait viewport (iPad 768,
+    Surface 720) drops directly from 1.35rem desktop title to
+    1.15rem mobile title — a typographic jump the audit flagged."""
+    assert "@media (max-width: 960px) and (min-width: 641px)" in kiln_css
+
+
+def test_intermediate_breakpoint_gutter_lands_between_tiers(
+    kiln_css: str,
+) -> None:
+    """The intermediate gutter MUST sit between the desktop value
+    (2.75rem) and the 640px-tier value (1.75rem). 2.2rem ≈ 35px is
+    the deliberate middle ground."""
+    assert "grid-template-columns: 2.2rem 1fr" in kiln_css
+
+
+def test_intermediate_breakpoint_title_lands_between_tiers(
+    kiln_css: str,
+) -> None:
+    """The intermediate title size MUST sit between desktop 1.35rem
+    and 640px-tier 1.15rem. 1.25rem preserves more of the editorial
+    heft than the 640 tier while still ceding inline space."""
+    assert "font-size: 1.25rem" in kiln_css
+
+
+def test_intermediate_breakpoint_index_softens_not_collapses(
+    kiln_css: str,
+) -> None:
+    """The numbered gutter ('01', '02') stays display-grade-ish at
+    this tier (opsz 72 between desktop's 144 and 640's 36). A jump
+    straight to opsz 36 would lose the chapter-mark character before
+    the inline width truly requires it."""
+    assert 'font-variation-settings: "opsz" 72' in kiln_css
+
+
 def test_mobile_breakpoint_640_present(kiln_css: str) -> None:
     """Primary mobile pass — covers iPhone SE, large phones, small
     tablets. Without this query the card grid stays at the desktop
