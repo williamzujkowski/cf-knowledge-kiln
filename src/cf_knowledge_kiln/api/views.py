@@ -145,6 +145,39 @@ def score_tier(score: float) -> int:
     return 1
 
 
+# Editorial stamp text per non-current status (#268). The stamp on
+# a result card replaces the silent 'subtle stripe' signal with
+# verbal copy a security engineer reads at scan speed:
+#
+#   deprecated  → "Deprecated · do not cite"
+#   archived    → "Archived · historical reference"
+#   superseded  → "Superseded · see successor"
+#
+# Voice is editorial — academic journal meets library catalog stamp.
+# An ``active`` / ``approved`` / ``draft`` status has NO stamp (the
+# absence of a stamp is the signal that the card is current).
+_DEPRECATION_LABELS: dict[str, str] = {
+    "deprecated": "Deprecated · do not cite",
+    "archived": "Archived · historical reference",
+    "superseded": "Superseded · see successor",
+}
+
+
+def deprecation_label(status: str) -> str | None:
+    """Return the editorial stamp text for a non-current status, or None.
+
+    Spec: ``docs/user-journeys.md:55-57`` — 'Deprecated/archived/
+    superseded results may appear but MUST be visually flagged.
+    Showing a deprecated doc as if it were current is a bug, not a
+    feature.' The verbal stamp is the strongest non-color signal we
+    can ship; the stripe + strikethrough + gutter rule reinforce.
+
+    Returns ``None`` for active / approved / draft so the template
+    can `{% if r.deprecation_label %}` without a per-status switch.
+    """
+    return _DEPRECATION_LABELS.get(status)
+
+
 def split_warnings(
     warnings: list[dict[str, Any]],
     result_document_ids: set[str],
@@ -200,6 +233,7 @@ async def log_human_query(
 
 
 __all__ = [
+    "deprecation_label",
     "humanize_warning",
     "log_human_query",
     "score_tier",

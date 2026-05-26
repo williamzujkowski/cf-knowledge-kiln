@@ -70,7 +70,34 @@
               </button>
             </h2>
             <span class="status-badge status-{{ r.status }}">{{ r.status }}</span>
+            {# #268 editorial deprecation stamp. Verbal copy replaces
+               the silent stripe-only signal — a security engineer
+               scanning 20 cards reads 'do not cite' before any text.
+               r.deprecation_label is None for active/approved/draft;
+               truthy text for deprecated/archived/superseded with
+               status-specific copy from api.views.deprecation_label. #}
+            {% if r.deprecation_label %}
+              <span class="deprecation-stamp" aria-label="{{ r.deprecation_label }}">
+                <span class="deprecation-stamp-rule" aria-hidden="true"></span>
+                <span class="deprecation-stamp-text">{{ r.deprecation_label }}</span>
+              </span>
+            {% endif %}
           </header>
+          {# #268 superseded-by inline note. Renders only when the
+             card carries successor metadata — falls through silently
+             today (the row threading is a separate enhancement under
+             epic #268); the structure is pre-wired so the data PR
+             becomes a one-line view change. #}
+          {% if r.status == 'superseded' and r.superseded_by %}
+            <p class="superseded-by-line">
+              <em>Superseded by</em>
+              <a class="superseded-by-link"
+                 href="{{ r.superseded_by.url }}"
+                 hx-get="/preview/{{ r.superseded_by.chunk_id }}"
+                 hx-target="#preview"
+                 hx-swap="innerHTML">{{ r.superseded_by.title }}</a>.
+            </p>
+          {% endif %}
           {# #257 per-card inline warnings. Severity classes:
              - advisory: gold rule, italic prefix
              - warning:  oxblood rule, bold prefix
