@@ -40,7 +40,7 @@ jobs:
         # `--frozen` refuses to update uv.lock — CI fails fast if a PR
         # changed pyproject.toml without running `make lock`. This is the
         # contract that makes the lockfile load-bearing (#194).
-        run: uv sync --frozen --extra dev --extra db --extra ingestion
+        run: uv sync --frozen --extra dev --extra db --extra ingestion --extra oidc
 
       - name: Add venv to PATH
         run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
@@ -123,7 +123,7 @@ jobs:
           enable-cache: true
 
       - name: Install from lockfile (uv sync --frozen)
-        run: uv sync --frozen --extra dev --extra db --extra ingestion
+        run: uv sync --frozen --extra dev --extra db --extra ingestion --extra oidc
 
       - name: Add venv to PATH
         run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
@@ -199,7 +199,7 @@ jobs:
       - name: Install runtime deps from lockfile
         # syft scans the installed tree; uv sync from the lockfile
         # gives it the exact pinned versions the deploy would use.
-        run: uv sync --frozen --extra dev --extra db --extra ingestion
+        run: uv sync --frozen --extra dev --extra db --extra ingestion --extra oidc
       - name: Add venv to PATH
         run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
       - name: Generate SBOM (syft)
