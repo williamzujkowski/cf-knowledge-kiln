@@ -143,6 +143,26 @@
              extra per card — acceptable for 20 results. #}
           <p class="excerpt excerpt-trimmed">{{ r.excerpt_html }}</p>
           <p class="excerpt excerpt-full" hidden>{{ r.excerpt_full_html }}</p>
+          {# #284: visible 'expand' affordance for the `o` shortcut.
+             type='button' so a click never accidentally submits the
+             feedback form lower in the card. data-action is picked up
+             by the kiln-keys.js dispatcher which walks up to the
+             nearest .result-card and calls toggleExpand on it. The
+             trailing <kbd> hint surfaces the keyboard binding so
+             power users learn it without opening the cheatsheet.
+
+             The label is split into a .card-action-label span so
+             toggleExpand() in kiln-keys.js can swap it to 'collapse'
+             when the card opens, without disturbing the <kbd> hint.
+             The data-label-* attributes carry both copies so a
+             future copy refactor only edits the template. #}
+          <button
+            type="button"
+            class="card-action card-action-expand"
+            data-action="toggle-expand"
+            data-label-collapsed="expand"
+            data-label-expanded="collapse"
+            aria-label="Toggle full chunk text"><span class="card-action-label">expand</span> <kbd class="card-action-kbd">o</kbd></button>
           <footer class="result-footer">
             <span class="source-line">
               {% if r.repo and r.path %}
@@ -173,6 +193,16 @@
                   Reviewed {{ r.last_reviewed }}
                 </time>
               {% endif %}
+              {# #284: visible 'copy' affordance for the `c` shortcut.
+                 Dispatcher walks to .result-card and reads data-repo /
+                 data-path / data-heading-path off the card. Visible
+                 here (not in the footer-right with the score) so the
+                 button sits next to the citation target it acts on. #}
+              <button
+                type="button"
+                class="card-action card-action-copy"
+                data-action="copy-citation"
+                aria-label="Copy citation to clipboard">copy <kbd class="card-action-kbd">c</kbd></button>
             </span>
             {# #259 score visualization. A 5-dot scale alongside the
                numeric so users scanning 20 results can assess relevance

@@ -1557,6 +1557,81 @@ a.source-link:focus-visible {
     letter-spacing: 0.1em;
   }
 }
+
+/* ─── #284: visible card-action affordances (copy + expand) ─────────
+ *
+ * Quiet text-button voice that matches .feedback-link below the
+ * card. The trailing <kbd> hint is rendered as a small bracketed
+ * letter so the button reads as 'copy [c]' — a sighted user
+ * learns the shortcut by using the visible affordance once.
+ *
+ * Two slots:
+ *   .card-action-copy   — alongside the source-line in the footer
+ *   .card-action-expand — between the excerpt and the footer
+ *
+ * Hover/focus shifts to oxblood matching the editorial accent on
+ * other action surfaces (.feedback-link, .result-title-button).
+ */
+.card-action {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0 0 0 0.6rem;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 0.82rem;
+  color: var(--ink-faded);
+  cursor: pointer;
+  border-block-end: 1px solid transparent;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+
+.card-action-expand {
+  /* Expand sits on its own line between the excerpt and the footer,
+     pushed to the start margin so it reads as a quiet 'show more'
+     option without becoming a wide button. */
+  display: inline-block;
+  margin: 0 0 0.65rem 0;
+}
+
+.card-action:hover,
+.card-action:focus-visible {
+  color: var(--oxblood);
+  border-block-end-color: var(--oxblood);
+}
+
+.card-action:focus-visible {
+  outline: 2px solid var(--oxblood);
+  outline-offset: 3px;
+  border-radius: 1px;
+}
+
+/* Bracketed shortcut hint. Small caps Fraunces in mono-ish color so
+   it reads as a typographic mark rather than text. */
+.card-action-kbd {
+  font-family: var(--mono);
+  font-size: 0.72em;
+  color: var(--ink-faded);
+  padding: 0 0.18em;
+  margin-inline-start: 0.15em;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  background: transparent;
+}
+
+/* When the card is in expanded state, flip the label copy via a
+   text-content swap. CSS can't swap button text directly without
+   pseudo-elements; we attach :before + hide the original via
+   data-expanded targeting the parent .result-card. The original
+   text stays in the DOM for screen readers / no-CSS fallback. */
+.result-card[data-expanded="true"] .card-action-expand {
+  /* JS could set data-expanded on the button itself; for simplicity
+     the visible label change rides on the card's data-expanded
+     attribute. This rule keeps the button visible with the same
+     letter hint; the change is purely the accent color. */
+  color: var(--oxblood);
+}
 /* ─── Error fragment (#122 margin-note voice) ─────────────────── */
 
 /* The .notice class already carries the oxblood-rule + italic
