@@ -72,6 +72,7 @@ def _pack(
     confidence: str | None = "high",
 ) -> ContextPackResponse:
     """A minimal ContextPackResponse for the mocked retriever."""
+    from cf_knowledge_kiln.agent.serializers import UNTRUSTED_CONTENT_NOTICE_ID
     from cf_knowledge_kiln.retrieval.types import TokenBudget
 
     return ContextPackResponse(
@@ -84,6 +85,7 @@ def _pack(
         requires_human_review=requires_human_review,
         review_reasons=review_reasons or [],
         untrusted_content_notice=UNTRUSTED_CONTENT_NOTICE,
+        untrusted_content_notice_id=UNTRUSTED_CONTENT_NOTICE_ID,
     )
 
 

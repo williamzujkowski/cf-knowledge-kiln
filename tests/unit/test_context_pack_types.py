@@ -129,6 +129,7 @@ class TestContextPackResponse:
             token_budget=TokenBudget(requested=3000, used_estimate=0),
             requires_human_review=True,
             untrusted_content_notice="source evidence only",
+            untrusted_content_notice_id="kiln.untrusted-content.v1",
         )
         assert pack.evidence == []
         assert pack.warnings == []
@@ -171,6 +172,7 @@ class TestContextPackResponse:
                 token_budget=TokenBudget(requested=100, used_estimate=10),
                 requires_human_review=False,
                 untrusted_content_notice="n",
+                untrusted_content_notice_id="kiln.untrusted-content.v1",
             )
 
     def test_extras_forbidden(self) -> None:
@@ -183,5 +185,6 @@ class TestContextPackResponse:
                 token_budget=TokenBudget(requested=100, used_estimate=10),
                 requires_human_review=False,
                 untrusted_content_notice="n",
+                untrusted_content_notice_id="kiln.untrusted-content.v1",
                 surprise=1,  # type: ignore[call-arg]
             )
