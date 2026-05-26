@@ -114,6 +114,16 @@ def canonical_body_hash(body: dict[str, Any] | None) -> str:
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
+# Wire-level invariant: an Idempotency-Key MUST fit the DB column
+# (TEXT, but the OpenAPI schema declares ``maxLength: 200``) and
+# MUST be ≤ the sanitizer's truncation cap. The sanitizer already
+# enforces the truncation, but pinning it explicitly here gives a
+# future refactor a single canonical constant to grep for if the
+# limit moves. Belt-and-braces against a hostile sanitizer-bypass
+# (blind-review #320 finding).
+MAX_KEY_LEN = 200
+
+
 def extract_key(request: Request) -> str | None:
     """Read the Idempotency-Key header and sanitize.
 
@@ -123,9 +133,30 @@ def extract_key(request: Request) -> str | None:
     * the sanitized form is empty (all chars stripped — caller
       sent a hostile / nonsense value, treat as absent rather
       than producing an all-underscore cache key).
+
+    Defensive invariant: the returned key MUST be at most
+    :data:`MAX_KEY_LEN` characters. The sanitizer already truncates,
+    but a future refactor that loosens the sanitizer must NOT silently
+    push the cap. If somehow the post-sanitize value exceeds the cap
+    we truncate again rather than failing the request — the alternative
+    (raising) would 500 every retry of an otherwise-valid request.
     """
     raw = request.headers.get(HEADER)
-    return sanitize_opaque_header(raw)
+    sanitized = sanitize_opaque_header(raw)
+    if sanitized is None:
+        return None
+    if len(sanitized) > MAX_KEY_LEN:
+        # Belt-and-braces: if a future sanitizer change ever produces
+        # a longer string, log + truncate rather than silently passing
+        # an oversized key through to the DB.
+        logger.warning(
+            "Idempotency-Key sanitized output exceeded MAX_KEY_LEN (%d > %d) — "
+            "truncating; check api._header_sanitize for drift.",
+            len(sanitized),
+            MAX_KEY_LEN,
+        )
+        return sanitized[:MAX_KEY_LEN]
+    return sanitized
 
 
 async def check_or_replay(
