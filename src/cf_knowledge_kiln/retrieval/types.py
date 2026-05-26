@@ -43,6 +43,13 @@ WarningType = Literal[
     # fires when all scores are low; isolated_match fires when one
     # score is suspiciously alone above the field.
     "isolated_match",
+    # #310: generator hit ``max_answer_tokens`` mid-stream — replaces
+    # the prior misuse of ``weak_evidence`` for "answer truncated"
+    # (see ``agent/answer.py``). Discriminated-variant counterpart
+    # lives in :class:`AnswerTruncatedWarning` in
+    # ``warning_variants.py``. Adding the enum value is additive per
+    # ADR-0011 (consumers with non-exhaustive matches keep working).
+    "answer_truncated",
 ]
 """Warning code enum — matches openapi.yaml Warning.type."""
 
