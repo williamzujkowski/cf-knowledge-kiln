@@ -51,6 +51,12 @@
   padding: 0.1rem 0.4rem;
   border-radius: 2px;
   transition: color 120ms ease, background 120ms ease;
+  /* #287: stay above the loading-skeleton overlay so the close
+     affordance + its focus ring remain visible while a preview
+     fetch is in flight. The ::before overlay sits at z-index 1;
+     the ::after preview-anchor at 2; close sits at 3. */
+  position: relative;
+  z-index: 3;
 }
 .preview-close:hover,
 .preview-close:focus-visible {
@@ -266,4 +272,102 @@
 /* Desktop: backdrop never shows. */
 @media (min-width: 960px) {
   #preview-backdrop { display: none; }
+}
+
+/* ─── #287: HTMX loading skeleton ──────────────────────────────────
+ *
+ * The result-title button POSTs hx-get against /preview/{id} with
+ * hx-indicator="#preview". HTMX adds .htmx-request to the panel
+ * for the duration of the fetch. This rule draws three stacked
+ * shimmer bars as a ::before overlay so the previous content
+ * stays in the DOM underneath but the user sees a quiet "loading"
+ * signal.
+ *
+ * Editorial constraint: paper-and-ink, not loud gray pills. Bars
+ * use --rule-strong for the fill — high enough contrast against
+ * --paper to meet WCAG 1.4.11 non-text 3:1 in both themes
+ * (paper-dim was 1.10:1; reviewer-flagged). An italic Fraunces
+ * 'preview' word via ::after gives the loading state a typographic
+ * anchor so it doesn't read as a broken render.
+ *
+ * The overlay disappears the moment HTMX removes .htmx-request
+ * (response landed), so no transition is needed.
+ *
+ * The base .preview-panel rule sets position: relative; media
+ * queries override it to sticky / fixed. We do NOT re-assert
+ * position: relative on .htmx-request because that would clobber
+ * the breakpoint position and shift the panel between coordinate
+ * spaces during loading (reviewer-flagged). The absolute-positioned
+ * ::before still anchors against whichever positioned ancestor is
+ * active for the current viewport.
+ */
+#preview.htmx-request::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-color: var(--paper);
+  /* Three stacked horizontal bars at heading + line + line widths.
+     Composited as a single background-image of three linear
+     gradients positioned at distinct vertical offsets so we don't
+     need additional DOM elements. --rule-strong against --paper
+     hits ~3:1 contrast in both light and dark themes — visible as
+     a clear loading affordance, not the 1.10:1 ghost --paper-dim
+     produced. */
+  background-image:
+    linear-gradient(90deg, var(--rule-strong) 0 70%, transparent 70% 100%),
+    linear-gradient(90deg, var(--rule-strong) 0 95%, transparent 95% 100%),
+    linear-gradient(90deg, var(--rule-strong) 0 85%, transparent 85% 100%);
+  background-size:
+    100% 1.4rem,
+    100% 0.85rem,
+    100% 0.85rem;
+  background-position:
+    0 2rem,
+    0 4.5rem,
+    0 6.2rem;
+  background-repeat: no-repeat;
+  /* The shimmer is a single horizontal pass that crosses the bars
+     every ~1.8s. --rule is the highlight; the panel background
+     color shows through outside the rule band. */
+  animation: kiln-preview-shimmer 1.8s ease-in-out infinite;
+  opacity: 0.9;
+  /* Don't intercept pointer events — the close button + any
+     content underneath stays clickable in the brief window the
+     overlay shows. */
+  pointer-events: none;
+  z-index: 1;
+}
+
+#preview.htmx-request::after {
+  /* Quiet italic 'preview' anchor at the top edge so the loading
+     state reads as deliberate, not as a broken render. */
+  content: "preview";
+  position: absolute;
+  inset-block-start: 0.45rem;
+  inset-inline-start: 0;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 0.78rem;
+  color: var(--ink-faded);
+  font-variation-settings: "opsz" 14;
+  text-transform: lowercase;
+  letter-spacing: 0.12em;
+  pointer-events: none;
+  z-index: 2;
+}
+
+@keyframes kiln-preview-shimmer {
+  /* Cycle the bar fill between --paper-dim and a lighter tint of
+     --rule so the bars 'breathe' rather than slide. CSS-only, no
+     reflow. */
+  0%, 100% { opacity: 0.9; }
+  50%      { opacity: 0.6; }
+}
+
+/* Reduced motion: keep the bars visible as a static skeleton —
+   the loading signal is the bars themselves, not the animation. */
+@media (prefers-reduced-motion: reduce) {
+  #preview.htmx-request::before {
+    animation: none;
+  }
 }

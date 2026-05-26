@@ -59,12 +59,19 @@
                doesn't skip (axe heading-order rule). The visual
                treatment is driven by .result-title CSS, not the tag. #}
             <h2 class="result-title">
+              {# #287 hx-indicator="#preview" so HTMX adds the
+                 .htmx-request class to the target during the fetch.
+                 The skeleton overlay rule in _preview.css fires off
+                 that class to render shimmer bars while the response
+                 is in flight, signaling "this is being replaced"
+                 rather than "did my click register?". #}
               <button
                 type="button"
                 class="result-title-button"
                 hx-get="/preview/{{ r.chunk_id }}"
                 hx-target="#preview"
                 hx-swap="innerHTML"
+                hx-indicator="#preview"
                 data-action="open-preview">
                 {{ r.title }}
               </button>
