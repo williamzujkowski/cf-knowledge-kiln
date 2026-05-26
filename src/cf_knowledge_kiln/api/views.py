@@ -345,6 +345,7 @@ async def log_human_query(
     filters: RetrievalFilters,
     chunk_ids: list[Any],
     request_id: str | None = None,
+    requester: str | None = None,
 ) -> object | None:
     """Append a row to ``rag_queries`` and return its id (or None on failure).
 
@@ -357,6 +358,10 @@ async def log_human_query(
     ``request_id`` (#260): the X-Request-ID correlation key from the
     middleware. Optional so a bare test harness that calls this
     function without installing the middleware still works.
+
+    ``requester`` (#315): the OIDC username claim, threaded from the
+    OIDC middleware via :func:`cf_knowledge_kiln.api.auth.username_for`.
+    None outside of ``KILN_AUTH_MODE=oidc`` — the column is nullable.
     """
     try:
         async with session.begin_nested():
@@ -366,6 +371,7 @@ async def log_human_query(
                 filters=filters.model_dump(exclude_none=True),
                 retrieved_chunk_ids=chunk_ids,
                 request_id=request_id,
+                requester=requester,
             )
         return row.id
     except Exception:

@@ -41,8 +41,15 @@ tags:
 # version probes override with `security: []` so probes can run
 # unauthenticated even when bearer is enforced (matches
 # api/auth.py's public-path allowlist).
+#
+# #315: ``oauth2`` (OIDC) listed alongside bearerAuth — a route is
+# satisfied by EITHER scheme. The middleware accepts whichever the
+# operator's KILN_AUTH_MODE wires up; both shapes ride the same
+# Authorization header, so OpenAPI tooling that picks bearerAuth
+# Just Works for OIDC too.
 security:
   - bearerAuth: []
+  - oauth2: [openid, profile, email]
 
 paths:
   /healthz:
@@ -269,14 +276,53 @@ components:
   # validated against KILN_AUTH_TOKEN. The doc-level `security:`
   # block above declares bearer as the default; per-operation
   # `security: []` opts probes out.
+  #
+  # #315: ``oauth2`` scheme added for the OIDC mode. The
+  # authorization-code + PKCE flow is the browser handshake; agent
+  # callers send the issued JWT in the same ``Authorization: Bearer``
+  # header (``bearerAuth`` with ``bearerFormat: JWT``). When
+  # ``KILN_OIDC_ALLOW_BEARER_FALLBACK=true`` an inbound static bearer
+  # token is also accepted (service-account path) — routes accept
+  # either scheme in that case.
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
+      bearerFormat: JWT
       description: |
-        Static bearer token from `KILN_AUTH_TOKEN`. Enforced only
-        when `KILN_AUTH_MODE=bearer`. Public paths (/healthz,
-        /readyz, /version, /openapi.json, /docs) ignore the token.
+        Authorization header. The accepted token shape depends on
+        `KILN_AUTH_MODE`:
+
+        * `bearer` — a static token compared against
+          `KILN_BEARER_TOKEN`. Never expires; rotated by the operator.
+        * `oidc` — a JWT issued by `KILN_OIDC_ISSUER` for client
+          `KILN_OIDC_CLIENT_ID`. The middleware validates signature
+          (against the issuer's JWKS), `iss`, `aud`, `exp`, and
+          (when `KILN_OIDC_REQUIRED_GROUPS` is set) `groups`
+          membership. When `KILN_OIDC_ALLOW_BEARER_FALLBACK=true` a
+          static bearer token is ALSO accepted on this header, so
+          service-account agents can coexist with browser users.
+
+        Public paths (/healthz, /readyz, /version, /openapi.json,
+        /docs) ignore the token in every mode.
+    oauth2:
+      type: oauth2
+      description: |
+        OIDC SSO (#315). The OpenAPI flow is filled in at runtime from
+        `${KILN_OIDC_ISSUER}/.well-known/openid-configuration` — the
+        schema lists illustrative placeholders. Browsers go through
+        the authorization-code + PKCE flow; the IdP redirects to
+        `${KILN_OIDC_REDIRECT_PATH}` (default `/auth/callback`) and
+        kiln sets a signed session cookie. Programmatic callers use
+        the same bearerAuth scheme above with a JWT.
+      flows:
+        authorizationCode:
+          authorizationUrl: https://issuer.example/application/o/authorize/
+          tokenUrl: https://issuer.example/application/o/token/
+          scopes:
+            openid: OpenID Connect base claim set
+            profile: User profile claims (preferred_username, name, …)
+            email: Email claim
 
   # #294: reusable error responses, each wired to the ErrorResponse
   # envelope with a representative example. Operations $ref these

@@ -96,6 +96,21 @@ real-embeddings = [
   "transformers>=5.0,<6",
   "torch>=2.9,<3",
 ]
+oidc = [
+  # #315 — OIDC SSO. Kept optional so deployments that stick with
+  # ``KILN_AUTH_MODE=none|bearer|mtls`` don't pull in authlib or its
+  # transitive cryptography dep.
+  #
+  # * authlib provides the JsonWebToken / JsonWebKey primitives used
+  #   to validate the issuer's RS256 / ES* signatures against the
+  #   cached JWKS. The 1.3 line is the current LTS branch.
+  # * itsdangerous signs the session + handshake cookies. Starlette
+  #   pulls it transitively in some configurations, but the floor is
+  #   declared here so the OIDC code path doesn't accidentally
+  #   regress to an older signature-vulnerable line.
+  "authlib>=1.3,<2.0",
+  "itsdangerous>=2.0,<3.0",
+]
 otel = [
   # Optional OpenTelemetry tracing. Enabled only when
   # KILN_OTEL_EXPORTER_OTLP_ENDPOINT is set AND this extra is

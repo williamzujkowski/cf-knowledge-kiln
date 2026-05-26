@@ -79,4 +79,4 @@
 # so this index doesn't affect their CUDA install.
 --extra-index-url https://download.pytorch.org/whl/cpu
 
-.[db,ingestion,real-embeddings]
+.[db,ingestion,real-embeddings,oidc]

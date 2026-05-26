@@ -70,10 +70,17 @@ class TestSecurityScheme:
     def test_doc_level_security_requires_bearer(self, spec: dict[str, Any]) -> None:
         """The top-level `security:` block applies bearer as the
         default for every operation. Operations opt out by setting
-        `security: []`."""
+        `security: []`.
+
+        #315: the block also lists oauth2 (OIDC) — a route is satisfied
+        by EITHER scheme. The middleware accepts whichever
+        KILN_AUTH_MODE wires up.
+        """
         sec = spec.get("security", [])
-        assert sec == [{"bearerAuth": []}], (
-            f"expected doc-level security: [{{bearerAuth: []}}], got {sec!r}"
+        # bearer must be present + first (highest-priority scheme).
+        assert sec, f"expected at least one doc-level security scheme, got {sec!r}"
+        assert {"bearerAuth": []} in sec, (
+            f"expected bearerAuth in doc-level security, got {sec!r}"
         )
 
     @pytest.mark.parametrize("path", _PUBLIC_OPERATIONS)

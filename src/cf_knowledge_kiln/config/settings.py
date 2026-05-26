@@ -18,7 +18,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 Environment = Literal["development", "staging", "production"]
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR"]
-AuthMode = Literal["none", "bearer", "mtls"]
+# #315: ``oidc`` mode adds browser SSO + agent JWT bearer alongside
+# the existing static-bearer / mtls / none modes.
+AuthMode = Literal["none", "bearer", "mtls", "oidc"]
 
 
 class Settings(BaseSettings):
@@ -113,6 +115,44 @@ class Settings(BaseSettings):
     security_config_path: str = "config/security.yaml"
     auth_mode: AuthMode = "none"
     bearer_token: str | None = None
+
+    # #315: OIDC SSO. Active only when KILN_AUTH_MODE=oidc; the
+    # middleware reads issuer metadata at startup and caches the JWKS
+    # for token-signature verification. Browser users go through the
+    # authorization-code + PKCE flow; agent users send an
+    # ``Authorization: Bearer <token>`` they obtained from the same
+    # issuer (or, when ``oidc_allow_bearer_fallback`` is true, a static
+    # service-account token compared against ``bearer_token``).
+    #
+    # All values are read via the existing ``KILN_`` env prefix so an
+    # operator wires them the same way as every other kiln setting.
+    oidc_issuer: str | None = None
+    oidc_client_id: str | None = None
+    oidc_client_secret: str | None = None
+    # ``aud`` claim required on inbound tokens. Defaults to client_id
+    # at validation time when unset.
+    oidc_audience: str | None = None
+    # Optional comma-separated list — if any group in this list is
+    # present in the token's ``groups`` claim the request is allowed.
+    # Empty / unset means group-membership is not enforced.
+    oidc_required_groups: str | None = None
+    # Claim mapped to ``request.state.username`` and persisted on
+    # rag_queries.requester. Defaults to the IdP convention.
+    oidc_username_claim: str = "preferred_username"
+    # If true, requests that arrive with ``Authorization: Bearer
+    # <token>`` may use the static ``bearer_token`` OR a JWT issued by
+    # the OIDC issuer. Used to let service accounts coexist with
+    # browser-SSO users in a single deployment.
+    oidc_allow_bearer_fallback: bool = False
+    # Signs the session cookie. Defaults to a runtime-generated key
+    # with a log warning — operators running multiple kiln instances
+    # behind a single hostname MUST set this to a stable shared secret
+    # or browser sessions will be invalidated on every reschedule.
+    oidc_session_secret: str | None = None
+    # The path under which kiln registers the OIDC callback. Must
+    # match the redirect_uri configured in the IdP for this client.
+    oidc_redirect_path: str = "/auth/callback"
+
     # Per-IP rate limits (Phase 8 #79). In-process token bucket;
     # operationally cheap, single-instance only. Horizontal scale
     # needs a shared backend — separate follow-up.
@@ -144,6 +184,18 @@ class Settings(BaseSettings):
     def status_preference_list(self) -> list[str]:
         """Parse the comma-separated preference string into a list."""
         return [s.strip() for s in self.default_status_preference.split(",") if s.strip()]
+
+    @property
+    def oidc_required_groups_list(self) -> list[str]:
+        """Parse :attr:`oidc_required_groups` into a list of group names.
+
+        Empty / unset returns ``[]`` (group enforcement off). Whitespace
+        around commas is trimmed; empty entries are dropped — operators
+        get the obvious behavior when they write
+        ``KILN_OIDC_REQUIRED_GROUPS="admins, , kiln-users"``.
+        """
+        raw = self.oidc_required_groups or ""
+        return [s.strip() for s in raw.split(",") if s.strip()]
 
 
 @lru_cache(maxsize=1)

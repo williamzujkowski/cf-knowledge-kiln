@@ -50,6 +50,7 @@ from cf_knowledge_kiln.api.forms import (
     parse_uuid,
     selected_statuses,
 )
+from cf_knowledge_kiln.api.auth import username_for
 from cf_knowledge_kiln.api.rate_limit import TokenBucketLimiter, client_ip
 from cf_knowledge_kiln.api.request_id import request_id_for
 from cf_knowledge_kiln.api.views import (
@@ -204,6 +205,7 @@ async def search_partial(
             filters=filters,
             chunk_ids=[c.chunk_id for c in result.chunks],
             request_id=request_id_for(request),
+            requester=username_for(request),
         )
     cards = [
         _result_card_view(
