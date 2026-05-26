@@ -295,3 +295,127 @@ input:focus-visible,
   margin-inline-end: 0.3rem;
   color: var(--rule-strong);
 }
+
+/* ─── #296: keyboard-accessible tooltip pattern ────────────────────
+ *
+ * Native title= attributes only fire on mouse hover — keyboard-only
+ * sighted users (no mouse, no AT) miss every tooltip on the result
+ * card. The audit (post-#292) flagged this. The pattern below uses
+ * a [data-tooltip] attribute + CSS ::after pseudo-element so the
+ * tooltip surfaces on :hover AND :focus-visible.
+ *
+ * aria-label still carries the AT path on the same elements; the
+ * data-tooltip is the SIGHTED path (mouse OR keyboard).
+ *
+ * The visual treatment is the editorial-quiet voice — paper-soft
+ * background, ink-soft body, italic Fraunces text-grade opsz. Not
+ * a chat-app pill; reads as a margin annotation.
+ *
+ * Positioning: above the element (`bottom: 100%`), centered, with
+ * a small offset. `pointer-events: none` so the tooltip never
+ * blocks clicks on neighboring elements. z-index 5 keeps it above
+ * result-card hover rules + the preview skeleton overlay (z-index 1).
+ */
+/* :not([data-tooltip=""]) guards the latent case of an empty
+   attribute — without it, a future caller that sets data-tooltip=""
+   would render an empty white box. Inline `<a>` (source-link)
+   becomes inline-block so position:absolute pseudo-children get a
+   proper containing block (Safari ambiguity on wrapped inline
+   links — review-flagged WARN). */
+[data-tooltip]:not([data-tooltip=""]) {
+  position: relative;
+}
+
+a[data-tooltip]:not([data-tooltip=""]) {
+  display: inline-block;
+}
+
+[data-tooltip]:not([data-tooltip=""])::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 0.35rem);
+  left: 50%;
+  transform: translateX(-50%);
+  /* Visual */
+  background: var(--paper-soft);
+  color: var(--ink-soft);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  padding: 0.3rem 0.55rem;
+  /* Type */
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 0.78rem;
+  font-variation-settings: "opsz" 14;
+  line-height: 1.35;
+  white-space: nowrap;
+  /* Viewport-clamped max-width so a tooltip on a near-edge element
+     can never overflow the screen (review-flagged BLOCKER on
+     320-375px viewports). min() prefers the smaller of 22rem and
+     viewport-minus-1rem breathing room. */
+  max-width: min(22rem, calc(100vw - 1rem));
+  /* Default hidden */
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 120ms ease 80ms, visibility 0s linear 200ms;
+  pointer-events: none;
+  z-index: 5;
+}
+
+[data-tooltip]:not([data-tooltip=""]):hover::after,
+[data-tooltip]:not([data-tooltip=""]):focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 120ms, 0s;
+}
+
+/* Soft below-the-tooltip arrow via a second pseudo. */
+[data-tooltip]:not([data-tooltip=""])::before {
+  content: "";
+  position: absolute;
+  bottom: calc(100% + 0.15rem);
+  left: 50%;
+  transform: translateX(-50%);
+  border: 4px solid transparent;
+  border-top-color: var(--rule);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 120ms ease 80ms, visibility 0s linear 200ms;
+  pointer-events: none;
+  z-index: 5;
+}
+
+[data-tooltip]:not([data-tooltip=""]):hover::before,
+[data-tooltip]:not([data-tooltip=""]):focus-visible::before {
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 120ms, 0s;
+}
+
+/* Intermediate breakpoint (641-960px tablet-portrait): the score
+   tooltip 'Hybrid retrieval score (0.0-1.0...) N of 5.' at ~66
+   chars overflows the card body when held to nowrap. Allow wrap +
+   tighten max-width so it fits within the rail-column width.
+   Review-flagged WARN. */
+@media (max-width: 960px) and (min-width: 641px) {
+  [data-tooltip]:not([data-tooltip=""])::after {
+    max-width: 18rem;
+    white-space: normal;
+  }
+}
+
+/* Mobile: tighten max-width and drop nowrap so long tooltips wrap
+   instead of horizontally overflowing the narrow viewport. */
+@media (max-width: 640px) {
+  [data-tooltip]:not([data-tooltip=""])::after {
+    max-width: 16rem;
+    white-space: normal;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-tooltip]:not([data-tooltip=""])::after,
+  [data-tooltip]:not([data-tooltip=""])::before {
+    transition: none;
+  }
+}

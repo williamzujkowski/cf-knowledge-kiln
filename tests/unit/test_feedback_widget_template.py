@@ -64,16 +64,25 @@ def test_widget_renders_six_buttons(env: jinja2.Environment) -> None:
     assert body.count('class="feedback-link"') == 6
 
 
-def test_widget_renders_title_attribute_per_button(env: jinja2.Environment) -> None:
-    """Every category's tooltip lands as a ``title`` attribute so
-    hovering the button on desktop reveals the explanation. Without
-    this, the terse labels stay ambiguous on first encounter
-    (audit #268 finding)."""
+def test_widget_renders_data_tooltip_attribute_per_button(
+    env: jinja2.Environment,
+) -> None:
+    """Every category's tooltip lands as a ``data-tooltip`` attribute
+    (PR #296 migrated from ``title=`` so the CSS-driven pattern
+    surfaces the tooltip on :focus-visible too, not just mouse
+    :hover). Without this, the terse labels stay ambiguous on
+    first encounter for keyboard-only sighted users — even worse
+    than the original audit-flagged density problem."""
     body = _render_widget(env)
     for _signal, _label, tooltip in feedback_categories():
         escaped = _escape(tooltip)
-        assert f'title="{escaped}"' in body, (
-            f"missing title attribute for tooltip {tooltip!r} (escaped: {escaped!r})"
+        assert f'data-tooltip="{escaped}"' in body, (
+            f"missing data-tooltip attribute for {tooltip!r} (escaped: {escaped!r})"
+        )
+        # And NO regression to the keyboard-inaccessible native
+        # title= attribute that #296 replaced.
+        assert f'title="{escaped}"' not in body, (
+            f"stale title= attr for {tooltip!r} — should be data-tooltip after #296"
         )
 
 
