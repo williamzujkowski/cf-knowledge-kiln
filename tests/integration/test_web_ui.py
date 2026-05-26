@@ -791,6 +791,51 @@ def test_preview_endpoint_returns_fragment_with_chunk(
     assert "preview-target" in body
 
 
+def test_preview_endpoint_renders_owner_and_last_reviewed(
+    client: TestClient, session: AsyncSession, small_corpus: Path
+) -> None:
+    """#282: preview header surfaces owner + last_reviewed.
+
+    End-to-end pin: the preview template reads these straight off
+    the Document row, so any future schema/serializer change that
+    strips them would silently bury the ownership + freshness
+    signal. Seeds the corpus, stamps owner + last_reviewed on the
+    Document, then asserts both render in the live response body.
+    """
+    from datetime import date
+
+    asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
+
+    async def _stamp_and_get_chunk_id() -> str:
+        from cf_knowledge_kiln.db.models import DocumentChunk
+
+        # Stamp the doc with both fields so the template branches
+        # render. Default ingestion leaves owner/last_reviewed NULL.
+        await session.execute(
+            update(Document)
+            .where(Document.path == "beta.md")
+            .values(owner="platform-team", last_reviewed=date(2026, 3, 15))
+        )
+        await session.commit()
+        row = (
+            await session.execute(
+                select(DocumentChunk).join(Document).where(Document.path == "beta.md")
+            )
+        ).scalar_one()
+        return str(row.id)
+
+    cid = asyncio.get_event_loop().run_until_complete(_stamp_and_get_chunk_id())
+    response = client.get(f"/preview/{cid}")
+    assert response.status_code == 200
+    body = response.text
+    # Owner span with the editorial italic-em treatment.
+    assert "platform-team" in body
+    assert "<em>platform-team</em>" in body
+    # last_reviewed as a <time> with the machine-readable datetime.
+    assert "Reviewed 2026-03-15" in body
+    assert 'datetime="2026-03-15"' in body
+
+
 def test_preview_endpoint_404_on_unknown_chunk(client: TestClient) -> None:
     """A well-formed but unknown chunk id renders a not-found fragment."""
     import uuid
