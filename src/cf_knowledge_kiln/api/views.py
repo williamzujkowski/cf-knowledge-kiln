@@ -232,6 +232,50 @@ def rail_filters_active_count(filters_view: dict[str, Any]) -> int:
     return count
 
 
+# Feedback-widget category table (#278). Single source of truth for
+# the (signal, visible label, tooltip / aria explanation) triple. The
+# template iterates this; the unit suite re-uses it to assert each
+# rendered button carries the matching title + aria-label. The signal
+# values are members of :data:`forms.FEEDBACK_TYPES` — the engine
+# enum the /feedback POST handler validates against.
+#
+# Editorial voice for tooltips: second person, present tense, single
+# sentence, capitalized, period. The labels stay terse because the
+# widget renders as an inline italic phrase at the foot of the card;
+# the tooltips carry the disambiguation the audit (#268) called out.
+_FEEDBACK_CATEGORIES: tuple[tuple[str, str, str], ...] = (
+    ("useful", "yes", "This answered my question."),
+    ("not_useful", "no", "This didn't answer my question."),
+    ("stale", "stale", "The content is out of date."),
+    ("wrong_source", "wrong source", "Not the right doc for this question."),
+    (
+        "missing_source",
+        "missing source",
+        "I expected a different doc to show up.",
+    ),
+    (
+        "duplicate_or_conflicting",
+        "duplicate",
+        "Duplicate of another result, or conflicts with one.",
+    ),
+)
+
+
+def feedback_categories() -> tuple[tuple[str, str, str], ...]:
+    """Return the (signal, label, tooltip) table for the feedback widget.
+
+    Stable order — the binary 'yes/no' leads, the four diagnostic
+    categories follow. A future re-order that puts 'duplicate' first
+    would bury the primary signal.
+
+    Returned as a tuple of tuples so the template can iterate it via
+    ``{% for signal, label, tooltip in feedback_categories() %}`` and
+    the engine enum (``forms.FEEDBACK_TYPES``) stays the single
+    source of truth for the SET of valid signals.
+    """
+    return _FEEDBACK_CATEGORIES
+
+
 def split_warnings(
     warnings: list[dict[str, Any]],
     result_document_ids: set[str],
@@ -294,6 +338,7 @@ async def log_human_query(
 
 __all__ = [
     "deprecation_label",
+    "feedback_categories",
     "humanize_warning",
     "log_human_query",
     "rail_filters_active_count",

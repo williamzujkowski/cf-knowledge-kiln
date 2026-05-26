@@ -16,19 +16,21 @@
 
   <em class="feedback-prompt">Was this useful?</em>
   <span class="feedback-row" role="group" aria-label="Quick feedback">
-    {% for value, label in [
-      ('useful',                   'yes'),
-      ('not_useful',               'no'),
-      ('stale',                    'stale'),
-      ('wrong_source',             'wrong source'),
-      ('missing_source',           'missing source'),
-      ('duplicate_or_conflicting', 'duplicate'),
-    ] %}
+    {# #278: each button carries a `title` attribute (native browser
+       hover tooltip for sighted-mouse users) AND an `aria-label` of
+       "label: tooltip" so AT users hear both the visible phrase and
+       its explanation. Categories come from api.views.feedback_categories
+       — the single source of truth shared with the engine's
+       FEEDBACK_TYPES enum. Re-ordering or editing labels lives in
+       views.py, not here. #}
+    {% for signal, label, tooltip in feedback_categories() %}
       <button
         type="submit"
         name="signal"
-        value="{{ value }}"
-        class="feedback-link">{{ label }}</button>{% if not loop.last %}<span class="feedback-sep" aria-hidden="true"> · </span>{% endif %}
+        value="{{ signal }}"
+        class="feedback-link"
+        title="{{ tooltip }}"
+        aria-label="{{ label }}: {{ tooltip }}">{{ label }}</button>{% if not loop.last %}<span class="feedback-sep" aria-hidden="true"> · </span>{% endif %}
     {% endfor %}
   </span>
 </form>
