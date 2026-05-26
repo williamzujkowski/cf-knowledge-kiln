@@ -17,7 +17,8 @@ from __future__ import annotations
 import logging
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from cf_knowledge_kiln.api.dependencies import (
@@ -27,6 +28,16 @@ from cf_knowledge_kiln.api.dependencies import (
     get_trust_xff,
 )
 from cf_knowledge_kiln.api.auth import username_for
+from cf_knowledge_kiln.api.error_handlers import raise_with_code
+from cf_knowledge_kiln.api.idempotency import (
+    REPLAY_HEADER,
+    Outcome,
+    check_or_replay,
+    should_cache,
+)
+from cf_knowledge_kiln.api.idempotency import (
+    store as _store_idempotent,
+)
 from cf_knowledge_kiln.api.rate_limit import (
     TokenBucketLimiter,
     raise_429_if_limited,
@@ -65,7 +76,7 @@ async def human_search(
     session: Annotated[AsyncSession, Depends(get_session)],
     limiter: Annotated[TokenBucketLimiter, Depends(get_search_limiter)],
     trust_xff: Annotated[bool, Depends(get_trust_xff)],
-) -> SearchResponse:
+) -> SearchResponse | Response:
     """Run a hybrid retrieval query and return ranked result cards.
 
     Persists the query into ``rag_queries`` (consumer_type='human') for
@@ -73,6 +84,27 @@ async def human_search(
     one DB session per request. Issue #79: per-IP rate limit.
     """
     raise_429_if_limited(limiter, request, trust_xff=trust_xff)
+    # #309: idempotency dispatch. body.model_dump() is the
+    # canonical-hash input — Pydantic already validated, so
+    # serialization is safe + deterministic.
+    idem = await check_or_replay(
+        session=session,
+        request=request,
+        route="/v1/search",
+        body=body.model_dump(mode="json", exclude_none=True),
+    )
+    if idem.outcome is Outcome.HIT:
+        return JSONResponse(
+            content=idem.cached_body,
+            status_code=idem.cached_status or 200,
+            headers={REPLAY_HEADER: "true"},
+        )
+    if idem.outcome is Outcome.CONFLICT:
+        raise_with_code(
+            status_code=422,
+            error_code="idempotency_conflict",
+            message="Idempotency-Key reuse with different body.",
+        )
     filters = body.filters or _empty_filters()
     try:
         result = await retriever.search(
@@ -103,6 +135,17 @@ async def human_search(
         request_id=request_id_for(request),
         requester=username_for(request),
     )
+    # #309: cache the response for replay if the key was set.
+    if idem.key is not None and idem.request_hash is not None and should_cache(200):
+        await _store_idempotent(
+            session=session,
+            key=idem.key,
+            route="/v1/search",
+            request_hash=idem.request_hash,
+            resource_id=None,
+            response_body=response.model_dump(mode="json", exclude_none=True),
+            response_status=200,
+        )
     return response
 
 
@@ -125,7 +168,7 @@ async def agent_context_pack(
     session: Annotated[AsyncSession, Depends(get_session)],
     limiter: Annotated[TokenBucketLimiter, Depends(get_search_limiter)],
     trust_xff: Annotated[bool, Depends(get_trust_xff)],
-) -> ContextPackResponse:
+) -> ContextPackResponse | Response:
     """Build a bounded, cited context pack for an agent consumer.
 
     Persists into ``context_packs`` so an operator can audit what the
@@ -134,6 +177,25 @@ async def agent_context_pack(
     per-IP rate limit (same bucket as /v1/search; both are DB-heavy).
     """
     raise_429_if_limited(limiter, request, trust_xff=trust_xff)
+    # #309: idempotency dispatch.
+    idem = await check_or_replay(
+        session=session,
+        request=request,
+        route="/v1/agent/context-pack",
+        body=body.model_dump(mode="json", exclude_none=True),
+    )
+    if idem.outcome is Outcome.HIT:
+        return JSONResponse(
+            content=idem.cached_body,
+            status_code=idem.cached_status or 200,
+            headers={REPLAY_HEADER: "true"},
+        )
+    if idem.outcome is Outcome.CONFLICT:
+        raise_with_code(
+            status_code=422,
+            error_code="idempotency_conflict",
+            message="Idempotency-Key reuse with different body.",
+        )
     filters = body.filters or _empty_filters()
     try:
         pack = await retriever.context_pack(
@@ -154,6 +216,17 @@ async def agent_context_pack(
         request_id=request_id_for(request),
         requester=username_for(request),
     )
+    # #309: cache the response for replay if the key was set.
+    if idem.key is not None and idem.request_hash is not None and should_cache(200):
+        await _store_idempotent(
+            session=session,
+            key=idem.key,
+            route="/v1/agent/context-pack",
+            request_hash=idem.request_hash,
+            resource_id=str(pack.context_pack_id),
+            response_body=pack.model_dump(mode="json", exclude_none=True),
+            response_status=200,
+        )
     return pack
 
 

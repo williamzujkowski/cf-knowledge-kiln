@@ -22,7 +22,8 @@ from __future__ import annotations
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from cf_knowledge_kiln.agent.answer import synthesize_answer
@@ -33,6 +34,16 @@ from cf_knowledge_kiln.api.dependencies import (
     get_search_limiter,
     get_session,
     get_trust_xff,
+)
+from cf_knowledge_kiln.api.error_handlers import raise_with_code
+from cf_knowledge_kiln.api.idempotency import (
+    REPLAY_HEADER,
+    Outcome,
+    check_or_replay,
+    should_cache,
+)
+from cf_knowledge_kiln.api.idempotency import (
+    store as _store_idempotent,
 )
 from cf_knowledge_kiln.api.rate_limit import (
     TokenBucketLimiter,
@@ -72,7 +83,7 @@ async def answer(
     session: Annotated[AsyncSession, Depends(get_session)],
     limiter: Annotated[TokenBucketLimiter, Depends(get_search_limiter)],
     trust_xff: Annotated[bool, Depends(get_trust_xff)],
-) -> AnswerResponse:
+) -> AnswerResponse | Response:
     """Run hybrid retrieval → synthesize a cited answer → return it.
 
     Same rate-limit bucket as /v1/search and /v1/agent/context-pack
@@ -82,6 +93,26 @@ async def answer(
     rag_queries row can't be persisted (mirrors #172).
     """
     raise_429_if_limited(limiter, request, trust_xff=trust_xff)
+    # #309: idempotency dispatch. Body hash is canonical so
+    # JSON-key-order on the wire doesn't produce false conflict.
+    idem = await check_or_replay(
+        session=session,
+        request=request,
+        route="/v1/answer",
+        body=body.model_dump(mode="json", exclude_none=True),
+    )
+    if idem.outcome is Outcome.HIT:
+        return JSONResponse(
+            content=idem.cached_body,
+            status_code=idem.cached_status or 200,
+            headers={REPLAY_HEADER: "true"},
+        )
+    if idem.outcome is Outcome.CONFLICT:
+        raise_with_code(
+            status_code=422,
+            error_code="idempotency_conflict",
+            message="Idempotency-Key reuse with different body.",
+        )
     try:
         response = await synthesize_answer(retriever, generator, body, session=session)
     except ValueError as exc:
@@ -94,6 +125,17 @@ async def answer(
         request_id=request_id_for(request),
         requester=username_for(request),
     )
+    # #309: cache for replay if Idempotency-Key was set.
+    if idem.key is not None and idem.request_hash is not None and should_cache(200):
+        await _store_idempotent(
+            session=session,
+            key=idem.key,
+            route="/v1/answer",
+            request_hash=idem.request_hash,
+            resource_id=str(response.answer_id),
+            response_body=response.model_dump(mode="json", exclude_none=True),
+            response_status=200,
+        )
     return response
 
 

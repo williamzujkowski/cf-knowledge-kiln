@@ -27,7 +27,7 @@ single body-hash column.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import delete, select
@@ -87,7 +87,7 @@ class IdempotencyRepository(BaseRepository):
                 resource_id=resource_id,
                 response_body=response_body,
                 response_status=response_status,
-                expires_at=datetime.now(timezone.utc) + ttl,
+                expires_at=datetime.now(UTC) + ttl,
             )
         )
 
@@ -99,7 +99,7 @@ class IdempotencyRepository(BaseRepository):
         to UTC now()). The sweeper isn't on the request path —
         a CLI subcommand or background task invokes it.
         """
-        cutoff = now or datetime.now(timezone.utc)
+        cutoff = now or datetime.now(UTC)
         result = await self._session.execute(
             delete(IdempotencyKey).where(IdempotencyKey.expires_at < cutoff)
         )
@@ -115,9 +115,7 @@ class IdempotencyRepository(BaseRepository):
     ) -> Sequence[IdempotencyKey]:
         """List cached rows. Operational tool only — not used by
         the dispatcher. Useful for audits / debugging."""
-        stmt = select(IdempotencyKey).order_by(
-            IdempotencyKey.created_at.desc()
-        )
+        stmt = select(IdempotencyKey).order_by(IdempotencyKey.created_at.desc())
         if route is not None:
             stmt = stmt.where(IdempotencyKey.route == route)
         if limit is not None:

@@ -36,7 +36,7 @@ import hashlib
 import json
 import logging
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from fastapi import Request
@@ -59,7 +59,7 @@ HEADER = "Idempotency-Key"
 REPLAY_HEADER = "Idempotency-Replayed"
 
 
-class Outcome(str, Enum):
+class Outcome(StrEnum):
     """Dispatcher decision."""
 
     # Header absent or unusable — proceed with normal handler flow.
@@ -109,9 +109,7 @@ def canonical_body_hash(body: dict[str, Any] | None) -> str:
     return.
     """
     payload = body if body is not None else {}
-    serialized = json.dumps(
-        payload, sort_keys=True, separators=(",", ":"), default=str
-    )
+    serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
@@ -161,9 +159,7 @@ async def check_or_replay(
     repo = IdempotencyRepository(session)
     cached = await repo.lookup(key=key, route=route)
     if cached is None:
-        return CheckResult(
-            Outcome.MISS, key, request_hash, None, None
-        )
+        return CheckResult(Outcome.MISS, key, request_hash, None, None)
 
     # Body mismatch under the same key → conflict. The retry
     # path (which the Idempotency-Key contract is FOR) carries
@@ -235,9 +231,7 @@ async def store(
         # not turn a successful handler response into a 500.
         # Matches the pattern in api/views.log_human_query and
         # api/retrieval._log_context_pack.
-        logger.exception(
-            "idempotency_keys cache write failed (non-fatal)"
-        )
+        logger.exception("idempotency_keys cache write failed (non-fatal)")
 
 
 __all__ = [

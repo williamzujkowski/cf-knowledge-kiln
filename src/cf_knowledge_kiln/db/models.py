@@ -343,7 +343,6 @@ class IngestionJob(Base):
     )
 
 
-
 class IdempotencyKey(Base):
     """Per-route replay cache for agent POST retries (#309).
 
@@ -378,6 +377,4 @@ class IdempotencyKey(Base):
     response_body: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     response_status: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     created_at: Mapped[datetime] = _ts()
-    expires_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
