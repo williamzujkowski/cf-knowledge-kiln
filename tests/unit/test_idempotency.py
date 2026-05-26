@@ -89,6 +89,42 @@ class TestExtractKey:
         """Newline / quote / slash injection scrubbed."""
         assert extract_key(self._req("foo\nbar/baz")) == "foo_bar_baz"
 
+    def test_oversized_input_truncated_to_max_key_len(self) -> None:
+        """Sanitizer truncates at MAX_KEY_LEN; extract_key honors it.
+
+        Belt-and-braces (#320 follow-up): even if a future refactor
+        of the sanitizer ever produced a longer string, extract_key
+        re-clamps at the post-sanitize step. Pin the invariant from
+        the caller side."""
+        from cf_knowledge_kiln.api.idempotency import MAX_KEY_LEN
+
+        # Build a value that's clearly too long (10x the cap) using
+        # only the allowed charset so the sanitizer's char-scrub
+        # doesn't accidentally shrink it via replacement.
+        oversized = "a" * (MAX_KEY_LEN * 10)
+        key = extract_key(self._req(oversized))
+        assert key is not None
+        assert len(key) == MAX_KEY_LEN
+
+    def test_key_under_max_returns_unchanged(self) -> None:
+        """A legal key well under the cap passes through verbatim."""
+        from cf_knowledge_kiln.api.idempotency import MAX_KEY_LEN
+
+        # 64-char hex is the common UUID-without-dashes shape.
+        value = "a" * 64
+        assert len(value) < MAX_KEY_LEN
+        assert extract_key(self._req(value)) == value
+
+
+class TestMaxKeyLenExported:
+    """MAX_KEY_LEN is the wire invariant other modules + tests grep for.
+    Pin its value here so a silent bump doesn't slip through review."""
+
+    def test_max_key_len_is_200(self) -> None:
+        from cf_knowledge_kiln.api.idempotency import MAX_KEY_LEN
+
+        assert MAX_KEY_LEN == 200
+
 
 class TestShouldCache:
     """2xx + 4xx yes, 5xx no (transient — caching breaks retry contract)."""
