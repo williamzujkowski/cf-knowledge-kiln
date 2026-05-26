@@ -54,7 +54,13 @@ active > approved > draft > deprecated > archived > superseded
 
 Deprecated/archived/superseded results may appear but **must** be
 visually flagged. Showing a deprecated doc as if it were current is a
-bug, not a feature.
+bug, not a feature. The shipped treatment is a layered five-channel
+signal (verbal stamp + striped body + title strikethrough + heavy
+gutter rule + body fade) so no single sensory failure
+(color-blindness, fast scan, mobile compression, CSS off, print)
+drops the message — see
+[ADR-0010](./adr/0010-five-channel-deprecation-signal.md) for the
+contract a future status addition must obey.
 
 ### Weak-evidence and conflict messaging
 

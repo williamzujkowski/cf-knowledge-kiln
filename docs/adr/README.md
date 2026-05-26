@@ -17,3 +17,4 @@ ADR's `supersedes` field and the older ADR's `superseded_by` field.
 | 0007  | FTS-first retrieval; embeddings deferred to Phase 5.5  | superseded by 0008 |
 | 0008  | Embeddings are MVP-critical; pgvector back in Phase 2  | accepted   |
 | 0009  | Hybrid retrieval — RRF over pgvector + Postgres FTS    | accepted   |
+| 0010  | Five-channel deprecation signal                        | accepted   |
