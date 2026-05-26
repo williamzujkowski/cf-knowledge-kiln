@@ -139,6 +139,20 @@
     } else {
       card.setAttribute("data-expanded", "true");
     }
+    // #284: flip the visible button label to match state. The
+    // <kbd> hint stays put because we only mutate the inner
+    // .card-action-label span, not the full button textContent.
+    // Copy comes from data-label-* attributes on the button so a
+    // future copy edit lives in the template, not in JS.
+    const btn = card.querySelector(".card-action-expand");
+    if (!btn) return;
+    const label = btn.querySelector(".card-action-label");
+    if (!label) return;
+    const nowExpanded = card.getAttribute("data-expanded") === "true";
+    const next = nowExpanded
+      ? btn.getAttribute("data-label-expanded") || "collapse"
+      : btn.getAttribute("data-label-collapsed") || "expand";
+    label.textContent = next;
   };
 
   const toggleCheatsheet = (force) => {
@@ -244,6 +258,34 @@
       c.setAttribute("tabindex", i === 0 ? "0" : "-1");
     });
   };
+
+  // #284: click dispatch for the visible 'copy' + 'expand'
+  // affordances on each result card. The buttons carry
+  // data-action="copy-citation" or "toggle-expand"; the dispatcher
+  // walks up to the nearest .result-card and invokes the same
+  // function the `c` / `o` keyboard shortcuts call, so the two
+  // surfaces stay behaviorally identical.
+  //
+  // Registered here (not in kiln-app.js) because copyCitation and
+  // toggleExpand are IIFE-private — keeping the dispatch and the
+  // implementation in the same closure avoids exporting them onto
+  // window or refactoring the module shape.
+  document.addEventListener("click", (e) => {
+    const target = e.target;
+    if (!target || !target.closest) return;
+    const actor = target.closest("[data-action]");
+    if (!actor) return;
+    const action = actor.getAttribute("data-action");
+    if (action !== "copy-citation" && action !== "toggle-expand") return;
+    const card = actor.closest(".result-card");
+    if (!card) return;
+    e.preventDefault();
+    if (action === "copy-citation") {
+      copyCitation(card);
+    } else {
+      toggleExpand(card);
+    }
+  });
 
   document.addEventListener("keydown", onKeydown);
   document.addEventListener("DOMContentLoaded", seedRovingTabindex);
