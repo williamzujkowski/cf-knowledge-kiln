@@ -1427,6 +1427,136 @@ a.source-link:focus-visible {
      attention in a list scanned at 200ms per card. */
   font-weight: 600;
 }
+
+/* ─── Mobile result-card legibility (#276 / epic #268) ──────────────
+ *
+ * Two breakpoints. The 640px pass is the primary mobile treatment;
+ * the 360px pass handles iPhone Mini / 320 worst-case. The numbered
+ * gutter is preserved (signature element) but softens at each step.
+ * Excerpt stays at 1rem (16px) — above the WCAG 14px floor — because
+ * shrinking the body text would defeat the legibility fix itself.
+ *
+ * Header strategy: force the deprecation-stamp to its own row via
+ * flex-basis: 100% so the five-channel deprecation signal (PR #271)
+ * reads STRONGER on mobile, not weaker. Status badge keeps its
+ * inline wrap because its copy is one short word.
+ *
+ * Footer strategy: stack the score widget above the source-line
+ * (order: -1) so the 200ms-per-card scan still has its right-rail
+ * anchor and long repo paths get the full row width.
+ */
+
+@media (max-width: 640px) {
+  .result-card {
+    /* Tighten the gutter so the ~272px usable width on a 320px
+       viewport leaves real room for the result body. 1.75rem ≈ 28px. */
+    grid-template-columns: 1.75rem 1fr;
+    padding-block: 1rem;
+    gap: 0.45rem;
+  }
+
+  .result-index {
+    /* Soften — drop display-grade opsz, shrink to body-display size.
+       Still italic Fraunces oldstyle nums; reads as quiet chapter
+       mark, not editorial showpiece. */
+    font-size: 1.15rem;
+    font-variation-settings: "opsz" 36;
+    padding-block-start: 0.1rem;
+  }
+
+  .result-header {
+    gap: 0.4rem 0.5rem;
+    margin-block-end: 0.25rem;
+  }
+
+  .result-title {
+    font-size: 1.15rem;
+    line-height: 1.22;
+    /* Drop display-grade opsz at small sizes — text-grade curves
+       carry better at body sizes. */
+    font-variation-settings: "opsz" 36, "SOFT" 30;
+  }
+
+  /* Deprecation-stamp earns its own row so 'Deprecated · do not cite'
+     never collides with a wrapping title or the status badge. Channel
+     1 of the five-channel signal (PR #271) gets MORE prominence on
+     mobile, not less. */
+  .deprecation-stamp {
+    flex-basis: 100%;
+    margin-block-start: 0.1rem;
+  }
+
+  .heading-path {
+    font-size: 0.74rem;
+    margin-block-end: 0.45rem;
+  }
+
+  /* Deprecation gutter rule scales with the narrower card gutter —
+     2px stays visible without dominating the 1.75rem column. */
+  .result-card.status-deprecated::before,
+  .result-card.status-archived::before,
+  .result-card.status-superseded::before {
+    width: 2px;
+    inset-block: 1rem;
+  }
+  .result-card.status-deprecated::after,
+  .result-card.status-archived::after,
+  .result-card.status-superseded::after {
+    inset-block-start: 1rem;
+    inline-size: 0.45rem;
+    block-size: 2px;
+  }
+
+  /* Footer stacks: score widget anchors the top of the row, source-
+     line gets the full width below it. Long repo paths now wrap on
+     slash boundaries instead of squeezing under the score widget. */
+  .result-footer {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.35rem;
+  }
+  .result-footer .score {
+    order: -1;
+  }
+  .source-line {
+    inline-size: 100%;
+    gap: 0.5rem;
+  }
+}
+
+@media (max-width: 360px) {
+  /* Worst-case (iPhone Mini, 320 Androids). Further squeeze the
+     gutter + index; drop the heading-path because its content is
+     already present in the source-line below the excerpt. */
+  .result-card {
+    grid-template-columns: 1.4rem 1fr;
+    padding-block: 0.85rem;
+    gap: 0.4rem;
+  }
+
+  .result-index {
+    font-size: 1rem;
+    font-variation-settings: "opsz" 24;
+  }
+
+  .excerpt {
+    /* One fewer line so the card height stays scannable when each
+       line wraps more aggressively at 320px. */
+    -webkit-line-clamp: 3;
+  }
+
+  .heading-path {
+    /* The same path renders inside .source-line below the excerpt;
+       hiding the breadcrumb here trades duplication for vertical
+       budget. Deliberate de-duplication — not a content loss. */
+    display: none;
+  }
+
+  .deprecation-stamp {
+    /* Tighten tracking so 'do not cite' fits one line at 320px. */
+    letter-spacing: 0.1em;
+  }
+}
 /* ─── Error fragment (#122 margin-note voice) ─────────────────── */
 
 /* The .notice class already carries the oxblood-rule + italic
