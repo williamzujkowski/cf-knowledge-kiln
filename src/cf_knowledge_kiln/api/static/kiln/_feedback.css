@@ -103,27 +103,11 @@
   font-weight: 600;
 }
 
-.feedback-failed {
-  display: block;
-  background: var(--oxblood-tint);
-  border: 0;
-  border-inline-start: 2px solid var(--oxblood);
-  padding: 0.45rem 0.7rem;
-}
-
-.feedback-failed > summary {
-  color: var(--oxblood);
-  font-family: var(--serif);
-  font-style: italic;
-  cursor: pointer;
-}
-
-.fb-error {
-  margin: 0.35rem 0 0;
-  color: var(--ink);
-  font-style: italic;
-  font-size: 0.85rem;
-}
+/* #293: .feedback-failed + .fb-error rules removed — the
+   _feedback_error.html template now uses the shared
+   .notice .notice-alert chrome from _error.html. All error
+   fragments share one editorial voice (oxblood left rule,
+   italic body) instead of two divergent treatments. */
 
 .error-icon {
   font-family: var(--serif);
