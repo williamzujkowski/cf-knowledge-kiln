@@ -123,15 +123,26 @@ class TestOperationsAgree:
                     f"{method.upper()} {path}: operationId drift. hand={hand_id!r}, app={app_id!r}"
                 )
 
-    def test_declared_status_codes_match(
+    def test_declared_status_codes_app_subset_of_hand(
         self, hand_spec: dict[str, Any], app_spec: dict[str, Any]
     ) -> None:
-        """Each method's response keys (status codes) must be the same set.
+        """Every status code FastAPI auto-discovers MUST be documented
+        in the hand spec — but the hand spec is allowed to declare
+        additional statuses that the global handlers / middlewares
+        emit and FastAPI can't infer from route decorators (401 from
+        auth middleware, 500 from the unhandled-exception envelope,
+        529-aside-from-Retry-After-headers, etc.).
 
-        FastAPI auto-adds a ``422`` for routes with a request body — the
-        contract should NOT declare 422 unless it's a real custom 422.
-        We tolerate FastAPI's auto-422 to avoid forcing every contract
-        to list it explicitly.
+        FastAPI auto-adds ``422`` for routes with a request body even
+        when the contract doesn't list it explicitly — still discarded
+        so the assertion doesn't require every body route to itemize 422.
+
+        Pre-#294 this test asserted strict equality. The widened
+        ErrorResponse wiring landed 401 / 500 (and 503 on /v1/answer)
+        on the hand spec for typed-client codegen; those statuses are
+        produced by the global handler in api/error_handlers.py, not
+        by route-level `responses=` kwargs, so FastAPI's app spec
+        doesn't see them. The subset assertion is the right invariant.
         """
         for path in self._shared_paths(hand_spec, app_spec):
             for method in ("get", "post", "put", "delete", "patch"):
@@ -140,9 +151,10 @@ class TestOperationsAgree:
                 hand_codes = set(hand_spec["paths"][path][method].get("responses", {}))
                 app_codes = set(app_spec["paths"][path][method].get("responses", {}))
                 app_codes.discard("422")  # FastAPI auto-adds for body routes
-                assert hand_codes == app_codes, (
-                    f"{method.upper()} {path}: response status codes drift. "
-                    f"hand={sorted(hand_codes)}, app={sorted(app_codes)}"
+                missing = app_codes - hand_codes
+                assert not missing, (
+                    f"{method.upper()} {path}: FastAPI auto-declares status "
+                    f"codes the hand spec is missing. extra={sorted(missing)}"
                 )
 
 
