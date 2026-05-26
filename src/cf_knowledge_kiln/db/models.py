@@ -26,6 +26,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    SmallInteger,
     Text,
     UniqueConstraint,
     func,
@@ -339,4 +340,44 @@ class IngestionJob(Base):
         PG_UUID(as_uuid=True),
         ForeignKey("ingestion_runs.id", ondelete="SET NULL"),
         nullable=True,
+    )
+
+
+
+class IdempotencyKey(Base):
+    """Per-route replay cache for agent POST retries (#309).
+
+    An agent that retries a /v1/agent/* POST with the same
+    Idempotency-Key header gets the original response back
+    byte-identically — no duplicate telemetry row, no extra
+    retriever/generator cost. Body-hash mismatch on the same
+    key → 422 idempotency_conflict (Stripe semantics).
+
+    The PK is composite (key, route) — same key against
+    /v1/answer and /v1/agent/context-pack are independent.
+    expires_at is set at insert time so the sweeper does a
+    plain btree range query instead of CASE-expression
+    filtering. The full response_body is stored as JSONB so
+    a replay re-serves byte-identical bytes (Stripe-style)
+    without re-running retriever or generator.
+    """
+
+    __tablename__ = "idempotency_keys"
+
+    key: Mapped[str] = mapped_column(Text, primary_key=True)
+    route: Mapped[str] = mapped_column(Text, primary_key=True)
+    # sha256 hex of the canonicalized request body. Mismatch on
+    # the same key → 422 idempotency_conflict.
+    request_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    # Wire-visible resource id (context_pack_id / answer_id) or
+    # NULL when the cached response was an error envelope. Stored
+    # as TEXT (not UUID) because /v1/search's rag_queries row PK
+    # isn't surfaced on the wire — for that route it's always
+    # NULL.
+    resource_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    response_body: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    response_status: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    created_at: Mapped[datetime] = _ts()
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
     )
