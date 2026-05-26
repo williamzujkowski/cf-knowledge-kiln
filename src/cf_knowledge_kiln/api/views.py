@@ -163,6 +163,43 @@ _DEPRECATION_LABELS: dict[str, str] = {
 }
 
 
+# Status-badge tooltips (#280). The badge is color-coded (teal /
+# gold / oxblood) and a new or color-blind user has no legend for
+# what each color means. The tooltip is the editorial gloss that
+# rendsers into ``title`` for sighted-mouse hover AND into the
+# ``aria-label`` combined with the visible status word.
+#
+# 'active' is glossed as 'Current — …' (not 'Active — …') to avoid
+# the awkward 'Active — active.' redundancy. Every other status
+# leads with the title-cased status word so the AT announcement
+# reads naturally: 'deprecated: Deprecated — superseded; do not
+# cite as current.'
+#
+# Corpus-native statuses outside this table (e.g. 'reference',
+# 'canonical', 'running' — per the #203 open-status model) return
+# None; the template skips the attribute rather than guessing a
+# meaning the operator never wrote down.
+_STATUS_TOOLTIPS: dict[str, str] = {
+    "active": "Current — the canonical version.",
+    "approved": "Approved — reviewed and signed off.",
+    "draft": "Draft — not yet approved as authoritative.",
+    "deprecated": "Deprecated — superseded; do not cite as current.",
+    "archived": "Archived — kept for historical reference.",
+    "superseded": "Superseded — see the linked successor.",
+}
+
+
+def status_tooltip(status: str) -> str | None:
+    """Return the editorial gloss for a status, or None if unknown.
+
+    Returns ``None`` for any status outside the kiln-recommended
+    Literal vocabulary so the template can ``{% if r.status_tooltip
+    %}`` without per-status guards. The badge still renders
+    color-coded; just without the tooltip.
+    """
+    return _STATUS_TOOLTIPS.get(status)
+
+
 def deprecation_label(status: str) -> str | None:
     """Return the editorial stamp text for a non-current status, or None.
 
@@ -344,5 +381,6 @@ __all__ = [
     "rail_filters_active_count",
     "score_tier",
     "split_warnings",
+    "status_tooltip",
     "warning_severity",
 ]

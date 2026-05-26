@@ -60,6 +60,7 @@ from cf_knowledge_kiln.api.views import (
     rail_filters_active_count,
     score_tier,
     split_warnings,
+    status_tooltip,
 )
 from cf_knowledge_kiln.db.repositories import FeedbackRepository
 from cf_knowledge_kiln.retrieval import HybridRetriever
@@ -384,6 +385,10 @@ def _result_card_view(
         # active/approved/draft so the template can conditionally
         # render the stamp without a per-status switch.
         "deprecation_label": deprecation_label(chunk.status),
+        # #280 hover/AT tooltip explaining the color-coded badge.
+        # None for corpus-native statuses outside the kiln-recommended
+        # vocabulary so the template can ``{% if %}`` the attributes.
+        "status_tooltip": status_tooltip(chunk.status),
     }
 
 

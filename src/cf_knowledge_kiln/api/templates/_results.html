@@ -69,7 +69,15 @@
                 {{ r.title }}
               </button>
             </h2>
-            <span class="status-badge status-{{ r.status }}">{{ r.status }}</span>
+            {# #280: hover tooltip + AT announcement explaining the
+               color-coded status. r.status_tooltip is None for
+               corpus-native statuses outside the kiln-recommended
+               vocabulary (e.g. 'reference', 'canonical', 'running')
+               — those badges render without the tooltip rather than
+               with a guessed meaning. #}
+            <span class="status-badge status-{{ r.status }}"
+                  {% if r.status_tooltip %}title="{{ r.status_tooltip }}"
+                  aria-label="{{ r.status }}: {{ r.status_tooltip }}"{% endif %}>{{ r.status }}</span>
             {# #268 editorial deprecation stamp. Verbal copy replaces
                the silent stripe-only signal — a security engineer
                scanning 20 cards reads 'do not cite' before any text.
@@ -77,8 +85,16 @@
                truthy text for deprecated/archived/superseded with
                status-specific copy from api.views.deprecation_label. #}
             {% if r.deprecation_label %}
-              <span class="deprecation-stamp" aria-label="{{ r.deprecation_label }}">
-                <span class="deprecation-stamp-rule" aria-hidden="true"></span>
+              {# The status badge above already carries an aria-label
+                 like 'deprecated: Deprecated — superseded; do not
+                 cite as current.' which subsumes this stamp's
+                 announcement (#280 review). aria-hidden on the
+                 whole stamp keeps the visible verbal signal for
+                 sighted users without making the AT user hear the
+                 same meaning twice. The inner text node is also
+                 ignored thanks to aria-hidden being inherited. #}
+              <span class="deprecation-stamp" aria-hidden="true">
+                <span class="deprecation-stamp-rule"></span>
                 <span class="deprecation-stamp-text">{{ r.deprecation_label }}</span>
               </span>
             {% endif %}
