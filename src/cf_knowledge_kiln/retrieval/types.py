@@ -53,6 +53,41 @@ WarningType = Literal[
 ]
 """Warning code enum — matches openapi.yaml Warning.type."""
 
+# #358 — `severity` axis. Smaller closed set than WarningType (3 vs 9)
+# so an agent can switch on POLICY without enumerating every emitter
+# type. Lifted from the template-side _WARNING_SEVERITY mapping in
+# api/views.py (which is now a thin re-export — see
+# retrieval.warning_policy for the canonical table).
+Severity = Literal[
+    # Reading the result is fine; just an informational margin note.
+    "advisory",
+    # Caution required: the result is still useful but the operator
+    # should weigh the signal (deprecated source, weak evidence, etc.)
+    "warning",
+    # Refuse-to-act class: a sensitive-content / prompt-injection match.
+    # The result should NOT be cited without operator review.
+    "blocking",
+]
+"""Visual-severity / policy bucket — matches openapi.yaml Warning.severity."""
+
+# #358 — `action` axis: the recommended-thing-to-do per warning. Tells
+# an agent what RESPONSE the warning expects, not what TYPE the warning
+# is. 5 values exactly cover the prose action column in
+# docs/agent-integration-guide.md.
+Action = Literal[
+    # Surface the warning in the answer; otherwise proceed.
+    "inform",
+    # Downweight this source; cite something else if alternatives exist.
+    "prefer_other_sources",
+    # Defer to a human (the answer pipeline sets requires_human_review).
+    "request_human_review",
+    # Surface the normalization to the user (e.g. "I cleaned your query").
+    "rewrite_query",
+    # Drop the chunk; refuse to synthesize if it's the sole evidence.
+    "refuse_to_synthesize",
+]
+"""Action enum — matches openapi.yaml Warning.action."""
+
 Confidence = Literal["high", "medium", "low", "none"]
 """ContextPackResponse confidence enum."""
 
@@ -116,6 +151,17 @@ class Warning(BaseModel):
 
     See :data:`WarningType` for the closed set of codes. ``source_id``
     is the document_id the warning is about (when applicable).
+
+    #358 added ``severity`` + ``action`` so agents can switch on POLICY
+    instead of having to maintain a parallel WarningType → policy
+    lookup. Both are populated by the kiln's emitters via
+    :mod:`cf_knowledge_kiln.retrieval.warning_policy`; both have
+    Pydantic defaults so prior call sites that construct
+    ``Warning(type=..., message=...)`` directly continue to validate
+    (the defaults match the policy table's "advisory / inform" entry,
+    which is the safest fallback for an emitter that hasn't been
+    migrated). The OpenAPI schema lists both as optional response
+    fields per ADR-0011 (additive on /v1/).
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -123,6 +169,15 @@ class Warning(BaseModel):
     type: WarningType
     message: str
     source_id: UUID | None = None
+    # #358: severity defaults to 'advisory' so an emitter that ignores
+    # the field still constructs a valid Warning. Production emitters
+    # route through ``warning_policy.flat_warning`` which populates the
+    # right value per WarningType.
+    severity: Severity = "advisory"
+    # #358: action defaults to 'inform' for the same reason. Five-value
+    # closed set so an agent can pattern-match exhaustively without
+    # tracking 9 warning types.
+    action: Action = "inform"
 
 
 class SearchRequest(BaseModel):

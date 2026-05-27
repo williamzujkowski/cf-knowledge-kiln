@@ -46,7 +46,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from cf_knowledge_kiln.retrieval.types import Warning
+from cf_knowledge_kiln.retrieval.types import Action, Severity, Warning
 
 # ─── Variant base + helpers ────────────────────────────────────
 
@@ -57,9 +57,19 @@ class _VariantBase(BaseModel):
     ``extra='forbid'`` mirrors the flat ``Warning`` and catches
     typos in emitter call sites (a forgotten kwarg surfaces at
     construction time, not at downgrade time).
+
+    #358: every variant carries ``severity`` + ``action`` so the
+    downgrade adapter can project the policy fields onto the flat
+    ``Warning`` shape without a per-emitter lookup. Defaults match
+    the safest fallback (advisory / inform); production emitters
+    pass the per-type values from
+    :data:`cf_knowledge_kiln.retrieval.warning_policy.WARNING_POLICY`.
     """
 
     model_config = ConfigDict(extra="forbid")
+
+    severity: Severity = "advisory"
+    action: Action = "inform"
 
 
 # ─── The nine variants ─────────────────────────────────────────
@@ -259,9 +269,9 @@ def downgrade_to_flat(variant: WarningVariant) -> Warning:
     """Project a variant onto the flat ``Warning`` shape.
 
     Drops every per-variant field; preserves ``type``, ``message``,
-    and (where the variant carries it) ``source_id``. The flat
-    shape is the wire contract for ``/v1/*`` until the ``/v2/``
-    PR ships the discriminated schema.
+    ``source_id`` (where the variant carries it), and the #358
+    policy fields ``severity`` + ``action`` (which every variant
+    inherits from :class:`_VariantBase`).
 
     ``ConflictingSourcesWarning`` carries ``source_ids`` not
     ``source_id`` — the downgrade emits ``source_id=None`` so the
@@ -273,6 +283,8 @@ def downgrade_to_flat(variant: WarningVariant) -> Warning:
         type=variant.type,
         message=variant.message,
         source_id=getattr(variant, "source_id", None),
+        severity=variant.severity,
+        action=variant.action,
     )
 
 

@@ -451,14 +451,18 @@ class TestDowngradeToFlat:
     def test_downgrade_drops_per_variant_fields(
         self, variant: WarningVariant, _expected: dict[str, object]
     ) -> None:
-        # The flat shape has exactly 3 fields. Anything else on the
-        # variant (stale_after_days, top_score, removed_phrases, …)
-        # must not survive the downgrade.
+        # The flat shape has exactly 5 fields after #358:
+        # type, message, source_id (unchanged) PLUS severity, action.
+        # Per-variant fields (stale_after_days, top_score, removed_
+        # phrases, etc.) must NOT survive the downgrade — only the
+        # policy axes ride through.
         flat = downgrade_to_flat(variant)
         assert set(flat.model_dump(exclude_none=False).keys()) == {
             "type",
             "message",
             "source_id",
+            "severity",
+            "action",
         }
 
     def test_downgrade_list_returns_flat_list(self) -> None:
