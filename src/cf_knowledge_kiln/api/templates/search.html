@@ -173,6 +173,23 @@
     aria-live="polite"
     aria-atomic="true"></div>
 
+  {# #321: dedicated feedback live-region, separate from
+     #search-status. When a feedback vote lands within the same
+     event-tick as a preview-load or search-count update, two
+     independent polite regions guarantee both announcements reach
+     AT in order — a single shared region would have the second
+     setText overwrite the first before the screen reader could
+     announce it. role="status" + polite + atomic keeps the
+     ergonomics identical to #search-status; the only difference
+     is the id (and that this region is exclusively for feedback
+     ACK + similar single-shot post-action confirmations). #}
+  <div
+    id="feedback-status"
+    class="search-status"
+    role="status"
+    aria-live="polite"
+    aria-atomic="true"></div>
+
   {# UX-audit MEDIUM: a full result page has 20 cards × ~6 inner
      controls (title button + expand + copy + 6 feedback buttons) =
      120+ tab stops. A keyboard user trying to reach the colophon
