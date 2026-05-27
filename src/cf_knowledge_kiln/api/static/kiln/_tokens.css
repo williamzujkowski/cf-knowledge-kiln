@@ -97,3 +97,76 @@
     --oxblood-stripe: rgba(255, 85, 85, 0.12);
   }
 }
+
+/* ─── #351 prefers-contrast: more palette ────────────────────────────
+ *
+ * Audit Finding #19: low-vision users with prefers-contrast: more set
+ * get the same paired ratios as everyone else. The default palette
+ * passes WCAG AA (5.0-5.3:1 across the accent pairs, AAA on the
+ * ink/paper pair) but plateaus there. WCAG AAA wants 7:1+ for normal
+ * text; prefers-contrast: more is the OS-level signal that the user
+ * needs that.
+ *
+ * Approach: a thinner palette of tokens (just the foreground inks +
+ * the accent pairs) overridden to AAA-passing alternates. We don't
+ * touch the paper background — paper stays the same so the contrast
+ * difference is felt as "ink got darker" rather than "everything
+ * inverted." The deprecation-stripe alpha is bumped too so the hatch
+ * carries through despite the darker ink overpowering it.
+ *
+ * Approximate ratios (computed against the unchanged paper #f4f7fd):
+ *   ink        #1c2330  →  ~12.5:1  AAA
+ *   ink-soft   #2b3548  →  ~9.5:1   AAA
+ *   ink-faded  #3f4a5e  →  ~7.5:1   AAA
+ *   oxblood    #7e1820  →  ~7.0:1   AAA
+ *   teal       #00475e  →  ~7.1:1   AAA
+ *   gold       #6b3712  →  ~7.3:1   AAA
+ * (Eyeballed via WebAIM contrast checker; tests in a follow-up if
+ * the team wants automated verification.)
+ *
+ * Pairs with #356 (focus-ring widens to 3px at prefers-contrast: more)
+ * + #352 (forced-colors: active for Windows High Contrast users).
+ * ─────────────────────────────────────────────────────────── */
+@media (prefers-contrast: more) {
+  :root {
+    --ink:          #1c2330;
+    --ink-soft:     #2b3548;
+    --ink-faded:    #3f4a5e;
+    --rule:         #8a99b3;
+    --rule-strong:  #5d6f8a;
+
+    --oxblood:      #7e1820;
+    --oxblood-tint: #ecbac0;
+    --teal:         #00475e;
+    --teal-tint:    #abd2e2;
+    --gold:         #6b3712;
+    --gold-tint:    #e9cba6;
+    /* Stripe alpha bumped to 0.22 so the hatch still reads against
+       the darker accent ink — at the default 0.14 it visually
+       merged with the ink overpaint. */
+    --oxblood-stripe: rgba(126, 24, 32, 0.22);
+  }
+}
+
+/* prefers-contrast: more × prefers-color-scheme: dark — combined.
+ * Without this rule the dark-mode tokens (defined above) win because
+ * they're declared later, so a dark+high-contrast user gets ordinary
+ * dark mode. This block re-overrides for the combined case with
+ * AAA-passing inks against the dark #212121 paper. */
+@media (prefers-contrast: more) and (prefers-color-scheme: dark) {
+  :root {
+    --ink:          #ffffff;
+    --ink-soft:     #e0e0e0;
+    --ink-faded:    #bdbdbd;
+    --rule:         #6a6a6a;
+    --rule-strong:  #8d8d8d;
+
+    --oxblood:      #ff8888;
+    --oxblood-tint: #5a2424;
+    --teal:         #b6f0ff;
+    --teal-tint:    #245665;
+    --gold:         #ffe199;
+    --gold-tint:    #5a4624;
+    --oxblood-stripe: rgba(255, 136, 136, 0.2);
+  }
+}
