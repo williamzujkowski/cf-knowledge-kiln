@@ -144,10 +144,16 @@ async def search_partial(
     if not limiter.hit(key):
         # HTMX-friendly fragment with the same template the error path uses.
         retry = limiter.retry_after(key)
+        # #340 editorial copy: label gives the operator a clear
+        # one-line failure name; message keeps the actionable
+        # retry-after detail.
         return templates.TemplateResponse(
             request,
             "_error.html",
-            {"message": f"Too many requests. Please retry in {retry}s."},
+            {
+                "label": "Too many requests",
+                "message": f"Please retry in {retry}s.",
+            },
             status_code=429,
             headers={"Retry-After": str(retry)},
         )
@@ -164,7 +170,10 @@ async def search_partial(
         return templates.TemplateResponse(
             request,
             "_error.html",
-            {"message": f"Query too long — limit is {MAX_QUERY_LENGTH} characters."},
+            {
+                "label": "Query too long",
+                "message": f"Limit is {MAX_QUERY_LENGTH} characters.",
+            },
             status_code=413,
         )
     fs = filters_set is not None
@@ -192,7 +201,13 @@ async def search_partial(
         return templates.TemplateResponse(
             request,
             "_error.html",
-            {"message": "Search is temporarily unavailable. Please try again."},
+            {
+                # ASCII apostrophe in source; the template can smart-
+                # quote on render if desired (ruff RUF001 forbids the
+                # curly mark in Python string literals).
+                "label": "Couldn't reach the engine",
+                "message": "Search is temporarily unavailable; try again in a moment.",
+            },
             status_code=503,
         )
     if kiln_source == "keyup-debounce":

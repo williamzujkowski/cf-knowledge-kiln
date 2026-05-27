@@ -2,7 +2,14 @@
    (oxblood left rule, italic, no fill) so failures read as quiet
    editorial annotations rather than chat-app banners. role="alert"
    still announces to AT. #}
+{# #340 editorial copy: replaced bare 'Error' label (system-y) with
+   a phrase that names the failure mode and keeps the editorial
+   margin-annotation voice. Two messages used: 'Couldn't reach the
+   engine' for retrieval failures (the dominant case via HTMX swap
+   on 503), 'Something went wrong' as the fallback. The {%- if -%}
+   keeps the visible label faithful to which failure the operator
+   is reading. #}
 <aside class="error-fragment notice notice-alert" role="alert">
-  <span class="notice-label" aria-hidden="true">Error</span>
+  <span class="notice-label" aria-hidden="true">{%- if label -%}{{ label }}{%- else -%}Couldn&rsquo;t complete this{%- endif -%}</span>
   <em class="error-message">{{ message }}</em>
 </aside>

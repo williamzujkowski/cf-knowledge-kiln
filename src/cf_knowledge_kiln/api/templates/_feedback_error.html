@@ -8,7 +8,13 @@
    The fragment is still the HTMX swap target for the feedback form
    (outerHTML swap), so the role='alert' on the wrapper announces
    the failure exactly once when it lands. #}
+{# #340 editorial copy: the prior system-y label was replaced with
+   the editorial annotation register (Couldn&rsquo;t record this) so
+   the error reads as a margin annotation rather than a banner.
+   Pairs with _error.html which uses the same shape. The notice-
+   label is still AT-hidden (the role=alert on the wrapper carries
+   the announcement). See docs/copy-voice.md for the canon. #}
 <aside class="feedback-error notice notice-alert" role="alert">
-  <span class="notice-label" aria-hidden="true">Feedback failed</span>
+  <span class="notice-label" aria-hidden="true">Couldn&rsquo;t record this</span>
   <em class="error-message">{{ message }}</em>
 </aside>
