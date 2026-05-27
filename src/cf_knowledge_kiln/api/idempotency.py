@@ -257,10 +257,31 @@ async def store(
     unconditionally inserts. Separating the cache-vs-not decision
     from the write keeps the dispatcher dead-simple and the
     should_cache policy in one place.
+
+    #320 items 1 + 2: uses ``create_if_absent`` (INSERT … ON
+    CONFLICT DO NOTHING) so two concurrent same-key submissions
+    don't race-error; the loser silently observes that the winner
+    already cached the response. Remaining exceptions are
+    discriminated:
+
+    * ``OperationalError`` — transient DB (connection drop,
+      timeout). WARNING log; the next retry's check_or_replay will
+      MISS and re-execute (correctness preserved; we just didn't
+      cache the response).
+    * ``IntegrityError`` — genuine schema-level constraint failure
+      (NOT the race; that's the DO-NOTHING branch). ERROR log;
+      surfaces real corruption to an operator without 500-ing
+      the otherwise-successful response.
+    * Anything else — ERROR log, opaque to the caller.
     """
+    # Local imports keep the module import-light + avoid forcing
+    # asyncpg / sqlalchemy.exc onto consumers that only touch the
+    # dispatch protocol.
+    from sqlalchemy.exc import IntegrityError, OperationalError
+
     try:
         async with session.begin_nested():
-            await IdempotencyRepository(session).create(
+            inserted = await IdempotencyRepository(session).create_if_absent(
                 key=key,
                 route=route,
                 request_hash=request_hash,
@@ -268,12 +289,48 @@ async def store(
                 response_body=response_body,
                 response_status=response_status,
             )
+        if not inserted:
+            # Race lost: a sibling request already cached this
+            # (key, route). Functionally fine — both handlers
+            # produced a valid response; only the winner's bytes
+            # are cached. The agent's retry hits the winner's row
+            # so the byte-identical-replay contract holds.
+            logger.info(
+                "idempotency_keys race observed (key=%s route=%s) — "
+                "sibling request already cached; this response not cached.",
+                key,
+                route,
+            )
+    except OperationalError:
+        # Transient DB issue. Telemetry-style non-fatal: a cache-
+        # write failure must not turn a successful handler response
+        # into a 500. The next retry's check_or_replay will MISS
+        # and the handler re-executes — correctness preserved.
+        logger.warning(
+            "idempotency_keys cache write failed: transient DB error "
+            "(key=%s route=%s, response NOT cached, next retry will re-run).",
+            key,
+            route,
+        )
+    except IntegrityError:
+        # Genuine constraint violation — NOT the (key, route) race
+        # (DO-NOTHING handled that). Surface as ERROR so an
+        # operator notices real schema corruption.
+        logger.exception(
+            "idempotency_keys cache write failed: integrity constraint "
+            "(key=%s route=%s). Likely schema-level corruption — investigate.",
+            key,
+            route,
+        )
     except Exception:
-        # Telemetry-style non-fatal: a cache-write failure must
-        # not turn a successful handler response into a 500.
-        # Matches the pattern in api/views.log_human_query and
-        # api/retrieval._log_context_pack.
-        logger.exception("idempotency_keys cache write failed (non-fatal)")
+        # Defense in depth for the rare "neither of the above" path.
+        # Same non-fatal contract — the handler response stands.
+        logger.exception(
+            "idempotency_keys cache write failed (key=%s route=%s, "
+            "non-fatal — response NOT cached).",
+            key,
+            route,
+        )
 
 
 __all__ = [

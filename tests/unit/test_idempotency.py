@@ -285,3 +285,214 @@ class TestCheckOrReplayExpiry:
             body={"q": "new"},  # different body
         )
         assert result.outcome == Outcome.MISS
+
+
+# ─── #320 items 1+2: race-safe store + exception discrimination ──
+
+
+class _RecordingLogger:
+    """Capture log calls so we can assert WARNING vs ERROR vs INFO."""
+
+    def __init__(self) -> None:
+        self.info_msgs: list[str] = []
+        self.warning_msgs: list[str] = []
+        self.error_msgs: list[str] = []
+        self.exception_msgs: list[str] = []
+
+    def info(self, msg: str, *args: object, **_kw: object) -> None:
+        self.info_msgs.append(msg % args if args else msg)
+
+    def warning(self, msg: str, *args: object, **_kw: object) -> None:
+        self.warning_msgs.append(msg % args if args else msg)
+
+    def error(self, msg: str, *args: object, **_kw: object) -> None:
+        self.error_msgs.append(msg % args if args else msg)
+
+    def exception(self, msg: str, *args: object, **_kw: object) -> None:
+        self.exception_msgs.append(msg % args if args else msg)
+
+
+class _StubAsyncCtx:
+    """Minimal async-with stub for session.begin_nested()."""
+
+    async def __aenter__(self) -> _StubAsyncCtx:
+        return self
+
+    async def __aexit__(self, *args: object) -> None:
+        return None
+
+
+class _StubSession:
+    """Minimal AsyncSession stand-in: only begin_nested is used by store()."""
+
+    def begin_nested(self) -> _StubAsyncCtx:
+        return _StubAsyncCtx()
+
+
+class _StubRepoForStore:
+    """Replaces IdempotencyRepository so store() can be exercised
+    without standing up Postgres."""
+
+    def __init__(self, *, returns: bool = True, raises: Exception | None = None) -> None:
+        self.returns = returns
+        self.raises = raises
+        self.create_if_absent_called = False
+
+    async def create_if_absent(self, **_kwargs: object) -> bool:
+        self.create_if_absent_called = True
+        if self.raises is not None:
+            raise self.raises
+        return self.returns
+
+
+class TestStoreRaceSafety:
+    """#320 item 1: concurrent same-key submissions can't race-error.
+
+    The dispatcher calls create_if_absent (INSERT … ON CONFLICT DO NOTHING),
+    which returns False when a sibling request already cached the row.
+    store() must log INFO (not WARNING/ERROR) and return cleanly.
+    """
+
+    @pytest.mark.asyncio
+    async def test_race_lost_returns_cleanly_with_info_log(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from cf_knowledge_kiln.api import idempotency as mod
+
+        repo = _StubRepoForStore(returns=False)  # race-lost shape
+        rec = _RecordingLogger()
+        monkeypatch.setattr(mod, "IdempotencyRepository", lambda _s: repo)
+        monkeypatch.setattr(mod, "logger", rec)
+
+        await mod.store(
+            session=_StubSession(),
+            key="dash-shaped-value-1",
+            route="/v1/search",
+            request_hash="abc",
+            resource_id=None,
+            response_body={"x": 1},
+            response_status=200,
+        )
+
+        assert repo.create_if_absent_called is True
+        assert rec.warning_msgs == []  # NOT a warning — race is expected
+        assert rec.error_msgs == []
+        assert rec.exception_msgs == []
+        # INFO log carries enough context for an operator to grep
+        assert len(rec.info_msgs) == 1
+        assert "race observed" in rec.info_msgs[0]
+
+    @pytest.mark.asyncio
+    async def test_fresh_insert_logs_nothing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from cf_knowledge_kiln.api import idempotency as mod
+
+        repo = _StubRepoForStore(returns=True)  # fresh insert
+        rec = _RecordingLogger()
+        monkeypatch.setattr(mod, "IdempotencyRepository", lambda _s: repo)
+        monkeypatch.setattr(mod, "logger", rec)
+
+        await mod.store(
+            session=_StubSession(),
+            key="dash-shaped-value-2",
+            route="/v1/search",
+            request_hash="abc",
+            resource_id=None,
+            response_body={"x": 1},
+            response_status=200,
+        )
+
+        # Happy path: nothing logged at any level.
+        assert rec.info_msgs == []
+        assert rec.warning_msgs == []
+        assert rec.error_msgs == []
+        assert rec.exception_msgs == []
+
+
+class TestStoreExceptionDiscrimination:
+    """#320 item 2: distinguish OperationalError (transient) from
+    IntegrityError (corruption) from the generic catch-all."""
+
+    @pytest.mark.asyncio
+    async def test_operational_error_logs_warning(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from sqlalchemy.exc import OperationalError
+
+        from cf_knowledge_kiln.api import idempotency as mod
+
+        # OperationalError signature: (statement, params, orig)
+        exc = OperationalError("SELECT 1", {}, Exception("connection dropped"))
+        repo = _StubRepoForStore(raises=exc)
+        rec = _RecordingLogger()
+        monkeypatch.setattr(mod, "IdempotencyRepository", lambda _s: repo)
+        monkeypatch.setattr(mod, "logger", rec)
+
+        await mod.store(
+            session=_StubSession(),
+            key="dash-shaped-value-3",
+            route="/v1/search",
+            request_hash="abc",
+            resource_id=None,
+            response_body={"x": 1},
+            response_status=200,
+        )
+
+        # Transient → WARNING (operator-noticeable but not actionable);
+        # NOT exception() (which carries traceback and reads as bug).
+        assert len(rec.warning_msgs) == 1
+        assert "transient DB error" in rec.warning_msgs[0]
+        assert rec.error_msgs == []
+        assert rec.exception_msgs == []
+
+    @pytest.mark.asyncio
+    async def test_integrity_error_logs_exception(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from sqlalchemy.exc import IntegrityError
+
+        from cf_knowledge_kiln.api import idempotency as mod
+
+        # IntegrityError surfaces when ON CONFLICT didn't deflect —
+        # i.e. genuine schema corruption (NOT the (key, route) race).
+        exc = IntegrityError("INSERT", {}, Exception("not-null violation on column foo"))
+        repo = _StubRepoForStore(raises=exc)
+        rec = _RecordingLogger()
+        monkeypatch.setattr(mod, "IdempotencyRepository", lambda _s: repo)
+        monkeypatch.setattr(mod, "logger", rec)
+
+        await mod.store(
+            session=_StubSession(),
+            key="dash-shaped-value-4",
+            route="/v1/search",
+            request_hash="abc",
+            resource_id=None,
+            response_body={"x": 1},
+            response_status=200,
+        )
+
+        # Real corruption → exception() with traceback so operator
+        # has the stack on hand.
+        assert len(rec.exception_msgs) == 1
+        assert "integrity constraint" in rec.exception_msgs[0]
+        assert rec.warning_msgs == []
+
+    @pytest.mark.asyncio
+    async def test_unknown_exception_logs_exception_non_fatal(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from cf_knowledge_kiln.api import idempotency as mod
+
+        repo = _StubRepoForStore(raises=RuntimeError("disk full"))
+        rec = _RecordingLogger()
+        monkeypatch.setattr(mod, "IdempotencyRepository", lambda _s: repo)
+        monkeypatch.setattr(mod, "logger", rec)
+
+        # Crucially: must NOT re-raise. The handler response stands.
+        await mod.store(
+            session=_StubSession(),
+            key="dash-shaped-value-5",
+            route="/v1/search",
+            request_hash="abc",
+            resource_id=None,
+            response_body={"x": 1},
+            response_status=200,
+        )
+
+        assert len(rec.exception_msgs) == 1
+        assert "non-fatal" in rec.exception_msgs[0]

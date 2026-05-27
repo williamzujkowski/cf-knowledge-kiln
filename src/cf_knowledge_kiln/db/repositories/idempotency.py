@@ -31,6 +31,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from cf_knowledge_kiln.db.models import IdempotencyKey
 from cf_knowledge_kiln.db.repositories._base import BaseRepository
@@ -78,6 +79,10 @@ class IdempotencyRepository(BaseRepository):
         insert time as ``now() + ttl`` so the sweeper's index
         does a plain btree range query instead of a CASE
         expression on every row.
+
+        Raises ``IntegrityError`` on (key, route) collision —
+        callers that need race-safe insertion should use
+        :meth:`create_if_absent` instead.
         """
         return await self._persist(
             IdempotencyKey(
@@ -90,6 +95,58 @@ class IdempotencyRepository(BaseRepository):
                 expires_at=datetime.now(UTC) + ttl,
             )
         )
+
+    async def create_if_absent(
+        self,
+        *,
+        key: str,
+        route: str,
+        request_hash: str,
+        resource_id: str | None,
+        response_body: dict[str, Any],
+        response_status: int,
+        ttl: timedelta = DEFAULT_TTL,
+    ) -> bool:
+        """Race-safe insert. Returns True if a new row was inserted,
+        False if a row already existed for ``(key, route)``.
+
+        Uses ``INSERT … ON CONFLICT (key, route) DO NOTHING`` so two
+        concurrent same-key submissions can't error — the second
+        writer cleanly observes that the first already cached the
+        response. The composite PK on the table is the conflict
+        target.
+
+        #320 item 1: prior ``create()`` raised IntegrityError on
+        the race, which the dispatcher caught + logged but couldn't
+        distinguish from a real schema-constraint failure. This
+        method makes "race lost" a normal return value, leaving the
+        ``except IntegrityError`` branch for genuine corruption.
+
+        Both writers' responses are functionally correct (the
+        handler ran successfully); only one wins the cache slot.
+        The retry contract is preserved: a subsequent retry with
+        the same key hits the cached row and replays the winner's
+        bytes.
+        """
+        stmt = (
+            pg_insert(IdempotencyKey)
+            .values(
+                key=key,
+                route=route,
+                request_hash=request_hash,
+                resource_id=resource_id,
+                response_body=response_body,
+                response_status=response_status,
+                expires_at=datetime.now(UTC) + ttl,
+            )
+            .on_conflict_do_nothing(index_elements=["key", "route"])
+        )
+        result = await self._session.execute(stmt)
+        # rowcount is 1 on insert, 0 when DO NOTHING fired. Driver
+        # may not populate rowcount on all backends; default to 0
+        # so a missing value reads as "didn't insert" (safer for
+        # the caller's telemetry).
+        return bool(getattr(result, "rowcount", 0))
 
     async def delete_expired(self, *, now: datetime | None = None) -> int:
         """Drop expired rows; return the number deleted.
