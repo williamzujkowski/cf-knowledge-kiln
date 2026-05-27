@@ -1,0 +1,51 @@
+{# #338 first-visit onboarding overlay.
+
+   Renders with `data-hidden` until kiln-empty.js sees the localStorage
+   flag is absent AND prefers-reduced-motion isn't set. Suppressed under
+   no-JS or when the user has dismissed it once.
+
+   Voice matches docs/copy-voice.md — italic Fraunces title, editorial
+   register in the body. No system-y "Got it" — the action verbs are
+   "Try a query" + "Skip".
+
+   The native <dialog> element gives us a free Esc-close + focus trap
+   on modern browsers; the JS opens it via showModal() so a tab outside
+   the dialog can't escape into the obscured page. role="dialog" is
+   implicit on <dialog>; aria-labelledby points at the visible heading
+   so AT users hear the title on focus.
+#}
+<dialog
+  id="onboarding"
+  class="onboarding"
+  aria-labelledby="onboarding-title"
+  data-hidden>
+  <div class="onboarding-card">
+    <h2 class="onboarding-title" id="onboarding-title">
+      <em>Welcome</em> &mdash; this is your team&rsquo;s cited search.
+    </h2>
+    <p class="onboarding-body">
+      Search runbooks, ADRs, standards, and guides indexed from your
+      team&rsquo;s docs. Every result links back to the source &mdash;
+      <em>nothing is invented</em>, and deprecated docs are visibly
+      flagged.
+    </p>
+    <p class="onboarding-body onboarding-secondary">
+      Type what you&rsquo;re trying to remember, or pick an example below.
+      Press <kbd>?</kbd> for keyboard shortcuts.
+    </p>
+    <div class="onboarding-actions">
+      <button
+        type="button"
+        class="onboarding-button onboarding-primary"
+        data-action="onboarding-try">
+        Try a query
+      </button>
+      <button
+        type="button"
+        class="onboarding-button onboarding-secondary"
+        data-action="onboarding-skip">
+        Skip
+      </button>
+    </div>
+  </div>
+</dialog>
