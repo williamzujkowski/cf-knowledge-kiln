@@ -388,17 +388,46 @@ async def test_pipeline_does_not_hold_idle_in_transaction_during_embed_phase(
     # Across every snapshot, no connection touching the chunks/embeddings
     # JOIN may be 'idle in transaction'. The poller itself uses simple
     # SELECTs so its own connections appear as 'active' and short-lived.
+    #
+    # #323: the original assertion failed on a SINGLE offending snapshot,
+    # which produced CI flakes — pg_stat_activity is a polling snapshot,
+    # not a continuous trace, so it can catch a connection in the
+    # millisecond between commit and the next BEGIN with the dedup
+    # SELECT still listed as ``query`` (Postgres only updates ``state``,
+    # not ``query``, between transactions on the same connection).
+    #
+    # Bug fingerprint is "connection STUCK in idle-in-tx for the FULL
+    # duration of the embed phase" (minutes on a large doc). The
+    # snapshot poller fires every 50ms, so requiring N consecutive
+    # snapshots of the same (pid, state, query) means a genuinely-
+    # stuck connection is caught (still hundreds of ms wall-clock)
+    # while a single transient catch is tolerated.
+    _CONSECUTIVE_FLAKE_THRESHOLD = 3  # 3 snapshots @ 50ms = 150ms minimum stuck
     offending: list[tuple[int, dict[str, str]]] = []
+    streaks: dict[int, int] = {}  # pid → consecutive matching snapshots
     for i, snap in enumerate(snapshots):
+        seen_this_snap: set[int] = set()
         for row in snap:
             state = row.get("state") or ""
             query = row.get("query") or ""
+            pid = row.get("pid")
             if state == "idle in transaction" and "document_chunks" in query:
-                offending.append((i, row))
+                seen_this_snap.add(pid)
+                streaks[pid] = streaks.get(pid, 0) + 1
+                if streaks[pid] >= _CONSECUTIVE_FLAKE_THRESHOLD:
+                    offending.append((i, row))
+        # Reset streaks for pids that DIDN'T match this snapshot —
+        # the bug is continuous-stuck, not "appears repeatedly with
+        # gaps." A single transient catch then a clean snapshot
+        # means the tx committed; ignore it.
+        for pid in list(streaks):
+            if pid not in seen_this_snap:
+                streaks.pop(pid, None)
     assert not offending, (
-        "#286 regression: connection held 'idle in transaction' on the "
-        f"chunks-JOIN-chunk_embeddings dedup SELECT during the embed phase. "
-        f"Offending snapshots: {offending[:3]}"
+        f"#286 regression: connection held 'idle in transaction' on the "
+        f"chunks-JOIN-chunk_embeddings dedup SELECT for ≥"
+        f"{_CONSECUTIVE_FLAKE_THRESHOLD} consecutive snapshots during the "
+        f"embed phase. Offending snapshots: {offending[:3]}"
     )
 
 
