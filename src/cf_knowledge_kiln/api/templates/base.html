@@ -93,5 +93,11 @@
     </nav>
     <p class="set-mark"><span aria-hidden="true">§</span> cf-knowledge-kiln</p>
   </footer>
+  {# #338 first-visit onboarding overlay (kiln-empty.js opens it on
+     load when the localStorage flag is absent + prefers-reduced-
+     motion is unset; the overlay is data-hidden by default so JS-
+     off browsers see nothing — the existing exemplars are the
+     fallback path). #}
+  {% include "_onboarding.html" %}
 </body>
 </html>
