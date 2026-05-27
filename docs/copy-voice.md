@@ -40,7 +40,7 @@ toast that says 'Success!'?") has somewhere concrete to push back from.
 
 6. **No exclamation marks. No emojis.** The voice is quiet.
 
-7. **Verbs over nouns.** "Skip past results" over "Result skip"; 
+7. **Verbs over nouns.** "Skip past results" over "Result skip";
    "Couldn't record this" over "Record failure."
 
 8. **Same word, same meaning.** If "stale" means "last_reviewed past

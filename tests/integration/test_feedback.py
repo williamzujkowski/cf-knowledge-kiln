@@ -124,7 +124,9 @@ def test_feedback_persists_row_and_returns_ack(
         },
     )
     assert r.status_code == 200, r.text
-    assert "Thanks" in r.text
+    # #340 editorial copy: 'Thanks' replaced by italic 'Noted'.
+    # See docs/copy-voice.md for the canonical phrase.
+    assert "Noted" in r.text
     assert "useful" in r.text
 
     async def _rows() -> list[RagFeedback]:
