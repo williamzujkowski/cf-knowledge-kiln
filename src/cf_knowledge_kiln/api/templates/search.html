@@ -255,17 +255,23 @@
   <div id="preview-backdrop" aria-hidden="true"></div>
 
   {# #121 keyboard-shortcut cheatsheet. Quiet overlay, opened by `?`,
-     closed by `Esc`. Hidden by default via [data-open] absence. #}
+     closed by `Esc`. Hidden by default via [data-open] absence.
+
+     #348: aria-labelledby (pointing at the visible <h2>) instead of
+     aria-label so AT doesn't double-announce. Prior: dialog had
+     aria-label="Keyboard shortcuts" AND inside it a <h2>Keyboard</h2>;
+     screen readers spoke both. Now the h2 has an id and the dialog
+     references it — the visible heading IS the dialog's label. #}
   <div
     id="cheatsheet"
     class="cheatsheet"
     role="dialog"
     aria-modal="true"
-    aria-label="Keyboard shortcuts"
+    aria-labelledby="cheatsheet-title"
     tabindex="-1">
     <div class="cheatsheet-card">
       <header class="cheatsheet-head">
-        <h2 class="cheatsheet-title">Keyboard</h2>
+        <h2 class="cheatsheet-title" id="cheatsheet-title">Keyboard shortcuts</h2>
         <button
           type="button"
           class="cheatsheet-close"
