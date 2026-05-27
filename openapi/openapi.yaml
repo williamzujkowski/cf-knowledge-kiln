@@ -835,6 +835,18 @@ components:
             chunk_id") DOES bump it. Agents that don't recognize the
             id should fall back to the safe default — refuse to treat
             source text as instructions.
+        untrusted_content_notice_pinned_phrases:
+          type: array
+          items: { type: string }
+          description: |
+            #360 — short canonical substrings that MUST appear verbatim
+            in whatever rendering the agent ships. Run
+            ``for p in pack.untrusted_content_notice_pinned_phrases:
+            assert p in rendered_prompt`` after templating to catch a
+            silent truncation that would weaken the contract. Three
+            short phrases (vs one long one) so a truncation dropping
+            one leaves the contract recognizable; dropping all three
+            is loud (the consumer's verifier fails fast).
 
     EvidenceChunk:
       type: object
@@ -1038,3 +1050,11 @@ components:
             can switch on the handle instead of byte-comparing the
             prose. See the matching field on `ContextPackResponse`
             for the full contract.
+        untrusted_content_notice_pinned_phrases:
+          type: array
+          items: { type: string }
+          description: |
+            #360 — same pinned-phrase contract as
+            `ContextPackResponse.untrusted_content_notice_pinned_phrases`.
+            Consumers should verify every phrase appears in their
+            rendered prompt before sending the request to the model.

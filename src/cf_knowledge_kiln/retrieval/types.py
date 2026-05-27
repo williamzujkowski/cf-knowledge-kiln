@@ -290,6 +290,15 @@ class ContextPackResponse(BaseModel):
     # the prose without changing the meaning does NOT change the id;
     # changing the meaning DOES bump it.
     untrusted_content_notice_id: str
+    # #360: short canonical phrases the agent's prompt template MUST
+    # contain verbatim. A naive template-truncation that drops any
+    # of these has weakened the contract; consumers run a quick
+    # ``for p in pack.untrusted_content_notice_pinned_phrases: assert
+    # p in rendered_prompt`` after templating to catch it. Three
+    # short phrases (vs one long one) so a truncation that drops one
+    # still leaves the contract recognizable; dropping all three is
+    # loud (the consumer's verifier fails fast).
+    untrusted_content_notice_pinned_phrases: list[str] = Field(default_factory=list)
 
 
 # ─── /v1/answer shapes (#192 Phase B+C) ────────────────────────────────
@@ -372,6 +381,9 @@ class AnswerResponse(BaseModel):
     # Same stable id pattern as ContextPackResponse (agent-API audit
     # post-#299) — see the field above for the contract.
     untrusted_content_notice_id: str
+    # #360: pinned phrases for prompt-truncation safety; see the
+    # matching field on ContextPackResponse for the contract.
+    untrusted_content_notice_pinned_phrases: list[str] = Field(default_factory=list)
 
 
 __all__ = [
