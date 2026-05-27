@@ -25,6 +25,10 @@ from cf_knowledge_kiln.db.repositories.operations import (
     IngestionRunsRepository,
     QueriesRepository,
 )
+from cf_knowledge_kiln.db.repositories.registry import (
+    RegistryRepository,
+    RegistryRow,
+)
 
 __all__ = [
     "AnswersRepository",
@@ -39,4 +43,6 @@ __all__ = [
     "IngestionRunsRepository",
     "ModelRegistryRepository",
     "QueriesRepository",
+    "RegistryRepository",
+    "RegistryRow",
 ]

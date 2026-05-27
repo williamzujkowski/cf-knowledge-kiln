@@ -176,6 +176,15 @@ class Settings(BaseSettings):
     # GitHub blob URL of docs/agent-integration-guide.md).
     agent_guide_url: str | None = None
 
+    # #359: TTL for the GET /v1/registry cache. Agents bootstrapping
+    # a kiln client call /v1/registry once to learn the per-dimension
+    # filter vocabulary, then cache it locally; the kiln's own
+    # process-local cache avoids re-aggregating the documents table
+    # for every bootstrap call. 5 min default keeps the response
+    # within one ingestion cycle of fresh; operators with bursty
+    # ingestion can drop it via KILN_REGISTRY_CACHE_SECONDS=60.
+    registry_cache_seconds: int = 300
+
     # #198: upper bound on the one-shot embedding-provider health probe
     # run at startup. 90 s gives ~3x the previous 30 s headroom for
     # cold first-call HuggingFace weight pulls, while leaving a 30 s

@@ -275,6 +275,49 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /v1/registry:
+    get:
+      tags: [agent]
+      summary: Filter vocabulary for the current deploy
+      description: |
+        Returns the per-dimension filter vocabulary so an agent can
+        validate `RetrievalFilters` values before sending. Each entry
+        carries `count` (how many indexed documents currently have
+        the value) and `last_indexed` (most-recent `last_reviewed`
+        date in the bucket) — agents can skip values with `count == 0`
+        to avoid the silent-failure path where a recognized-but-
+        empty filter returns no results.
+
+        Server-side TTL cache (default 300 s, configurable via
+        `KILN_REGISTRY_CACHE_SECONDS`). High-QPS bootstrap callers
+        SHOULD cache the response locally too — the dimensions
+        rarely change within a 5-minute window.
+
+        See `docs/agent-integration-guide.md` for the consumer
+        contract; #359 for the issue trail.
+      operationId: agentRegistry
+      parameters:
+        - in: query
+          name: dimension
+          required: false
+          schema:
+            $ref: "#/components/schemas/RegistryDimension"
+          description: |
+            Optional. Limit the response to a single dimension; the
+            response shell stays the same (the `dimensions` map
+            contains just the one key).
+      responses:
+        "200":
+          description: Per-dimension filter vocabulary.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegistryResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
 components:
   # #294: bearer-token auth, gated by KILN_AUTH_MODE in api/auth.py.
   # When mode='none' (default) the middleware short-circuits and the
@@ -1099,3 +1142,65 @@ components:
             `ContextPackResponse.untrusted_content_notice_pinned_phrases`.
             Consumers should verify every phrase appears in their
             rendered prompt before sending the request to the model.
+
+    # ─── /v1/registry shapes (#359) ─────────────────────────────────
+
+    RegistryDimension:
+      type: string
+      enum:
+        - status
+        - doc_type
+        - owner
+        - repo
+        - authority
+        - sensitivity
+        - system
+      description: |
+        Closed set of filter dimensions the kiln aggregates. Adding a
+        new dimension is a deliberate API change (matches the
+        `RetrievalFilters` field set that backs DB columns).
+
+    RegistryValue:
+      type: object
+      required: [value, count]
+      properties:
+        value:
+          type: string
+          description: |
+            The literal string an agent would pass in
+            `RetrievalFilters` (e.g. `"runbook"` for `doc_type`,
+            `"active"` for `status`).
+        count:
+          type: integer
+          minimum: 0
+          description: |
+            How many indexed documents carry this value. Agents
+            should skip values with `count == 0` — those would
+            return empty results silently.
+        last_indexed:
+          type: string
+          format: date
+          nullable: true
+          description: |
+            Most-recent `last_reviewed` date in the bucket. Helps
+            an agent gauge how stale the bucket is.
+
+    RegistryResponse:
+      type: object
+      required: [dimensions, as_of]
+      properties:
+        dimensions:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              $ref: "#/components/schemas/RegistryValue"
+          description: |
+            Per-dimension vocabulary. Keys are `RegistryDimension`
+            values; values are sorted-by-count descending lists.
+        as_of:
+          type: string
+          format: date-time
+          description: |
+            Server clock at cache-build time. Useful for an agent
+            that wants to gauge how stale the response is.
