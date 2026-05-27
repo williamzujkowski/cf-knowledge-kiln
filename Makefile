@@ -109,6 +109,10 @@ build-css: ## Concatenate the static/kiln/*.css partials into static/kiln.css.
 	     src/cf_knowledge_kiln/api/static/kiln/_base.css \
 	     src/cf_knowledge_kiln/api/static/kiln/_search.css \
 	     src/cf_knowledge_kiln/api/static/kiln/_results.css \
+	     src/cf_knowledge_kiln/api/static/kiln/_deprecation.css \
+	     src/cf_knowledge_kiln/api/static/kiln/_excerpt_score.css \
+	     src/cf_knowledge_kiln/api/static/kiln/_warnings.css \
+	     src/cf_knowledge_kiln/api/static/kiln/_results_mobile.css \
 	     src/cf_knowledge_kiln/api/static/kiln/_feedback.css \
 	     src/cf_knowledge_kiln/api/static/kiln/_preview.css \
 	     src/cf_knowledge_kiln/api/static/kiln/_keyboard.css \

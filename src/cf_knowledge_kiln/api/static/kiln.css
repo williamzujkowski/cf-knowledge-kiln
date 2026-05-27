@@ -1328,7 +1328,14 @@ a[data-tooltip]:not([data-tooltip=""]) {
 .status-badge.status-archived,
 .status-badge.status-superseded { color: var(--oxblood); }
 
-/* ─── Deprecation treatment (#268 — five-channel signal) ────────
+/* ─── Deprecation treatment for result cards.
+ *
+ * Extracted from _results.css per #342 (file-size cap split).
+ * Owns: every .result-card.status-{deprecated,archived,superseded}
+ * rule + .deprecation-stamp + .superseded-by-line. The full
+ * five-channel deprecation signal (#268) lives here.
+ */
+
  *
  * Per AGENTS.md + docs/user-journeys.md:55-57: "Deprecated docs must
  * be visibly flagged in results. Showing a deprecated doc as if it
@@ -1520,6 +1527,15 @@ a[data-tooltip]:not([data-tooltip=""]) {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* ─── Excerpt highlighting + owner byline + score widget.
+ *
+ * Extracted from _results.css per #342 (file-size cap split).
+ * Owns: .excerpt (with query-term em highlight), .owner byline,
+ * .source-line, .source-link icon, the 5-dot relevance scale
+ * (#259), the per-tier shape variants (#354), and the
+ * forced-colors safety block for the score dots.
+ */
 
 /* #117: query-term highlighting in the excerpt.
    Editorial restraint — no bright yellow. A warm gold tint that
@@ -1744,7 +1760,15 @@ a.source-link:focus-visible {
   }
 }
 
-/* ─── Warnings ─────────────────────────────────────────────────── */
+/* ─── Warning pills (top-of-list + per-card inline).
+ *
+ * Extracted from _results.css per #342 (file-size cap split).
+ * Owns: .warnings + .warning + .result-warnings + .result-
+ * warning, the per-type ::before glyph rules (#355), the
+ * severity-* visual tiers, and the forced-colors block for
+ * the per-type glyphs.
+ */
+
 
 .warnings {
   list-style: none;
@@ -1956,7 +1980,14 @@ a.source-link:focus-visible {
   font-weight: 600;
 }
 
-/* ─── Mobile result-card legibility (#276 / epic #268) ──────────────
+/* ─── Result-card mobile + card-action affordances + intermediate.
+ *
+ * Extracted from _results.css per #342 (file-size cap split).
+ * Owns: every @media block covering result-card layout —
+ * 640px + 360px legibility (#276), the .card-action chrome
+ * (#284), and the 960-640 intermediate breakpoint (#289).
+ */
+
  *
  * Two breakpoints. The 640px pass is the primary mobile treatment;
  * the 360px pass handles iPhone Mini / 320 worst-case. The numbered
