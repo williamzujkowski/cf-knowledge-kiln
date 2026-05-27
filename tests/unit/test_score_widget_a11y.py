@@ -26,7 +26,10 @@ import pytest
 
 _REPO = Path(__file__).resolve().parents[2]
 _TEMPLATES = _REPO / "src/cf_knowledge_kiln/api/templates"
-_RESULTS_CSS = _REPO / "src/cf_knowledge_kiln/api/static/kiln/_results.css"
+# #342 split: the score widget rules + forced-colors block moved
+# from _results.css into the new _excerpt_score.css partial. Grep
+# the new location so this test pins behavior, not the old layout.
+_RESULTS_CSS = _REPO / "src/cf_knowledge_kiln/api/static/kiln/_excerpt_score.css"
 
 
 @pytest.fixture

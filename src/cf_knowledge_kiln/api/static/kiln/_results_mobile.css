@@ -1,0 +1,257 @@
+/* ─── Result-card mobile + card-action affordances + intermediate.
+ *
+ * Extracted from _results.css per #342 (file-size cap split).
+ * Owns: every @media block covering result-card layout —
+ * 640px + 360px legibility (#276), the .card-action chrome
+ * (#284), and the 960-640 intermediate breakpoint (#289).
+ */
+
+ *
+ * Two breakpoints. The 640px pass is the primary mobile treatment;
+ * the 360px pass handles iPhone Mini / 320 worst-case. The numbered
+ * gutter is preserved (signature element) but softens at each step.
+ * Excerpt stays at 1rem (16px) — above the WCAG 14px floor — because
+ * shrinking the body text would defeat the legibility fix itself.
+ *
+ * Header strategy: force the deprecation-stamp to its own row via
+ * flex-basis: 100% so the five-channel deprecation signal (PR #271)
+ * reads STRONGER on mobile, not weaker. Status badge keeps its
+ * inline wrap because its copy is one short word.
+ *
+ * Footer strategy: stack the score widget above the source-line
+ * (order: -1) so the 200ms-per-card scan still has its right-rail
+ * anchor and long repo paths get the full row width.
+ */
+
+@media (max-width: 640px) {
+  .result-card {
+    /* Tighten the gutter so the ~272px usable width on a 320px
+       viewport leaves real room for the result body. 1.75rem ≈ 28px. */
+    grid-template-columns: 1.75rem 1fr;
+    padding-block: 1rem;
+    gap: 0.45rem;
+  }
+
+  .result-index {
+    /* Soften — drop display-grade opsz, shrink to body-display size.
+       Still italic Fraunces oldstyle nums; reads as quiet chapter
+       mark, not editorial showpiece. */
+    font-size: 1.15rem;
+    font-variation-settings: "opsz" 36;
+    padding-block-start: 0.1rem;
+  }
+
+  .result-header {
+    gap: 0.4rem 0.5rem;
+    margin-block-end: 0.25rem;
+  }
+
+  .result-title {
+    font-size: 1.15rem;
+    line-height: 1.22;
+    /* Drop display-grade opsz at small sizes — text-grade curves
+       carry better at body sizes. */
+    font-variation-settings: "opsz" 36, "SOFT" 30;
+  }
+
+  /* Deprecation-stamp earns its own row so 'Deprecated · do not cite'
+     never collides with a wrapping title or the status badge. Channel
+     1 of the five-channel signal (PR #271) gets MORE prominence on
+     mobile, not less. */
+  .deprecation-stamp {
+    flex-basis: 100%;
+    margin-block-start: 0.1rem;
+  }
+
+  .heading-path {
+    font-size: 0.74rem;
+    margin-block-end: 0.45rem;
+  }
+
+  /* Deprecation gutter rule scales with the narrower card gutter —
+     2px stays visible without dominating the 1.75rem column. */
+  .result-card.status-deprecated::before,
+  .result-card.status-archived::before,
+  .result-card.status-superseded::before {
+    width: 2px;
+    inset-block: 1rem;
+  }
+  .result-card.status-deprecated::after,
+  .result-card.status-archived::after,
+  .result-card.status-superseded::after {
+    inset-block-start: 1rem;
+    inline-size: 0.45rem;
+    block-size: 2px;
+  }
+
+  /* Footer stacks: score widget anchors the top of the row, source-
+     line gets the full width below it. Long repo paths now wrap on
+     slash boundaries instead of squeezing under the score widget. */
+  .result-footer {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.35rem;
+  }
+  .result-footer .score {
+    order: -1;
+  }
+  .source-line {
+    inline-size: 100%;
+    gap: 0.5rem;
+  }
+}
+
+@media (max-width: 360px) {
+  /* Worst-case (iPhone Mini, 320 Androids). Further squeeze the
+     gutter + index; drop the heading-path because its content is
+     already present in the source-line below the excerpt. */
+  .result-card {
+    grid-template-columns: 1.4rem 1fr;
+    padding-block: 0.85rem;
+    gap: 0.4rem;
+  }
+
+  .result-index {
+    font-size: 1rem;
+    font-variation-settings: "opsz" 24;
+  }
+
+  .excerpt {
+    /* One fewer line so the card height stays scannable when each
+       line wraps more aggressively at 320px. */
+    -webkit-line-clamp: 3;
+  }
+
+  .heading-path {
+    /* The same path renders inside .source-line below the excerpt;
+       hiding the breadcrumb here trades duplication for vertical
+       budget. Deliberate de-duplication — not a content loss. */
+    display: none;
+  }
+
+  .deprecation-stamp {
+    /* Tighten tracking so 'do not cite' fits one line at 320px. */
+    letter-spacing: 0.1em;
+  }
+}
+
+/* ─── #284: visible card-action affordances (copy + expand) ─────────
+ *
+ * Quiet text-button voice that matches .feedback-link below the
+ * card. The trailing <kbd> hint is rendered as a small bracketed
+ * letter so the button reads as 'copy [c]' — a sighted user
+ * learns the shortcut by using the visible affordance once.
+ *
+ * Two slots:
+ *   .card-action-copy   — alongside the source-line in the footer
+ *   .card-action-expand — between the excerpt and the footer
+ *
+ * Hover/focus shifts to oxblood matching the editorial accent on
+ * other action surfaces (.feedback-link, .result-title-button).
+ */
+.card-action {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0 0 0 0.6rem;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 0.82rem;
+  color: var(--ink-faded);
+  cursor: pointer;
+  border-block-end: 1px solid transparent;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+
+.card-action-expand {
+  /* Expand sits on its own line between the excerpt and the footer,
+     pushed to the start margin so it reads as a quiet 'show more'
+     option without becoming a wide button. */
+  display: inline-block;
+  margin: 0 0 0.65rem 0;
+}
+
+.card-action:hover,
+.card-action:focus-visible {
+  color: var(--oxblood);
+  border-block-end-color: var(--oxblood);
+}
+
+.card-action:focus-visible {
+  outline: 2px solid var(--oxblood);
+  outline-offset: 3px;
+  border-radius: 1px;
+}
+
+/* Bracketed shortcut hint. Small caps Fraunces in mono-ish color so
+   it reads as a typographic mark rather than text. */
+.card-action-kbd {
+  font-family: var(--mono);
+  font-size: 0.72em;
+  color: var(--ink-faded);
+  padding: 0 0.18em;
+  margin-inline-start: 0.15em;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  background: transparent;
+}
+
+/* When the card is in expanded state, flip the label copy via a
+   text-content swap. CSS can't swap button text directly without
+   pseudo-elements; we attach :before + hide the original via
+   data-expanded targeting the parent .result-card. The original
+   text stays in the DOM for screen readers / no-CSS fallback. */
+.result-card[data-expanded="true"] .card-action-expand {
+  /* JS could set data-expanded on the button itself; for simplicity
+     the visible label change rides on the card's data-expanded
+     attribute. This rule keeps the button visible with the same
+     letter hint; the change is purely the accent color. */
+  color: var(--oxblood);
+}
+
+/* ─── #289: intermediate breakpoint between desktop and 640 ─────────
+ *
+ * Tablet-portrait (iPad 768, Surface 720) and large-phone-landscape
+ * viewports landed on the 640px mobile rules with no in-between
+ * tier. The audit (epic #268) flagged the resulting desktop → mobile
+ * jump: title 1.35rem → 1.15rem in a single step, gutter 44px → 28px
+ * with nothing between.
+ *
+ * This middle pass softens those steps. 960 is the upper bound
+ * because _preview.css switches its panel from sticky-rail to
+ * mobile-drawer at exactly that breakpoint; viewports under 960
+ * already lose the side-by-side layout, so it's the natural pairing.
+ * 641 (not 640) so this rule doesn't overlap with the existing
+ * max-width:640 block and the cascade stays unambiguous.
+ *
+ * Values land deliberately between desktop and the 640 tier — not
+ * a third aggressive shrink, just a softer middle.
+ */
+@media (max-width: 960px) and (min-width: 641px) {
+  .result-card {
+    /* 2.2rem ≈ 35px — between desktop 44px and 640-tier 28px. */
+    grid-template-columns: 2.2rem 1fr;
+    padding-block: 1.1rem;
+    gap: 0.5rem;
+  }
+
+  .result-index {
+    /* opsz 72 between desktop's 144 and 640's 36 — chapter-mark
+       character preserved at this width. */
+    font-size: 1.4rem;
+    font-variation-settings: "opsz" 72;
+  }
+
+  .result-header {
+    gap: 0.5rem 0.55rem;
+  }
+
+  .result-title {
+    /* 1.25rem between desktop 1.35rem and 640-tier 1.15rem. opsz
+       stays at desktop's 96 because the typographic step down to
+       text-grade 36 doesn't need to happen until the 640 tier. */
+    font-size: 1.25rem;
+    font-variation-settings: "opsz" 96, "SOFT" 30;
+  }
+}

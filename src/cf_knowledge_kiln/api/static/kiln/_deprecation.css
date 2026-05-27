@@ -1,0 +1,200 @@
+/* ─── Deprecation treatment for result cards.
+ *
+ * Extracted from _results.css per #342 (file-size cap split).
+ * Owns: every .result-card.status-{deprecated,archived,superseded}
+ * rule + .deprecation-stamp + .superseded-by-line. The full
+ * five-channel deprecation signal (#268) lives here.
+ */
+
+ *
+ * Per AGENTS.md + docs/user-journeys.md:55-57: "Deprecated docs must
+ * be visibly flagged in results. Showing a deprecated doc as if it
+ * were current is a bug, not a feature."
+ *
+ * The original treatment (faint stripe + ink-soft title) was too
+ * subtle for a scan-of-20-cards workflow — the frontend audit
+ * flagged it as easy to miss at speed. The redesign layers five
+ * complementary signals so no one channel carries the meaning alone
+ * (color-blind safe, dark-mode safe, scan-speed-safe):
+ *
+ *   1. STAMP — verbal copy (`Deprecated · do not cite`, etc.) in the
+ *      header, set in small-caps Fraunces oxblood. The eye reads the
+ *      stamp text before the title — meaning is verbal, not chromatic.
+ *   2. STRIPE — diagonal hatch, alpha bumped 0.06 → 0.14 (token-level
+ *      change so light AND dark themes get visibility), spacing
+ *      tightened 14px → 8px so the pattern reads as 'this card is
+ *      hatched out' rather than 'subtle texture.'
+ *   3. STRIKETHROUGH — hairline oxblood line-through on the title,
+ *      skip-ink so descenders survive (j, g, p, y stay readable).
+ *   4. GUTTER RULE — bumped 2px → 3px, with a perpendicular top cap
+ *      via ::after creating an editorial 'margin annotation end-mark.'
+ *   5. BODY FADE — excerpt + footer at opacity 0.85 so the card
+ *      visibly settles behind its current-status siblings.
+ *
+ * Together: a deprecated card is unmistakable in a list of active
+ * results, even with monochrome rendering or a glance shorter than
+ * 200ms per card.
+ */
+
+.result-card.status-deprecated,
+.result-card.status-archived,
+.result-card.status-superseded {
+  background:
+    repeating-linear-gradient(
+      135deg,
+      transparent 0 7px,
+      var(--oxblood-stripe) 7px 8px);
+}
+
+.result-card.status-deprecated::before,
+.result-card.status-archived::before,
+.result-card.status-superseded::before {
+  /* Vertical gutter rule. Bumped 2px → 3px (#268). */
+  content: "";
+  position: absolute;
+  inset-block: 1.25rem;
+  inset-inline-start: 0;
+  width: 3px;
+  background: var(--oxblood);
+}
+
+.result-card.status-deprecated::after,
+.result-card.status-archived::after,
+.result-card.status-superseded::after {
+  /* Perpendicular top cap on the gutter rule — reads as the
+     end-mark of a margin annotation. The base ::after rule (used
+     for the hover hairline) is overridden here per-status. */
+  content: "";
+  position: absolute;
+  inset-block-start: 1.25rem;
+  inset-inline-start: 0;
+  inline-size: 0.6rem;
+  block-size: 3px;
+  background: var(--oxblood);
+  transform: none;          /* override the hover scaleX transition */
+  transition: none;
+}
+
+.result-card.status-deprecated .result-title,
+.result-card.status-archived .result-title,
+.result-card.status-superseded .result-title {
+  color: var(--ink-soft);
+  text-decoration: line-through;
+  text-decoration-color: var(--oxblood);
+  text-decoration-thickness: 1px;
+  text-decoration-skip-ink: auto;
+}
+
+.result-card.status-deprecated .excerpt,
+.result-card.status-archived .excerpt,
+.result-card.status-superseded .excerpt,
+.result-card.status-deprecated .result-footer,
+.result-card.status-archived .result-footer,
+.result-card.status-superseded .result-footer {
+  /* Card body fades behind current-status siblings; not so faint
+     it's unreadable (0.85 stays above the AA contrast floor). */
+  opacity: 0.85;
+}
+
+/* The editorial stamp itself. Sized one notch above the status
+   badge (0.72rem vs 0.68rem) so the eye lands on the stamp first.
+   Leading hairline rule mirrors the .status-badge::before
+   treatment — visual rhyme with the existing badge — but oxblood
+   instead of teal, and italic prefix so the copy reads as an
+   editorial mark, not a tag. */
+.deprecation-stamp {
+  font-family: var(--serif);
+  font-size: 0.72rem;
+  font-weight: 500;
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.16em;
+  color: var(--oxblood);
+  white-space: nowrap;
+  align-self: baseline;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  /* Tighter top padding aligns the stamp's small-caps cap-height
+     with the badge's, avoiding a wobbly baseline when both render
+     side-by-side in the header flexbox. */
+  padding-block-start: 0.05rem;
+}
+
+.deprecation-stamp-rule {
+  display: inline-block;
+  inline-size: 1.4rem;
+  block-size: 1px;
+  background: currentColor;
+  opacity: 0.7;
+}
+
+.deprecation-stamp-text {
+  /* The middle-dot in the copy (e.g. "Deprecated · do not cite")
+     uses oldstyle figures + the punctuation kerning that Fraunces
+     ships in its small-caps feature set. font-feature-settings
+     here explicitly enables the centered dot variant. */
+  font-feature-settings: "smcp" 1, "kern" 1;
+}
+
+/* Superseded-by inline note. Renders only when r.superseded_by is
+   threaded into the card view (a separate sub-issue under #268
+   wires the data; this rule pre-styles the structure so the data
+   PR becomes a one-line view change). Italic Fraunces with the
+   editorial 'see also' voice, anchored under the header so the
+   eye finds it right after the stamp without a section break. */
+.superseded-by-line {
+  margin: 0.2rem 0 0.5rem;
+  font-family: var(--serif);
+  font-size: 0.88rem;
+  font-style: italic;
+  font-variation-settings: "opsz" 18;
+  color: var(--ink-faded);
+}
+
+.superseded-by-line em {
+  /* The leading "Superseded by" reads as a margin-note label —
+     italic-on-italic with the oxblood echo from the stamp. */
+  font-style: italic;
+  color: var(--oxblood);
+}
+
+.superseded-by-link {
+  font-style: normal;
+  color: var(--ink-soft);
+  text-decoration: underline;
+  text-decoration-color: var(--rule-strong);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.16em;
+  transition: text-decoration-color 120ms ease, color 120ms ease;
+}
+
+.superseded-by-link:hover,
+.superseded-by-link:focus-visible {
+  color: var(--oxblood);
+  text-decoration-color: var(--oxblood);
+}
+
+.heading-path {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--ink-faded);
+  margin: 0 0 0.6rem;
+}
+
+.heading-path .sep {
+  color: var(--rule-strong);
+  margin-inline: 0.15rem;
+}
+
+.excerpt {
+  margin: 0.3rem 0 0.65rem;
+  color: var(--ink);
+  line-height: 1.6;
+  font-size: 1rem;
+  /* Limit to 4 lines to keep result density. */
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+

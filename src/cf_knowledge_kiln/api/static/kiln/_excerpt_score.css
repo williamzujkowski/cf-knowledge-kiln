@@ -1,0 +1,232 @@
+/* ─── Excerpt highlighting + owner byline + score widget.
+ *
+ * Extracted from _results.css per #342 (file-size cap split).
+ * Owns: .excerpt (with query-term em highlight), .owner byline,
+ * .source-line, .source-link icon, the 5-dot relevance scale
+ * (#259), the per-tier shape variants (#354), and the
+ * forced-colors safety block for the score dots.
+ */
+
+/* #117: query-term highlighting in the excerpt.
+   Editorial restraint — no bright yellow. A warm gold tint that
+   reads as "I noticed this", anchored by an underline so it works
+   for color-blind users too. */
+.excerpt mark {
+  background: var(--gold-tint);
+  color: var(--ink);
+  padding: 0 0.1em;
+  border-bottom: 1px solid var(--gold);
+  border-radius: 1px;
+}
+
+.result-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  color: var(--ink-faded);
+  font-size: 0.82rem;
+}
+
+.source-line {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  min-inline-size: 0;
+}
+
+.source {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+
+a.source-link {
+  text-decoration: none;
+  border-bottom: 1px dotted currentColor;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+
+a.source-link:hover,
+a.source-link:focus-visible {
+  color: var(--teal);
+  border-bottom-color: var(--teal);
+}
+
+a.source-link:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
+
+.source-link-icon {
+  font-size: 0.72em;
+  vertical-align: super;
+  opacity: 0.7;
+}
+
+.freshness {
+  font-style: italic;
+  color: var(--ink-faded);
+  font-variation-settings: "opsz" 14;
+}
+
+/* #117: owner byline — quiet credit between the source and the
+   freshness stamp. The leading em-dash gives it a typographic
+   anchor without needing a bullet. */
+.owner {
+  color: var(--ink-faded);
+  font-size: 0.82rem;
+}
+
+.owner em {
+  font-style: italic;
+  color: var(--ink-soft);
+}
+
+.score {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+.score-label {
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.65rem;
+  color: var(--ink-faded);
+}
+
+.score-value {
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+/* #259 5-dot relevance scale. The dots sit between the label and the
+   numeric so the editorial reading order is "score · ●●●●○ · 0.852"
+   — visual anchor, scale, precise value. Tier color comes from the
+   parent .score-tier-N class so an upgrade path (different palette,
+   different dot count) doesn't fan out per-dot rules. */
+
+.score-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.18rem;
+  /* Constrain so the dot row aligns with the JetBrains Mono baseline.
+     0.5rem matches the visual weight of the small caps label. */
+  height: 0.5rem;
+}
+
+.score-dot {
+  display: inline-block;
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 50%;
+  /* Off state: faded ring, no fill. Reads as "out of N" at-a-glance. */
+  border: 1px solid var(--ink-faded);
+  background: transparent;
+}
+
+.score-dot-on {
+  /* On state: filled with the tier color (set by the .score-tier-N
+     parent). currentColor lets the per-tier class drive both the
+     numeric label hue and the filled-dot hue together. */
+  background: currentColor;
+  border-color: currentColor;
+}
+
+/* Per-tier color tuning. Editorial palette:
+   - Tier 5 (≥ 0.85): teal — confident hit, both arms rank-1
+   - Tier 4 (≥ 0.65): teal-faded — strong but not perfect
+   - Tier 3 (≥ 0.50): ink — single-arm rank-1 (the plateau)
+   - Tier 2 (≥ 0.46): gold — at the weak-evidence threshold; survives
+                       but flagged
+   - Tier 1 (<  0.46): oxblood — below configured threshold; only
+                       visible if operator tuned it down */
+.score-tier-5 { color: var(--teal); }
+.score-tier-4 { color: var(--teal); opacity: 0.85; }
+.score-tier-3 { color: var(--ink-soft); }
+.score-tier-2 { color: var(--gold); }
+.score-tier-1 { color: var(--oxblood); }
+
+/* ── #354 color-blind safety ────────────────────────────────────
+ *
+ * Audit Finding #24: tier 5 vs tier 2 is hard to distinguish for
+ * deutan/protan users at the small dot size. The widget now layers
+ * THREE differentiators so no single sensory channel is load-
+ * bearing:
+ *
+ *   1. Color (per-tier, the original cue)
+ *   2. Numeric prefix "N/5" via .score-tier-num (sighted-only;
+ *      AT gets the same fact from aria-label on .score)
+ *   3. Per-tier dot SHAPE — round for high, square-ish for middle,
+ *      diamond for low — so even at print resolution (no color)
+ *      tier 5 reads visually different from tier 2.
+ *
+ * Pairs with the print stylesheet (#341) where the dots are
+ * hidden entirely and the numeric tier carries through alone.
+ * ─────────────────────────────────────────────────────────── */
+
+.score-tier-num {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+  /* Subtle separator from the dots so the row reads as
+     "score · 5/5 · ●●●●● · 0.952" — three discrete chunks. */
+  margin-right: 0.18rem;
+}
+
+/* Per-tier shape variants on the dot. The .score-dot default is a
+   round (50%) shape — high-tier styling. Lower tiers swap to
+   shapes that read distinct in B&W: */
+
+/* Tier 4: rounded square (slightly less circular than tier 5). */
+.score-tier-4 .score-dot { border-radius: 30%; }
+
+/* Tier 3: square — neutral / single-arm. */
+.score-tier-3 .score-dot { border-radius: 10%; }
+
+/* Tier 2: diamond — at the threshold; rotation reads as a
+   warning-cue shape across cultures. */
+.score-tier-2 .score-dot {
+  border-radius: 0;
+  transform: rotate(45deg);
+  /* The 45° rotation grows the visual bounding box; pull width down
+     ~30% so the diamond visually matches the round dots' weight. */
+  width: 0.34rem;
+  height: 0.34rem;
+}
+
+/* Tier 1: empty ring even when "on" — communicates "below floor".
+   Sighted users see a hollow stack; B&W readers see hollow vs filled. */
+.score-tier-1 .score-dot-on {
+  background: transparent;
+  /* Border stays currentColor (oxblood). The contrast between
+     ring + empty is the cue. */
+}
+
+/* High-contrast / forced-colors safety net: in Windows High Contrast
+   mode the per-tier color is stripped to system tokens. The shape
+   variants above are color-independent so the differentiation
+   survives; this rule just guarantees dots remain visible (forced-
+   colors flattens borders to a system value too). */
+@media (forced-colors: active) {
+  .score-dot {
+    forced-color-adjust: none;
+    border-color: CanvasText;
+  }
+  .score-dot-on {
+    background: CanvasText;
+  }
+  .score-tier-1 .score-dot-on {
+    background: transparent;
+    border-color: CanvasText;
+  }
+}
+
