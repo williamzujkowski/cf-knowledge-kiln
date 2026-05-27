@@ -2628,3 +2628,253 @@ a.source-link:focus-visible {
     gap: 0.5rem;
   }
 }
+/* ─── @media print ──────────────────────────────────────────────────
+ *
+ * #341: a security engineer who prints or saves-to-PDF a search
+ * results page (e.g. for an audit, a runbook attachment, or a
+ * compliance trail) was getting the dark-theme background, no URLs
+ * on links, missing deprecation stripes, and lost preview-panel
+ * context. The screen UI is HTMX-driven and assumes a viewport;
+ * print is a serializer — it needs explicit rules.
+ *
+ * Design intent (editorial-reference voice, like the rest of the
+ * UI): printed output looks like an academic-journal article reprint
+ * with quiet typographic emphasis instead of color. The Fraunces +
+ * JetBrains Mono pairing stays; color drops out except where it
+ * encodes meaning that the printed page can't otherwise carry.
+ *
+ * Audit Finding #30. Pairs with Epic A (#326) "Information scent
+ * + onboarding + mobile."
+ *
+ * NB: `prefers-color-scheme: dark` is intentionally NOT honored
+ * inside @media print — printers are paper; paper is white.
+ * ─────────────────────────────────────────────────────────────── */
+
+@media print {
+  /* ── Page setup ── */
+  @page {
+    /* Generous margins for binder holes + reviewer marginalia. */
+    margin: 0.75in 0.6in;
+  }
+
+  /* Force light theme regardless of OS preference. Use plain RGB
+   * so a print pipeline that strips CSS-vars still has a colour. */
+  html,
+  body {
+    background: #fff !important;
+    color: #111 !important;
+    color-scheme: light !important;
+  }
+
+  /* ── Hide chrome that has no print value ── */
+  .htmx-bar,
+  .filter-rail,
+  .filters,
+  .search-form .query-submit,
+  .pill,
+  .skip-link,
+  .preview-panel,
+  #preview-backdrop,
+  #cheatsheet,
+  #toast,
+  .empty-state,
+  .empty-exemplars,
+  .shortcut-hint,
+  .filter-rail-toggle,
+  .filter-rail-grid,
+  .feedback-widget,
+  [data-feedback-ack],
+  [data-feedback-error],
+  #search-status,
+  #feedback-status {
+    display: none !important;
+  }
+
+  /* The page-level <a class="skip-link"> is keyboard-only;
+   * suppress both the "Skip to results" and "Skip past results"
+   * variants. (Above rule covers them — duplicated as a comment
+   * anchor so a grep for 'skip-link' finds the print intent.) */
+
+  /* ── Layout: stack, no grid ── */
+  .search-with-preview,
+  .search-grid {
+    display: block !important;
+  }
+
+  /* ── Masthead reads as the article masthead ── */
+  .masthead {
+    border-bottom: 1px solid #333;
+    padding-bottom: 0.4em;
+    margin-bottom: 1em;
+  }
+  .brand {
+    font-size: 16pt;
+    margin: 0;
+  }
+  .tagline,
+  .notice {
+    font-size: 9pt;
+    margin: 0.2em 0 0;
+  }
+
+  /* ── Results list: bibliography-style ── */
+  .results-count {
+    font-style: italic;
+    font-size: 10pt;
+    margin: 0 0 0.6em;
+  }
+  .results-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  .result-card {
+    /* Avoid orphans + widows splitting a card across pages. */
+    page-break-inside: avoid;
+    border: none;
+    background: transparent !important;
+    padding: 0.4em 0 0.6em;
+    border-bottom: 1px solid #ccc;
+    margin-bottom: 0.6em;
+  }
+  .result-index {
+    /* Visible for context — paper readers want to see the
+     * ranking position too. Tone down so the title leads. */
+    font-family: "JetBrains Mono", monospace;
+    font-size: 9pt;
+    color: #666;
+    display: inline-block;
+    margin-right: 0.4em;
+  }
+  .result-title-button {
+    /* The button styling is for click-targets; on paper it's
+     * just text. Strip the button affordance, keep the type. */
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    font-family: inherit !important;
+    font-size: 12pt;
+    font-weight: 600;
+    color: #111 !important;
+    text-decoration: none !important;
+  }
+
+  /* Make URLs visible — without them, the print is decontextualised. */
+  .result-title-button[hx-get]::after {
+    content: " [" attr(hx-get) "]";
+    font-family: "JetBrains Mono", monospace;
+    font-size: 8pt;
+    color: #555;
+    font-weight: normal;
+  }
+  .source-line a::after,
+  .superseded-by-link::after {
+    content: " [" attr(href) "]";
+    font-family: "JetBrains Mono", monospace;
+    font-size: 8pt;
+    color: #555;
+  }
+
+  /* ── Deprecation: typographic in print, not color ── */
+  /* The audit found the five-channel deprecation signal (stripe +
+   * stamp + strikethrough + gutter rule + body fade) ONLY survives
+   * in colour media. On paper, lean on the stamp's verbal copy and
+   * a strikethrough + bracketed tag — both unmissable in B&W. */
+  .result-card.status-deprecated,
+  .result-card.status-archived,
+  .result-card.status-superseded {
+    background: transparent !important;
+    border-left: 4px solid #000;
+    padding-left: 0.5em;
+  }
+  .result-card.status-deprecated .result-title-button,
+  .result-card.status-archived .result-title-button,
+  .result-card.status-superseded .result-title-button {
+    text-decoration: line-through !important;
+    color: #444 !important;
+  }
+  .deprecation-stamp {
+    /* Stamp text becomes a bracketed annotation next to the title. */
+    display: inline-block !important;
+    margin-left: 0.4em;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 8.5pt;
+    font-weight: 700;
+    color: #000 !important;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .deprecation-stamp::before { content: "["; }
+  .deprecation-stamp::after { content: "]"; }
+  .deprecation-stamp-rule {
+    /* Decorative rule is screen-only. */
+    display: none !important;
+  }
+
+  /* ── Status badge / score-tier: drop to text ── */
+  .status-badge {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 8pt;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #555;
+    background: transparent !important;
+    border: 1px solid #999;
+    padding: 0 0.3em;
+    margin-left: 0.4em;
+  }
+  .score-dots {
+    display: none !important;
+  }
+  .score-label::after {
+    /* Make the score readable on paper: 'score 3 of 5'. */
+    content: " " attr(data-score);
+  }
+
+  /* ── Warnings: keep the prose, drop the colour chrome ── */
+  .warnings,
+  .result-warnings {
+    list-style: none;
+    padding: 0;
+    margin: 0.4em 0;
+  }
+  .warning,
+  .result-warning {
+    background: transparent !important;
+    border: none !important;
+    border-left: 2px solid #888;
+    padding: 0.2em 0 0.2em 0.5em;
+    margin: 0.2em 0;
+    font-size: 9.5pt;
+    color: #222 !important;
+  }
+  .warning-prefix {
+    font-style: italic;
+    color: #444 !important;
+  }
+  .warning-icon {
+    /* Inline character mark; ⚠ renders as text on most printers. */
+    display: inline !important;
+    font-weight: bold;
+    color: #000 !important;
+  }
+
+  /* ── Colophon: print as a footer-style imprint line ── */
+  .colophon {
+    margin-top: 1.5em;
+    padding-top: 0.4em;
+    border-top: 1px solid #333;
+    font-size: 9pt;
+    color: #555;
+  }
+  .colophon nav a {
+    color: #555 !important;
+    text-decoration: none;
+  }
+
+  /* ── General link colour reset ── */
+  a {
+    color: #111 !important;
+    text-decoration: underline;
+  }
+}
