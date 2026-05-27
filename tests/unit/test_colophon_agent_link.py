@@ -125,8 +125,19 @@ class TestAgentGuideUrlSchemeValidation:
             os.environ.pop("KILN_AGENT_GUIDE_URL", None)
             get_settings.cache_clear()
 
-    def test_unset_returns_none(self) -> None:
-        assert self._agent_url(None) is None
+    def test_unset_returns_default_swagger_anchor(self) -> None:
+        """#357: when the env var is unset, the helper returns the
+        same-origin Swagger anchor so the colophon link is always
+        discoverable. Operators who want the link OFF set
+        KILN_AGENT_GUIDE_URL=disabled (see the test below)."""
+        assert self._agent_url(None) == "/docs#tag/agent"
+
+    def test_disabled_sentinel_returns_none(self) -> None:
+        """Explicit off-switch for operators who want the colophon
+        clean. The sentinel string is documented in the helper's
+        docstring; any other no-link request now requires the
+        sentinel rather than an empty env var."""
+        assert self._agent_url("disabled") is None
 
     def test_https_url_is_accepted(self) -> None:
         url = "https://docs.example/agent-guide"
@@ -159,8 +170,11 @@ class TestAgentGuideUrlSchemeValidation:
     def test_mailto_scheme_is_refused(self) -> None:
         assert self._agent_url("mailto:agent@example.com") is None
 
-    def test_whitespace_only_returns_none(self) -> None:
-        assert self._agent_url("   ") is None
+    def test_whitespace_only_falls_back_to_default(self) -> None:
+        """#357: whitespace-only env var means "operator didn't really
+        set anything"; fall back to the default so the link still
+        renders. The explicit off-switch is the ``disabled`` sentinel."""
+        assert self._agent_url("   ") == "/docs#tag/agent"
 
     def test_leading_whitespace_is_trimmed(self) -> None:
         # An operator pasting a URL might leave whitespace; we honor
