@@ -269,6 +269,10 @@ def _chunk_to_result_card(chunk: RankedChunk, ref: object | None, content: str) 
         # #337: surface the section index so the template can render
         # "section N" inline without re-querying the chunks table.
         chunk_index=chunk.chunk_index,
+        # #336: thread authority through so the UI can render the
+        # band ('platform' / 'security' / etc.) without re-querying
+        # the documents table.
+        authority=getattr(ref, "authority", None) or chunk.authority,
     )
 
 

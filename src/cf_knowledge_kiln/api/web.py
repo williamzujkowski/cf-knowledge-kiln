@@ -55,6 +55,7 @@ from cf_knowledge_kiln.api.rate_limit import TokenBucketLimiter, client_ip
 from cf_knowledge_kiln.api.request_id import request_id_for
 from cf_knowledge_kiln.api.views import (
     agent_guide_url,
+    authority_tooltip,
     deprecation_label,
     feedback_categories,
     humanize_warning,
@@ -411,6 +412,17 @@ def _result_card_view(
         # None for corpus-native statuses outside the kiln-recommended
         # vocabulary so the template can ``{% if %}`` the attributes.
         "status_tooltip": status_tooltip(chunk.status),
+        # #336 authority band. Prefer the document-level value
+        # (DocumentRef.authority) and fall back to the per-chunk one
+        # if the ref didn't carry it. ``None`` for unannotated docs
+        # so the template can ``{% if r.authority %}`` cleanly.
+        "authority": getattr(ref, "authority", None) or getattr(chunk, "authority", None),
+        # #336 editorial gloss for known authority values, mirroring
+        # ``status_tooltip``. None for unknown values so the template
+        # ``{% if %}``s the data-tooltip / aria-label attributes.
+        "authority_tooltip": authority_tooltip(
+            getattr(ref, "authority", None) or getattr(chunk, "authority", None)
+        ),
     }
 
 
