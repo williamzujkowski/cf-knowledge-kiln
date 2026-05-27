@@ -250,6 +250,30 @@
       _openPreview(actor);
     } else if (action === "close-preview") {
       _closePreview();
+    } else if (action === "reset-filters") {
+      // #347: native <input type=reset> already cleared the form
+      // by the time this click handler fires; re-fire the HTMX
+      // submit on the search form so the cleared filter state
+      // round-trips through POST /search and the result list
+      // updates. Without this the form sits in its defaults but
+      // the user still sees the prior filtered results.
+      //
+      // Use HTMX's programmatic trigger if HTMX is loaded;
+      // fall back to dispatching a regular submit event so the
+      // form's native handler runs even without HTMX (graceful
+      // degradation per AGENTS.md).
+      const form = actor.closest("form.search-form");
+      if (!form) return;
+      // requestAnimationFrame so the reset happens FIRST (the
+      // browser applies it on this same tick), and the re-submit
+      // sees the cleared state.
+      requestAnimationFrame(() => {
+        if (window.htmx && typeof window.htmx.trigger === "function") {
+          window.htmx.trigger(form, "submit");
+        } else {
+          form.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
+        }
+      });
     }
   });
 })();
