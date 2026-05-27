@@ -1441,6 +1441,82 @@ a.source-link:focus-visible {
 .score-tier-2 { color: var(--gold); }
 .score-tier-1 { color: var(--oxblood); }
 
+/* ── #354 color-blind safety ────────────────────────────────────
+ *
+ * Audit Finding #24: tier 5 vs tier 2 is hard to distinguish for
+ * deutan/protan users at the small dot size. The widget now layers
+ * THREE differentiators so no single sensory channel is load-
+ * bearing:
+ *
+ *   1. Color (per-tier, the original cue)
+ *   2. Numeric prefix "N/5" via .score-tier-num (sighted-only;
+ *      AT gets the same fact from aria-label on .score)
+ *   3. Per-tier dot SHAPE — round for high, square-ish for middle,
+ *      diamond for low — so even at print resolution (no color)
+ *      tier 5 reads visually different from tier 2.
+ *
+ * Pairs with the print stylesheet (#341) where the dots are
+ * hidden entirely and the numeric tier carries through alone.
+ * ─────────────────────────────────────────────────────────── */
+
+.score-tier-num {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+  /* Subtle separator from the dots so the row reads as
+     "score · 5/5 · ●●●●● · 0.952" — three discrete chunks. */
+  margin-right: 0.18rem;
+}
+
+/* Per-tier shape variants on the dot. The .score-dot default is a
+   round (50%) shape — high-tier styling. Lower tiers swap to
+   shapes that read distinct in B&W: */
+
+/* Tier 4: rounded square (slightly less circular than tier 5). */
+.score-tier-4 .score-dot { border-radius: 30%; }
+
+/* Tier 3: square — neutral / single-arm. */
+.score-tier-3 .score-dot { border-radius: 10%; }
+
+/* Tier 2: diamond — at the threshold; rotation reads as a
+   warning-cue shape across cultures. */
+.score-tier-2 .score-dot {
+  border-radius: 0;
+  transform: rotate(45deg);
+  /* The 45° rotation grows the visual bounding box; pull width down
+     ~30% so the diamond visually matches the round dots' weight. */
+  width: 0.34rem;
+  height: 0.34rem;
+}
+
+/* Tier 1: empty ring even when "on" — communicates "below floor".
+   Sighted users see a hollow stack; B&W readers see hollow vs filled. */
+.score-tier-1 .score-dot-on {
+  background: transparent;
+  /* Border stays currentColor (oxblood). The contrast between
+     ring + empty is the cue. */
+}
+
+/* High-contrast / forced-colors safety net: in Windows High Contrast
+   mode the per-tier color is stripped to system tokens. The shape
+   variants above are color-independent so the differentiation
+   survives; this rule just guarantees dots remain visible (forced-
+   colors flattens borders to a system value too). */
+@media (forced-colors: active) {
+  .score-dot {
+    forced-color-adjust: none;
+    border-color: CanvasText;
+  }
+  .score-dot-on {
+    background: CanvasText;
+  }
+  .score-tier-1 .score-dot-on {
+    background: transparent;
+    border-color: CanvasText;
+  }
+}
+
 /* ─── Warnings ─────────────────────────────────────────────────── */
 
 .warnings {
