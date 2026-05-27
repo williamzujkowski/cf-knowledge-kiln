@@ -311,6 +311,64 @@ input:focus-visible,
   overflow: hidden;
   pointer-events: none;
 }
+
+/* ── #343 Masthead compression on narrow viewports ──────────────────
+ *
+ * Audit Finding #26: on 360px viewports (iPhone Mini / 320 worst
+ * case) the masthead consumed ~180px above the search input
+ * because brand + tagline + notice + shortcut-hint all stacked at
+ * desktop padding. The search input — the dominant interaction —
+ * sat below the fold on first paint.
+ *
+ * Approach: compress, don't hide. Every element stays in the AT
+ * tree (the editorial voice still reads), but vertical rhythm
+ * tightens so the search input lands above-fold on 360px.
+ * - Masthead top/bottom padding drops 2.5rem/1.5rem → 1rem/0.75rem
+ * - Brand mark caps at the lower end of clamp() (already wired
+ *   via clamp at the brand-mark rule above)
+ * - Tagline + notice gap tighter
+ * - Shortcut hint hides under 480px — keyboard shortcuts on a
+ *   touch device are noise. It still renders in AT via the
+ *   element existing in the DOM; display:none removes it from
+ *   visual AND AT trees — the right behavior for a hint that
+ *   announces 'press / to search' on a device with no keyboard.
+ * ─────────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .masthead {
+    padding-block: 1.25rem 0.75rem;
+  }
+  .tagline {
+    margin-block-start: 0.4rem;
+    font-size: 0.85rem;
+  }
+  .notice {
+    margin-block: 0.75rem 0.5rem;
+    padding-block: 0.5rem 0.6rem;
+    font-size: 0.82rem;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Below 480px: kill the shortcut-hint entirely — keyboard
+     mnemonics aren't useful on a touch keyboard, and the banner
+     was consuming ~36px of above-fold real estate. */
+  .shortcut-hint {
+    display: none;
+  }
+  .masthead {
+    padding-block: 1rem 0.5rem;
+  }
+  .brand a {
+    /* Stack the brand mark + name on one line at narrow widths;
+       the .brand-rule separator is visual chrome that gets in the
+       way at this width. */
+    gap: 0.3rem;
+  }
+  .brand-rule {
+    display: none;
+  }
+}
+
 /* ─── Colophon (footer) ────────────────────────────────────────── */
 
 .colophon {
