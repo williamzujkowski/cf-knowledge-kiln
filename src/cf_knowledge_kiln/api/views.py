@@ -78,38 +78,22 @@ def humanize_warning(w: Any) -> dict[str, Any]:
     }
 
 
-# Visual-severity mapping for the human UI (#257). Three buckets:
-#
-# * ``advisory``  — informational (yellow rule, italic prefix); reading
-#   the result is fine, the operator just needs to know.
-# * ``warning``   — caution required (oxblood rule, bold prefix); the
-#   result is still useful but the operator should weigh the signal.
-# * ``blocking``  — refuse-to-act class (oxblood + heavier rule); a
-#   sensitive-content / prompt-injection match. The result should NOT
-#   be cited without operator review.
-#
-# Engine-side ``requires_human_review`` already encodes the policy
-# decision; this is the UI-side encoding for the inline badges.
-_WARNING_SEVERITY: dict[str, str] = {
-    "stale_source": "advisory",
-    "deprecated_source": "warning",
-    "query_normalized": "advisory",
-    "weak_evidence": "warning",
-    "isolated_match": "warning",
-    "conflicting_sources": "warning",
-    "prompt_injection_pattern": "blocking",
-    "sensitive_content": "blocking",
-}
-
-
 def warning_severity(wtype: str) -> str:
-    """Return the visual-severity bucket for ``wtype`` (#257).
+    """Return the visual-severity bucket for ``wtype`` (#257 → #358).
 
-    Defaults to ``advisory`` for any unrecognized type so a future
-    warning surfaces as a quiet hint until the UI catches up — not
-    as a high-stakes red flag.
+    Wraps :func:`cf_knowledge_kiln.retrieval.warning_policy.severity_for`
+    so the template-side lookup uses the single canonical policy table
+    (was a duplicate dict here; the policy module is now the source of
+    truth). Falls back to ``advisory`` for any unrecognized type so a
+    future warning surfaces as a quiet hint until the UI catches up —
+    not as a high-stakes red flag.
     """
-    return _WARNING_SEVERITY.get(wtype, "advisory")
+    from cf_knowledge_kiln.retrieval.warning_policy import severity_for
+
+    # severity_for takes a WarningType Literal; the call site passes
+    # whatever Warning.type carries (which IS one of those values at
+    # runtime). The cast is a typing-only narrowing.
+    return severity_for(wtype)  # type: ignore[arg-type]
 
 
 # Score-tier thresholds for the 5-dot visual scale (#259). Reflect the

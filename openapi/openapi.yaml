@@ -740,6 +740,34 @@ components:
         source_id:
           type: string
           format: uuid
+        # #358 — policy axes. ``severity`` is the visual / decision
+        # bucket; ``action`` is the recommended response. Together
+        # they let an agent switch on policy (3 × 5 = 15 cells, but
+        # the policy table only populates ~9 of them) instead of
+        # maintaining a parallel WarningType lookup. Both fields are
+        # OPTIONAL on the wire per ADR-0011 (additive on /v1/); the
+        # kiln always populates them, but consumers MUST default to
+        # ``severity=advisory`` / ``action=inform`` if absent.
+        severity:
+          type: string
+          enum: [advisory, warning, blocking]
+          description: |
+            Policy / visual-treatment bucket. The kiln's emitters
+            always populate this; consumers must default to
+            ``advisory`` if a future server omits it.
+        action:
+          type: string
+          enum:
+            - inform
+            - prefer_other_sources
+            - request_human_review
+            - rewrite_query
+            - refuse_to_synthesize
+          description: |
+            Recommended action for an agent consumer. Five values
+            chosen to cover the prose action column in
+            docs/agent-integration-guide.md without one-to-one
+            mapping to WarningType.
 
     ContextPackRequest:
       type: object
