@@ -49,6 +49,9 @@ def row_to_ranked_chunk(row: SearchRow) -> RankedChunk:
         has_sensitive_content=row.has_sensitive_content,
         chunk_metadata=row.chunk_metadata,
         chunk_index=row.chunk_index,
+        # #384: total chunk count per document so the UI can render
+        # "section N of M". Flows through ranking unchanged.
+        chunk_count=row.chunk_count,
     )
 
 

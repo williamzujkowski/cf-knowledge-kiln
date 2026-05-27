@@ -78,6 +78,14 @@ class SearchRow:
     # requires a second query / window function; see #384 in the
     # parent epic.)
     chunk_index: int
+    # #384 — total chunk count for the parent document. Lets the UI
+    # render "section N of M" rather than the bare "section N" that
+    # #337 shipped. Populated via a correlated subquery on
+    # ``document_chunks`` keyed by ``document_id`` — see
+    # :func:`_select_search_row_columns`. Filtered chunks (the search
+    # candidates) do NOT shrink M; this is the document's total
+    # section count, not the number that surfaced.
+    chunk_count: int
 
 
 async def set_local_ef_search(session: AsyncSession, ef_search: int) -> None:
@@ -208,6 +216,21 @@ def _fts_arm(query_text: str, predicates: Sequence[Any], limit: int) -> Any:
 
 def _select_search_row_columns(score_col: Any) -> Any:
     """SELECT-list shared by hybrid + FTS-only paths."""
+    # #384 — per-document chunk count. Correlated scalar subquery on
+    # a separate ``DocumentChunk`` alias so the FROM-clause join from
+    # the outer SELECT (DocumentChunk → Document) isn't disturbed.
+    # Counts the document's TOTAL chunks (not the filtered candidate
+    # pool) so the UI's "section N of M" is M=true-total, even when
+    # the predicate set eliminates most chunks. Cost: ~20 index-hit
+    # lookups on ``document_chunks(document_id)`` per query — cheap.
+    chunk_count_alias = DocumentChunk.__table__.alias("dc_count")
+    chunk_count_col = (
+        select(func.count(chunk_count_alias.c.id))
+        .where(chunk_count_alias.c.document_id == Document.id)
+        .correlate(Document)
+        .scalar_subquery()
+        .label("chunk_count")
+    )
     return select(
         DocumentChunk.id.label("chunk_id"),
         DocumentChunk.document_id,
@@ -218,6 +241,9 @@ def _select_search_row_columns(score_col: Any) -> Any:
         # 0-based per the migration; the template renders as N+1
         # so the user sees "section 7" rather than "section 6".
         DocumentChunk.chunk_index,
+        # #384: total section count for the parent document so the UI
+        # can render "section N of M". See chunk_count_col above.
+        chunk_count_col,
         Document.status,
         Document.authority,
         Document.owner,
@@ -255,6 +281,8 @@ def row_to_search_row(row: Any) -> SearchRow:
         has_sensitive_content=bool(metadata.get("has_sensitive_content")),
         # #337: chunk_index surfaces "section N" on the result card.
         chunk_index=int(row["chunk_index"]),
+        # #384: total chunk count for the parent document.
+        chunk_count=int(row["chunk_count"]),
     )
 
 

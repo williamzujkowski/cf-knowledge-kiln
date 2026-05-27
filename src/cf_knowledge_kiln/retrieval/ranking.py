@@ -78,6 +78,11 @@ class RankedChunk:
     # a real index — same default as DocumentChunk's column would
     # apply for a freshly-inserted row at section position 1.
     chunk_index: int = 0
+    # #384: total section count for the parent document so the UI
+    # can render "section N of M". Defaults to 0 for synthetic
+    # ranked chunks — the template treats 0 as "unknown" and falls
+    # back to bare "section N" rendering.
+    chunk_count: int = 0
 
 
 # ─── RRF fusion ─────────────────────────────────────────────────────
@@ -143,6 +148,8 @@ def _apply_boost_to_chunk(
         has_sensitive_content=chunk.has_sensitive_content,
         chunk_metadata=chunk.chunk_metadata,
         chunk_index=chunk.chunk_index,
+        # #384: preserve through boost reconstruction.
+        chunk_count=chunk.chunk_count,
     )
 
 
