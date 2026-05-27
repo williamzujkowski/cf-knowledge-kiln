@@ -83,6 +83,58 @@ input:focus-visible,
   border-radius: 1px;
 }
 
+/* ── #356 focus-visible variants ────────────────────────────────────
+ *
+ * Audit Finding #21: the default 2px oxblood ring works for typical
+ * users on a typical display but degrades in two contexts the kiln
+ * is expected to serve:
+ *
+ *   1. prefers-contrast: more — low-vision users need a thicker ring
+ *      with more contrast. 2px against a paper-dim background can
+ *      still be missed.
+ *   2. forced-colors: active — Windows High Contrast remaps every
+ *      author colour to system tokens. The kiln's oxblood var
+ *      becomes whatever the OS picks; the ring may vanish if the
+ *      author-set offset doesn't survive the strip. Use
+ *      forced-color-adjust: none + the system Highlight token to
+ *      keep a deliberately drawn ring.
+ *
+ * The card-focus collision (audit-flagged) is also handled here:
+ * .result-title-button uses outline-offset 3px against the card
+ * which carries its own 1px top border — at 2px offset the ring
+ * collided. Already 3px in _results.css; the prefers-contrast
+ * variant bumps it further so the wider ring still clears.
+ * ─────────────────────────────────────────────────────────── */
+
+@media (prefers-contrast: more) {
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  .pill input:focus-visible + span {
+    /* 3px ring + larger offset for low-vision users. The oxblood
+       hue is already AA at 5.1:1 against paper; the extra pixel +
+       offset is the affordance, not a colour swap. */
+    outline-width: 3px;
+    outline-offset: 3px;
+  }
+}
+
+@media (forced-colors: active) {
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  .pill input:focus-visible + span {
+    /* forced-color-adjust: none lets author colours survive the
+       system-token remap, but per WCAG forced-colors guidance the
+       outline should use a SYSTEM token (Highlight) so it matches
+       the user's chosen palette. 3px so it survives the system
+       theme's typical thicker rendering. */
+    forced-color-adjust: none;
+    outline: 3px solid Highlight;
+    outline-offset: 2px;
+  }
+}
+
 /* ─── Skip link + progress bar ─────────────────────────────────── */
 
 .skip-link {
