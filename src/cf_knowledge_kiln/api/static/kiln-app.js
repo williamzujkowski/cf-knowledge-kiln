@@ -33,6 +33,20 @@
     if (s) s.textContent = text;
   };
 
+  // #321: feedback ACK announcements got their own live region so
+  // a feedback vote landing milliseconds after a preview-load (or a
+  // search-count update) can't overwrite the prior announcement in
+  // #search-status. Two independent polite regions can't collide
+  // because AT processes each one independently. Falls back to
+  // #search-status when the dedicated region isn't present (so the
+  // JS works against an unmigrated template).
+  const _setFeedbackStatus = (text) => {
+    const s =
+      document.getElementById("feedback-status") ||
+      document.getElementById("search-status");
+    if (s) s.textContent = text;
+  };
+
   document.addEventListener("htmx:beforeRequest", (e) => {
     const r = document.getElementById("results");
     if (r && e.target.closest("form.search-form")) {
@@ -93,12 +107,15 @@
     // #314 fix-1: feedback ack AT announcement. The swapped ack
     // fragment used to carry role="status" but that doesn't fire
     // reliably for live regions born WITH the role at swap-time;
-    // route through the persistent #search-status region instead.
-    // matches?() is the HTMX 2.x-friendly null-safe check.
+    // route through the persistent #feedback-status region instead
+    // (#321: previously #search-status, which collided with preview
+    // + search-count announcements when both fired in the same
+    // event tick). matches?() is the HTMX 2.x-friendly null-safe
+    // check.
     const target = e.detail.target;
     if (target && target.matches?.("[data-feedback-ack]")) {
       const sig = target.getAttribute("data-signal") || "feedback";
-      _setStatus("Feedback recorded: " + sig.replace(/_/g, " "));
+      _setFeedbackStatus("Feedback recorded: " + sig.replace(/_/g, " "));
     }
   });
 
