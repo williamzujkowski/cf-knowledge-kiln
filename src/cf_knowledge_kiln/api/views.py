@@ -313,36 +313,57 @@ def feedback_categories() -> tuple[tuple[str, str, str], ...]:
     return _FEEDBACK_CATEGORIES
 
 
+# #357 default: when the operator hasn't set KILN_AGENT_GUIDE_URL,
+# we still want the colophon "Agents" link to appear so a developer
+# landing on the kiln has a discoverable path to the agent surface.
+# /docs#tag/agent is the FastAPI-generated Swagger UI scrolled to the
+# agent operation group — always same-origin, always available
+# wherever the kiln is reachable. Operators with a curated external
+# guide override by setting KILN_AGENT_GUIDE_URL. Operators who want
+# the link OFF set KILN_AGENT_GUIDE_URL=disabled (special sentinel).
+_AGENT_GUIDE_URL_DEFAULT = "/docs#tag/agent"
+_AGENT_GUIDE_URL_DISABLED = "disabled"
+
+
 def agent_guide_url() -> str | None:
-    """Return the configured agent-integration-guide URL, or None (#314).
+    """Return the configured agent-integration-guide URL, or the same-
+    origin default (#314 / #357).
 
-    Reads ``KILN_AGENT_GUIDE_URL`` (optional setting). When set, the
-    colophon renders an "Agents → /v1/agent/context-pack" link so a
-    visiting engineer discovers the agent surface without grepping
-    docs. When unset (default), the link is omitted entirely — no
-    placeholder, no env-var-pollution on stock deployments.
+    Reads ``KILN_AGENT_GUIDE_URL`` (optional setting). Behavior:
 
-    Returned via the live ``get_settings()`` lookup (not a cached
-    module-level constant) so tests + runtime overrides of the
-    env var pick up immediately. The Jinja template registration
-    in ``api/web.py`` wires this into the global namespace.
+    * Unset (default) → returns ``"/docs#tag/agent"``. The Swagger
+      UI scrolled to the agent endpoints; always same-origin,
+      always available (#357 changed this from None to default-on).
+    * ``"disabled"`` sentinel → returns None. Operator off-switch for
+      stock deploys that want zero colophon noise.
+    * Same-origin absolute path (``"/..."``) → returned verbatim.
+    * ``https://`` / ``http://`` → returned verbatim.
+    * Anything else (``javascript:``, ``data:``, protocol-relative
+      ``//``, etc.) → WARNING log + None (link silently dropped,
+      NOT rendered as a broken/dangerous link).
 
     Security: the value goes into an ``href`` attribute, so we reject
     anything that isn't a safe URL scheme. Operator misconfiguration
     or an env-injection attack that sets the var to ``javascript:…``
     or ``data:…`` would otherwise execute attacker JS on every
     rendered page (Jinja autoescape doesn't sanitize URL schemes).
-    Allowed: ``https://``, ``http://``, and same-origin paths
-    starting with ``/``. Anything else → log + return None (link is
-    silently dropped, NOT rendered as a broken/dangerous link).
+
+    Returned via the live ``get_settings()`` lookup (not a cached
+    module-level constant) so tests + runtime overrides of the
+    env var pick up immediately. The Jinja template registration
+    in ``api/web.py`` wires this into the global namespace.
     """
     from cf_knowledge_kiln.config import get_settings
 
     raw = get_settings().agent_guide_url
     if raw is None:
-        return None
+        # #357: default-on. Same-origin Swagger UI is always available.
+        return _AGENT_GUIDE_URL_DEFAULT
     candidate = raw.strip()
     if not candidate:
+        return _AGENT_GUIDE_URL_DEFAULT
+    if candidate == _AGENT_GUIDE_URL_DISABLED:
+        # #357 explicit off-switch: operator chose to hide the link.
         return None
     # Same-origin absolute path is always safe.
     if candidate.startswith("/") and not candidate.startswith("//"):
