@@ -72,7 +72,14 @@
                 hx-target="#preview"
                 hx-swap="innerHTML"
                 hx-indicator="#preview"
-                data-action="open-preview">
+                data-action="open-preview"
+                {# #345: chunk-id on the button so kiln-app.js can
+                   restore focus to THIS card after the preview drawer
+                   closes (Esc / backdrop / close-button). The id is
+                   already on the card wrapper, but the button is
+                   what the user activated — it's the natural focus
+                   return target. #}
+                data-chunk-id="{{ r.chunk_id }}">
                 {{ r.title }}
               </button>
             </h2>

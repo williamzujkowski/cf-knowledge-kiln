@@ -143,21 +143,55 @@
   });
 
   // #119 preview panel: Esc clears it (mobile drawer + desktop rail).
+  //
+  // #345: focus return. Before closing, capture the previously-
+  // focused element (the result-card title button that the user came
+  // from) and restore focus to it after the panel clears. Without
+  // this, Esc-close lands focus on <body> — keyboard users lose
+  // their place in the result list and have to Tab from the top of
+  // the page back to where they were.
   const _closePreview = () => {
     const p = document.getElementById("preview");
     if (!p || !p.hasAttribute("data-open")) return;
+    // Capture the "open from" element BEFORE we clear data-open
+    // (because the captured ref is stored on the panel itself for
+    // both Esc and click-backdrop paths).
+    const opener = p.dataset.openerKey
+      ? document.querySelector(
+          '.result-title-button[data-chunk-id="' + p.dataset.openerKey + '"]'
+        )
+      : null;
     p.removeAttribute("data-open");
     // Allow focus-grab again next time the drawer reopens.
     p.removeAttribute("data-focus-grabbed");
+    delete p.dataset.openerKey;
     p.innerHTML = "";
+    if (opener && typeof opener.focus === "function") {
+      // Inside a requestAnimationFrame so the focus lands AFTER the
+      // browser commits the data-open removal (otherwise the panel
+      // can still be the focus target during the same paint frame).
+      requestAnimationFrame(() => opener.focus());
+    }
   };
 
   // Open the preview drawer (replaces the prior inline onclick on
   // .result-title-button). Only flips the data-open attribute —
   // HTMX still drives the actual content fetch through hx-get.
-  const _openPreview = () => {
+  //
+  // #345: capture the opener's chunk-id on the panel so _closePreview
+  // can restore focus to the originating card. The opener element
+  // itself isn't stored (DOM refs go stale across HTMX swaps); we
+  // re-query by chunk-id at close time so the result-card the user
+  // came from gets focus even if results were re-rendered.
+  const _openPreview = (opener) => {
     const p = document.getElementById("preview");
-    if (p) p.setAttribute("data-open", "true");
+    if (!p) return;
+    p.setAttribute("data-open", "true");
+    if (opener && opener.dataset && opener.dataset.chunkId) {
+      p.dataset.openerKey = opener.dataset.chunkId;
+    } else {
+      delete p.dataset.openerKey;
+    }
   };
 
   document.addEventListener("keydown", (e) => {
@@ -194,7 +228,9 @@
     if (!actor) return;
     const action = actor.getAttribute("data-action");
     if (action === "open-preview") {
-      _openPreview();
+      // Pass the activated control (the result-title button) so
+      // _openPreview can record it for focus-return on close (#345).
+      _openPreview(actor);
     } else if (action === "close-preview") {
       _closePreview();
     }
