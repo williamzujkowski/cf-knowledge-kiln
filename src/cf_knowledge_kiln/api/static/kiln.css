@@ -1779,6 +1779,92 @@ a.source-link:focus-visible {
   }
 }
 
+/* ─── #336 authority band ─────────────────────────────────────────
+   Small editorial chip that surfaces *what kind of authority* backs
+   the card. Sits in the source-line next to the owner byline so the
+   reading order is: source/path — by owner · platform — Reviewed ….
+
+   Visual language: lowercase italic-serif label (Fraunces, italic)
+   bracketed by hair-thin gold rules. No background fill — this is
+   an editorial annotation, not a status pill. The two ascenders
+   (◀ ▶ via :before/:after pseudo-elements rendered as thin borders)
+   echo the "editorial mark" voice already used by the deprecation
+   stamp + the score-tier numeric prefix, so it doesn't feel like a
+   new visual primitive grafted onto the card. ── */
+.authority-band {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35em;
+  margin-left: 0.4em;
+  padding: 0 0.45em;
+  /* Vertical hair rules around the label keep it readable as an
+     editorial annotation even when the card has no other gold
+     accent (no deprecation stamp, no high-tier score). */
+  border-left: 1px solid var(--gold);
+  border-right: 1px solid var(--gold);
+  font-family: "Fraunces", Georgia, serif;
+  font-style: italic;
+  font-size: 0.84rem;
+  /* font-variant-caps draws on Fraunces' OpenType small-caps so the
+     label reads as a deliberate editorial mark rather than a
+     lowercase shout. Falls back to lowercase visually on fonts
+     without the feature. */
+  font-variant-caps: small-caps;
+  letter-spacing: 0.04em;
+  color: var(--ink-faded);
+  /* Forced-colors users get a CanvasText border via the @media
+     block at the bottom of this file — the gold rules disappear
+     under forced-colors per the spec. */
+}
+
+/* Authority-specific accent: platform / security / standards are
+   the three "high-authority" values. Tint the rules teal so a
+   scanning user can tell a platform-canonical card from a
+   community-curated one even before reading the label. */
+.authority-band.authority-platform,
+.authority-band.authority-security,
+.authority-band.authority-standards,
+.authority-band.authority-compliance {
+  border-left-color: var(--teal);
+  border-right-color: var(--teal);
+  color: var(--ink);
+}
+
+/* Lower-authority values (community / experimental / operator)
+   keep the gold rules + faded ink — the chip still surfaces but
+   doesn't carry the "this is the canonical answer" weight. */
+.authority-band.authority-community,
+.authority-band.authority-experimental {
+  /* Italic Fraunces in --ink-faded already reads "softer"; no
+     further treatment needed. Listed explicitly so a future
+     designer can branch here without re-grokking the cascade. */
+}
+
+@media (forced-colors: active) {
+  .authority-band {
+    forced-color-adjust: none;
+    border-left-color: CanvasText;
+    border-right-color: CanvasText;
+    color: CanvasText;
+  }
+  .authority-band.authority-platform,
+  .authority-band.authority-security,
+  .authority-band.authority-standards,
+  .authority-band.authority-compliance {
+    /* Highlight in forced-colors signals "this is the
+       authoritative one" — same semantic as the teal rule. */
+    border-left-color: Highlight;
+    border-right-color: Highlight;
+    color: HighlightText;
+    background: Highlight;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .authority-band {
+    color: var(--ink);
+  }
+}
 /* ─── Warning pills (top-of-list + per-card inline).
  *
  * Extracted from _results.css per #342 (file-size cap split).

@@ -766,6 +766,22 @@ components:
             section 2 vs section 12" at scan speed without opening
             the preview. Total `chunk_count` per document is a
             follow-up — see #384.
+        authority:
+          # #336: human-side authority band. Already on EvidenceChunk
+          # for agents (line 664) + on DocumentRef; promoted to
+          # ResultCard so a scanning user can rank cards by what kind
+          # of authority backs them ('platform', 'security',
+          # 'standards', etc.) before reading the body. Optional +
+          # nullable per ADR-0011 — older clients that don't ask for
+          # the field keep working.
+          type: string
+          nullable: true
+          description: >-
+            Authority bucket carried forward from the source
+            document. Recommended values: platform, security,
+            standards, compliance, ops, engineering, operator,
+            community, experimental — but any string from the
+            source corpus is accepted and returned verbatim.
 
     Warning:
       type: object

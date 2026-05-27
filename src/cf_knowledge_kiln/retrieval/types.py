@@ -222,6 +222,13 @@ class ResultCard(BaseModel):
     # (additive per ADR-0011) — older clients that don't ask for it
     # keep working.
     chunk_index: int | None = Field(default=None, ge=0)
+    # #336 — authority band. Already on the agent-side EvidenceChunk;
+    # promoted to the human-side ResultCard so a scanning user can
+    # rank cards by what kind of authority backs them ('platform' >
+    # 'security' > operator-defined > unknown). Optional + nullable
+    # per ADR-0011 — older clients that don't ask for it keep
+    # working.
+    authority: str | None = None
 
 
 class SearchResponse(BaseModel):

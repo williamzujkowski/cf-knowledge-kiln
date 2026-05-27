@@ -199,6 +199,44 @@ def deprecation_label(status: str) -> str | None:
     return _DEPRECATION_LABELS.get(status)
 
 
+# #336 — authority bucket. Documents in a corpus typically declare an
+# authority via frontmatter: ``platform`` (the canonical owner team),
+# ``security`` (the security team's hardening doc), ``standards``
+# (org-wide standard), etc. Without surfacing this, a user scanning
+# results can't tell which card carries the strongest backing.
+#
+# Editorial tooltip per known value so the AT user gets the same
+# disambiguation a sighted user gets on hover/focus. Unknown values
+# return None — the template skips the tooltip + the badge falls
+# back to the raw string.
+_AUTHORITY_TOOLTIPS: dict[str, str] = {
+    "platform": "Platform — canonical owner-team doc.",
+    "security": "Security — hardening or threat-model authoritative.",
+    "standards": "Standards — org-wide policy.",
+    "compliance": "Compliance — audit / regulatory backing.",
+    "ops": "Ops — operational runbook authoritative.",
+    "engineering": "Engineering — practice or pattern authoritative.",
+    "operator": "Operator — team-curated, not org-wide canonical.",
+    "community": "Community — peer-contributed, less authoritative.",
+    "experimental": "Experimental — under evaluation.",
+}
+
+
+def authority_tooltip(authority: str | None) -> str | None:
+    """Return the editorial gloss for an authority value, or None.
+
+    Same shape as :func:`status_tooltip` — the template uses
+    ``{% if r.authority_tooltip %}`` to skip the title attribute
+    when the value isn't in the table. Falls through to the raw
+    string for unknown values so a custom-corpus authority like
+    ``"slack-handbook"`` still surfaces as a chip even without a
+    tooltip.
+    """
+    if not authority:
+        return None
+    return _AUTHORITY_TOOLTIPS.get(authority)
+
+
 # Rail-filter field set (#273). Order doesn't matter for the count,
 # but pinning the list here means a future field addition lands in
 # both the helper AND its tests (the unit suite uses these names).
@@ -432,6 +470,7 @@ async def log_human_query(
 
 __all__ = [
     "agent_guide_url",
+    "authority_tooltip",
     "deprecation_label",
     "feedback_categories",
     "humanize_warning",

@@ -229,6 +229,19 @@
                   <em>section {{ r.chunk_index + 1 }}</em>
                 </span>
               {% endif %}
+              {# #336 authority band. Small editorial chip surfacing
+                 *what kind of authority* backs the card — "platform"
+                 outranks "operator" outranks "community" at a glance.
+                 ``r.authority_tooltip`` is None for corpus-native
+                 values outside the kiln-recommended vocabulary; the
+                 {% if %} keeps unknown values plain. aria-label
+                 mirrors data-tooltip per #296. #}
+              {% if r.authority is defined and r.authority %}
+                <span class="authority-band authority-{{ r.authority }}"
+                      {% if r.authority_tooltip %}data-tooltip="{{ r.authority_tooltip }}"
+                      aria-label="Authority: {{ r.authority }} — {{ r.authority_tooltip }}"
+                      {% else %}aria-label="Authority: {{ r.authority }}"{% endif %}>{{ r.authority }}</span>
+              {% endif %}
               {% if r.last_reviewed %}
                 <time datetime="{{ r.last_reviewed }}" class="freshness">
                   Reviewed {{ r.last_reviewed }}
