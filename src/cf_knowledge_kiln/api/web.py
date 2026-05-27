@@ -423,6 +423,16 @@ def _result_card_view(
         "authority_tooltip": authority_tooltip(
             getattr(ref, "authority", None) or getattr(chunk, "authority", None)
         ),
+        # #337 / #384: surface section position so the HTMX template
+        # renders "section N of M" inline. The JSON ResultCard shape
+        # carries the same fields (see ``api/retrieval.py``); without
+        # also threading them here the HTMX flow would silently lose
+        # the section line that #385 added.
+        "chunk_index": getattr(chunk, "chunk_index", None),
+        # ``chunk.chunk_count`` defaults to 0 for synthetic chunks
+        # (tests / mocks); surface 0 as None so the template treats
+        # it as "unknown" and falls back to bare "section N".
+        "chunk_count": getattr(chunk, "chunk_count", None) or None,
     }
 
 

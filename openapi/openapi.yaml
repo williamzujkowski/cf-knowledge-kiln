@@ -764,8 +764,20 @@ components:
             `section {{ chunk_index + 1 }}` (1-based for readability)
             inline on the source-line. Useful for triaging "matched
             section 2 vs section 12" at scan speed without opening
-            the preview. Total `chunk_count` per document is a
-            follow-up — see #384.
+            the preview.
+        chunk_count:
+          type: integer
+          minimum: 0
+          nullable: true
+          description: |
+            #384 — total section count for the parent document.
+            Populated from a correlated subquery on `document_chunks`
+            keyed by `document_id`; counts the document's TOTAL
+            chunks regardless of filters / candidate-pool size. The
+            UI pairs this with `chunk_index` to render
+            "section N of M". Independent on the wire: if only
+            `chunk_index` is set the UI falls back to bare
+            "section N".
         authority:
           # #336: human-side authority band. Already on EvidenceChunk
           # for agents (line 664) + on DocumentRef; promoted to

@@ -269,6 +269,11 @@ def _chunk_to_result_card(chunk: RankedChunk, ref: object | None, content: str) 
         # #337: surface the section index so the template can render
         # "section N" inline without re-querying the chunks table.
         chunk_index=chunk.chunk_index,
+        # #384: total section count for the parent document so the
+        # template renders "section N of M". 0 means "unknown" (the
+        # synthetic-RankedChunk default) — surface as None so the
+        # template treats it the same as a missing field.
+        chunk_count=chunk.chunk_count or None,
         # #336: thread authority through so the UI can render the
         # band ('platform' / 'security' / etc.) without re-querying
         # the documents table.

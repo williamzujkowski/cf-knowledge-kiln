@@ -222,6 +222,11 @@ class ResultCard(BaseModel):
     # (additive per ADR-0011) — older clients that don't ask for it
     # keep working.
     chunk_index: int | None = Field(default=None, ge=0)
+    # #384: total section count for the parent document. When both
+    # chunk_index AND chunk_count are present, the UI renders
+    # "section N of M"; falls back to bare "section N" if only the
+    # index is set. Optional + nullable per ADR-0011.
+    chunk_count: int | None = Field(default=None, ge=0)
     # #336 — authority band. Already on the agent-side EvidenceChunk;
     # promoted to the human-side ResultCard so a scanning user can
     # rank cards by what kind of authority backs them ('platform' >

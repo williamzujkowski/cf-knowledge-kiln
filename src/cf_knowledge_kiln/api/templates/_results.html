@@ -225,8 +225,13 @@
                  always carries the field; only synthetic dict-shaped
                  fixtures need the defense-in-depth. #}
               {% if r.chunk_index is defined and r.chunk_index is not none %}
+                {# #384 — "section N of M" when chunk_count is set;
+                   bare "section N" otherwise. Both fields flow
+                   from the same SQL row, but synthetic ranked
+                   chunks (tests / mocks) only carry the index, so
+                   the template guards on each independently. #}
                 <span class="chunk-index" aria-hidden="true">·
-                  <em>section {{ r.chunk_index + 1 }}</em>
+                  <em>section {{ r.chunk_index + 1 }}{% if r.chunk_count is defined and r.chunk_count %} of {{ r.chunk_count }}{% endif %}</em>
                 </span>
               {% endif %}
               {# #336 authority band. Small editorial chip surfacing
