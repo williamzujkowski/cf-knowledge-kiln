@@ -1616,6 +1616,25 @@ a.source-link:focus-visible {
   color: var(--ink-soft);
 }
 
+/* #337 chunk-index in source-line.
+ *
+ * Renders alongside .owner / .freshness as a quiet "section N"
+ * tag. Italic Fraunces matches the editorial register; muted
+ * .ink-faded color keeps the index secondary to the title +
+ * source. The leading middot is in the template so it can flow
+ * with whatever siblings are present.
+ */
+.chunk-index {
+  color: var(--ink-faded);
+  font-size: 0.82rem;
+  margin-inline-start: 0.4rem;
+}
+
+.chunk-index em {
+  font-style: italic;
+  color: var(--ink-soft);
+}
+
 .score {
   display: inline-flex;
   align-items: baseline;

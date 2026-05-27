@@ -70,6 +70,14 @@ class SearchRow:
     score: float
     has_prompt_injection: bool
     has_sensitive_content: bool
+    # #337 — 0-based section index within the document. Originally only
+    # surfaced in the preview ("Selected chunk #07"); ResultCard now
+    # carries it so a user can tell "matched section 2 of … " vs
+    # "matched section 7 of …" at scan speed without opening the
+    # preview. (Total ``chunk_count`` per document is a follow-up —
+    # requires a second query / window function; see #384 in the
+    # parent epic.)
+    chunk_index: int
 
 
 async def set_local_ef_search(session: AsyncSession, ef_search: int) -> None:
@@ -206,6 +214,10 @@ def _select_search_row_columns(score_col: Any) -> Any:
         DocumentChunk.content,
         DocumentChunk.heading_path,
         DocumentChunk.extra.label("chunk_metadata"),
+        # #337: chunk_index surfaces "section N" on the result card.
+        # 0-based per the migration; the template renders as N+1
+        # so the user sees "section 7" rather than "section 6".
+        DocumentChunk.chunk_index,
         Document.status,
         Document.authority,
         Document.owner,
@@ -241,6 +253,8 @@ def row_to_search_row(row: Any) -> SearchRow:
         score=float(row["rrf_score"]),
         has_prompt_injection=bool(metadata.get("has_prompt_injection")),
         has_sensitive_content=bool(metadata.get("has_sensitive_content")),
+        # #337: chunk_index surfaces "section N" on the result card.
+        chunk_index=int(row["chunk_index"]),
     )
 
 
