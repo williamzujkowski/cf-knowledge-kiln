@@ -46,6 +46,29 @@ UNTRUSTED_CONTENT_NOTICE: str = (
 )
 """Standard preamble per AGENTS.md "Untrusted input policy"."""
 
+# #360: short canonical substrings that MUST appear verbatim in any
+# rendering of the prompt for the contract to be intact. A naive
+# template-truncation that drops one or more of these is a signal
+# the contract has been weakened — the prose paraphrase pattern is
+# the failure mode this guards against.
+#
+# Three short phrases instead of one long one is intentional —
+# truncation that drops ONE leaves the contract recognizable; one
+# that drops ALL three is loud (the consumer's verifier fails fast).
+# Each phrase is ≤ 30 chars / ≤ 5 words so it fits inside common
+# prompt-template line caps without being splitable.
+#
+# Every phrase MUST appear verbatim somewhere in UNTRUSTED_CONTENT_NOTICE
+# (pinned by test) so the canonical prose and the pinned list can't
+# drift. The id below remains v1: this is metadata (how to verify),
+# not a meaning change.
+UNTRUSTED_CONTENT_NOTICE_PINNED_PHRASES: tuple[str, ...] = (
+    "source evidence",  # the noun the contract names
+    "not treat",  # the negation that carries the policy
+    "explicitly authorizes",  # the only exception clause
+)
+"""Phrases an agent's rendered prompt MUST contain verbatim (#360)."""
+
 # Agent-API audit (post-#299): the prose above is a free-form
 # string. Agents that want to localize the preamble or detect
 # 'the server changed the notice between releases' had to
@@ -270,6 +293,7 @@ def assemble_context_pack(
         review_reasons=reasons,
         untrusted_content_notice=UNTRUSTED_CONTENT_NOTICE,
         untrusted_content_notice_id=UNTRUSTED_CONTENT_NOTICE_ID,
+        untrusted_content_notice_pinned_phrases=list(UNTRUSTED_CONTENT_NOTICE_PINNED_PHRASES),
     )
     # #189: used_estimate must reflect the WHOLE pack an agent ingests —
     # evidence text + per-chunk citation metadata + warnings + the
