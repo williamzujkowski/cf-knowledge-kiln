@@ -29,6 +29,11 @@ from cf_knowledge_kiln.retrieval.ranking import (
     weak_evidence_warning,
 )
 from cf_knowledge_kiln.retrieval.types import Conflict, Warning
+from cf_knowledge_kiln.retrieval.warning_variants import (
+    ConflictingSourcesWarning,
+    QueryNormalizedWarning,
+    downgrade_to_flat,
+)
 
 
 def row_to_ranked_chunk(row: SearchRow) -> RankedChunk:
@@ -103,14 +108,22 @@ def conflict_warnings(conflicts: list[Conflict]) -> list[Warning]:
     ``conflicts`` argument, not the warnings argument); the warning
     is purely for agents that only consume the warnings channel and
     would otherwise miss conflict surfacing.
+
+    #310 step 2: constructs a ConflictingSourcesWarning variant
+    (carrying source_ids + topic — fields the flat shape loses)
+    then downgrades to flat at the return. Wire-shape preserved;
+    the typed variant is what step 3 (/v2/) ships on the wire.
     """
-    return [
-        Warning(
+    out: list[Warning] = []
+    for c in conflicts:
+        variant = ConflictingSourcesWarning(
             type="conflicting_sources",
             message=f"{len(c.source_ids)} active sources address {c.topic!r}.",
+            source_ids=list(c.source_ids),
+            topic=c.topic,
         )
-        for c in conflicts
-    ]
+        out.append(downgrade_to_flat(variant))
+    return out
 
 
 def query_normalized_warning(removed_phrases: list[str]) -> Warning:
@@ -120,16 +133,21 @@ def query_normalized_warning(removed_phrases: list[str]) -> Warning:
     response can spot a query attempting to exfiltrate prompt-
     injection content from the corpus. The list is informational —
     the cleaned query has already gone through retrieval.
+
+    #310 step 2: constructs a QueryNormalizedWarning variant
+    (carrying the typed removed_phrases list) then downgrades.
     """
     sample = ", ".join(repr(p) for p in removed_phrases[:3])
     suffix = f" (and {len(removed_phrases) - 3} more)" if len(removed_phrases) > 3 else ""
-    return Warning(
+    variant = QueryNormalizedWarning(
         type="query_normalized",
         message=(
             f"Query contained prompt-injection markers; stripped before retrieval: "
             f"{sample}{suffix}."
         ),
+        removed_phrases=list(removed_phrases),
     )
+    return downgrade_to_flat(variant)
 
 
 def document_refs_from_rows(rows: list[SearchRow]) -> dict[UUID, Any]:

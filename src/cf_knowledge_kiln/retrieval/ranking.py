@@ -22,7 +22,12 @@ from uuid import UUID
 from cf_knowledge_kiln.retrieval.config import RetrievalConfig
 from cf_knowledge_kiln.retrieval.types import Conflict, Warning
 from cf_knowledge_kiln.retrieval.warning_variants import (
+    DeprecatedSourceWarning,
     IsolatedMatchWarning,
+    PromptInjectionPatternWarning,
+    SensitiveContentWarning,
+    StaleSourceWarning,
+    WeakEvidenceWarning,
     downgrade_to_flat,
 )
 
@@ -168,7 +173,11 @@ def stale_warnings(
     today: date,
     stale_after_days: int | None,
 ) -> list[Warning]:
-    """Emit one ``stale_source`` per distinct doc with last_reviewed too old."""
+    """Emit one ``stale_source`` per distinct doc with last_reviewed too old.
+
+    #310 step 2: constructs StaleSourceWarning variants (carrying
+    stale_after_days threshold + last_reviewed) then downgrades.
+    """
     if stale_after_days is None:
         return []
     seen: set[UUID] = set()
@@ -179,34 +188,41 @@ def stale_warnings(
             continue
         if c.last_reviewed is None or c.last_reviewed < threshold:
             seen.add(c.document_id)
-            out.append(
-                Warning(
-                    type="stale_source",
-                    message=(
-                        f"Document last reviewed {c.last_reviewed or 'never'}; "
-                        f"older than {stale_after_days} days."
-                    ),
-                    source_id=c.document_id,
-                )
+            variant = StaleSourceWarning(
+                type="stale_source",
+                message=(
+                    f"Document last reviewed {c.last_reviewed or 'never'}; "
+                    f"older than {stale_after_days} days."
+                ),
+                source_id=c.document_id,
+                stale_after_days=stale_after_days,
+                last_reviewed=c.last_reviewed,
             )
+            out.append(downgrade_to_flat(variant))
     return out
 
 
 def deprecated_warnings(chunks: list[RankedChunk]) -> list[Warning]:
-    """One ``deprecated_source`` warning per distinct deprecated/archived/superseded doc."""
-    bad = {"deprecated", "archived", "superseded"}
+    """One ``deprecated_source`` warning per distinct deprecated/archived/superseded doc.
+
+    #310 step 2: constructs DeprecatedSourceWarning variants
+    (carrying the specific document_status) then downgrades.
+    """
+    bad: set[str] = {"deprecated", "archived", "superseded"}
     seen: set[UUID] = set()
     out: list[Warning] = []
     for c in chunks:
         if c.status in bad and c.document_id not in seen:
             seen.add(c.document_id)
-            out.append(
-                Warning(
-                    type="deprecated_source",
-                    message=f"Document status is {c.status!r}.",
-                    source_id=c.document_id,
-                )
+            # Cast c.status into the variant's narrower Literal type;
+            # the bad-set guard above ensures it's one of three values.
+            variant = DeprecatedSourceWarning(
+                type="deprecated_source",
+                message=f"Document status is {c.status!r}.",
+                source_id=c.document_id,
+                document_status=c.status,  # type: ignore[arg-type]
             )
+            out.append(downgrade_to_flat(variant))
     return out
 
 
@@ -222,19 +238,27 @@ def prompt_injection_warnings(
     chunk matched a phrase from ``config/security.yaml``; retrieval
     surfaces the warning only for chunks that cleared the rank +
     score gates (#161). See :func:`_gate_for_warnings`.
+
+    #310 step 2: constructs PromptInjectionPatternWarning variants
+    (carrying chunk_id — brand-new info the flat shape never had —
+    plus the existing source_id) then downgrades. ``pattern_id``
+    stays None pending ingest-side widening.
     """
     eligible = _gate_for_warnings(
         chunks, relevance_floor=relevance_floor, max_warning_rank=max_warning_rank
     )
-    return [
-        Warning(
+    out: list[Warning] = []
+    for c in eligible:
+        if not c.has_prompt_injection:
+            continue
+        variant = PromptInjectionPatternWarning(
             type="prompt_injection_pattern",
             message="Chunk contains a configured prompt-injection phrase.",
             source_id=c.document_id,
+            chunk_id=c.chunk_id,
         )
-        for c in eligible
-        if c.has_prompt_injection
-    ]
+        out.append(downgrade_to_flat(variant))
+    return out
 
 
 def sensitive_content_warnings(
@@ -250,19 +274,26 @@ def sensitive_content_warnings(
     The agent serializer drops these chunks from the context-pack body
     entirely; humans see them with the warning attached. Emission is
     rank + score gated (#161); see :func:`_gate_for_warnings`.
+
+    #310 step 2: constructs SensitiveContentWarning variants (now
+    carrying chunk_id alongside source_id) then downgrades.
+    ``classifier_label`` stays None pending ingest-side widening.
     """
     eligible = _gate_for_warnings(
         chunks, relevance_floor=relevance_floor, max_warning_rank=max_warning_rank
     )
-    return [
-        Warning(
+    out: list[Warning] = []
+    for c in eligible:
+        if not c.has_sensitive_content:
+            continue
+        variant = SensitiveContentWarning(
             type="sensitive_content",
             message="Chunk matches a configured sensitive-content pattern.",
             source_id=c.document_id,
+            chunk_id=c.chunk_id,
         )
-        for c in eligible
-        if c.has_sensitive_content
-    ]
+        out.append(downgrade_to_flat(variant))
+    return out
 
 
 def _gate_for_warnings(
@@ -300,15 +331,25 @@ def weak_evidence_warning(
     """
     effective = WEAK_EVIDENCE_SCORE_THRESHOLD if threshold is None else threshold
     if not chunks:
-        return [Warning(type="weak_evidence", message="No matching evidence found.")]
+        # #310 step 2: empty-input shape — top_score is None.
+        variant = WeakEvidenceWarning(
+            type="weak_evidence",
+            message="No matching evidence found.",
+            top_score=None,
+            score_floor=effective,
+        )
+        return [downgrade_to_flat(variant)]
     best = max(c.score for c in chunks)
     if best < effective:
-        return [
-            Warning(
-                type="weak_evidence",
-                message=f"Best chunk score {best:.2f} below threshold {effective}.",
-            )
-        ]
+        # #310 step 2: below-floor shape — top_score is the best
+        # observed score (still < score_floor).
+        variant = WeakEvidenceWarning(
+            type="weak_evidence",
+            message=f"Best chunk score {best:.2f} below threshold {effective}.",
+            top_score=best,
+            score_floor=effective,
+        )
+        return [downgrade_to_flat(variant)]
     return []
 
 
