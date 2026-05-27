@@ -265,6 +265,18 @@ class ContextPackRequest(BaseModel):
     include_conflicts: bool = True
     include_related_sources: bool = True
     require_citations: bool = True
+    # #361: when True, every EvidenceChunk.text is suffixed with one
+    # ``[KILN-WARN: <type> — <message>]`` marker per non-blocking
+    # warning whose ``source_id`` matches the chunk's document_id.
+    # Defaults to False so the contract stays additive on /v1/.
+    # Blocking-severity warnings (prompt_injection_pattern,
+    # sensitive_content) are intentionally NOT embedded — those
+    # chunks are already dropped from the pack body, and re-introducing
+    # the injection vector via a marker would defeat the policy.
+    # Markers are idempotent: a re-assembled pack on the same inputs
+    # produces a byte-identical evidence text (sort warnings by
+    # (type, message) before joining).
+    embed_warnings_in_text: bool = False
 
 
 class EvidenceChunk(BaseModel):

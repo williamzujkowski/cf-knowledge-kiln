@@ -204,6 +204,7 @@ async def agent_context_pack(
             filters=filters,
             max_chunks=body.max_chunks,
             max_tokens=body.max_tokens,
+            embed_warnings_in_text=body.embed_warnings_in_text,
             session=session,
         )
     except ValueError as exc:
