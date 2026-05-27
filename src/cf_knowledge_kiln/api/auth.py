@@ -640,39 +640,68 @@ class OIDCAuthMiddleware:
         return response
 
     async def _handle_callback(self, request: Request) -> Response:
-        """Exchange code → tokens, validate, set session cookie."""
+        """Exchange code → tokens, validate, set session cookie.
+
+        #325: every rejection branch logs the SPECIFIC reason at
+        WARNING with structured ``extra={"reason": ..., "request_id":
+        ...}`` so an operator scanning kiln logs after a complaint
+        can grep one event class instead of inspecting middleware
+        source. The wire response stays the generic
+        ``auth_required`` envelope (don't leak which check tripped
+        to attackers); the differentiation is server-side only.
+        """
         from itsdangerous import BadSignature, SignatureExpired
 
+        req_id = _request_id(request)
         signed = request.cookies.get(_STATE_COOKIE)
         if not signed:
-            logger.info("auth: oidc callback without state cookie")
-            return _unauthorized(_request_id(request))
+            logger.warning(
+                "auth: oidc callback rejected — state cookie missing",
+                extra={"reason": "state_cookie_missing", "request_id": req_id},
+            )
+            return _unauthorized(req_id)
         try:
             stash = self._serializer.loads(signed, max_age=_STATE_TTL_SECONDS)
         except SignatureExpired:
-            logger.info("auth: oidc state cookie expired")
-            return _unauthorized(_request_id(request))
+            logger.warning(
+                "auth: oidc callback rejected — state cookie expired",
+                extra={"reason": "state_cookie_expired", "request_id": req_id},
+            )
+            return _unauthorized(req_id)
         except BadSignature:
-            logger.warning("auth: oidc state cookie signature invalid")
-            return _unauthorized(_request_id(request))
+            logger.warning(
+                "auth: oidc callback rejected — state cookie signature invalid",
+                extra={"reason": "state_cookie_bad_signature", "request_id": req_id},
+            )
+            return _unauthorized(req_id)
 
         inbound_state = request.query_params.get("state")
         if not inbound_state or not compare_digest(
             inbound_state.encode("utf-8"), stash["state"].encode("utf-8")
         ):
-            logger.info("auth: oidc state mismatch")
-            return _unauthorized(_request_id(request))
+            logger.warning(
+                "auth: oidc callback rejected — state value mismatch (XSRF / replay guard)",
+                extra={"reason": "state_mismatch", "request_id": req_id},
+            )
+            return _unauthorized(req_id)
 
         code = request.query_params.get("code")
         if not code:
-            logger.info("auth: oidc callback missing code")
-            return _unauthorized(_request_id(request))
+            logger.warning(
+                "auth: oidc callback rejected — authorization code missing from callback URL",
+                extra={"reason": "code_missing", "request_id": req_id},
+            )
+            return _unauthorized(req_id)
 
         # Exchange code → tokens.
         discovery = await self._ensure_discovery()
         token_endpoint = discovery.get("token_endpoint")
         if not token_endpoint:
-            return _unauthorized(_request_id(request))
+            logger.warning(
+                "auth: oidc callback rejected — issuer discovery has no token_endpoint",
+                extra={"reason": "discovery_no_token_endpoint", "request_id": req_id},
+            )
+            return _unauthorized(req_id)
         redirect_uri = _absolute_redirect_uri(request, self._settings.oidc_redirect_path)
         import httpx
 
@@ -690,27 +719,47 @@ class OIDCAuthMiddleware:
                 headers={"Accept": "application/json"},
             )
         if resp.status_code != 200:
-            logger.info(
-                "auth: oidc token exchange failed (status=%d body=%s)",
+            logger.warning(
+                "auth: oidc callback rejected — token exchange failed (status=%d body=%s)",
                 resp.status_code,
                 resp.text[:200],
+                extra={
+                    "reason": "token_exchange_failed",
+                    "request_id": req_id,
+                    "status_code": resp.status_code,
+                },
             )
-            return _unauthorized(_request_id(request))
+            return _unauthorized(req_id)
         token_response = resp.json()
         id_token = token_response.get("id_token")
         if not id_token:
-            logger.info("auth: oidc token response missing id_token")
-            return _unauthorized(_request_id(request))
+            logger.warning(
+                "auth: oidc callback rejected — token response missing id_token",
+                extra={"reason": "id_token_missing", "request_id": req_id},
+            )
+            return _unauthorized(req_id)
         try:
             claims = await self._validate_jwt(id_token)
         except _JWTValidationError as exc:
-            logger.info("auth: oidc id_token rejected: %s", exc)
-            return _unauthorized(_request_id(request))
+            logger.warning(
+                "auth: oidc callback rejected — id_token validation failed: %s",
+                exc,
+                extra={"reason": "id_token_invalid", "request_id": req_id},
+            )
+            return _unauthorized(req_id)
 
         if not _has_required_group(claims, self._settings.oidc_required_groups_list):
+            logger.warning(
+                "auth: oidc callback rejected — user lacks required group membership",
+                extra={
+                    "reason": "required_group_missing",
+                    "request_id": req_id,
+                    "required_groups": self._settings.oidc_required_groups_list,
+                },
+            )
             return _forbidden(
                 message="Required group membership not satisfied.",
-                request_id=_request_id(request),
+                request_id=req_id,
             )
 
         username_raw = claims.get(self._settings.oidc_username_claim)
