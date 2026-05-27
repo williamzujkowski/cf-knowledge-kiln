@@ -8,6 +8,12 @@
 <div class="feedback feedback-ack"
      data-feedback-ack
      data-signal="{{ signal }}">
+  {# #340 editorial copy: dropped the prior chat-app voice in favour
+     of the editorial annotation register the rest of the UI uses.
+     The italic phrasing matches the masthead notice + the result-
+     count italic so the ack reads as a margin gloss, not a chatbot
+     reply. Past-tense verb feels less performative than a present-
+     tense action verb. See docs/copy-voice.md for the canon. #}
   <span class="fb-ack-icon" aria-hidden="true">✓</span>
-  Thanks &mdash; logged as <em>{{ signal | replace("_", " ") }}</em>.
+  <em>Noted</em> &mdash; <em>{{ signal | replace("_", " ") }}</em>.
 </div>

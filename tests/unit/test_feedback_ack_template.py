@@ -60,11 +60,15 @@ def test_ack_carries_raw_signal_in_data_signal(env: jinja2.Environment, signal: 
     assert f'data-signal="{signal}"' in body
 
 
-def test_ack_visible_chip_text_unchanged(env: jinja2.Environment) -> None:
-    """Sighted users still see the same visual ack — only the AT
-    path moved. The visible text 'Thanks — logged as <signal>'
-    is preserved."""
+def test_ack_visible_chip_text(env: jinja2.Environment) -> None:
+    """The visible ack chip shows the editorial acknowledgement (#340)
+    plus the signal name. Updated from the prior prose; canonical
+    phrase lives in docs/copy-voice.md."""
     body = _render(env, "useful")
-    assert "Thanks" in body
+    # Editorial acknowledgement verb (italic past-tense per #340).
+    assert "Noted" in body
+    # Signal name still surfaces so the user can confirm what was
+    # recorded.
     assert "useful" in body
+    # Icon class stays for visual chrome.
     assert "fb-ack-icon" in body
