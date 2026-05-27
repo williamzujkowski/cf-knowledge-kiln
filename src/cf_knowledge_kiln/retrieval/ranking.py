@@ -21,6 +21,10 @@ from uuid import UUID
 
 from cf_knowledge_kiln.retrieval.config import RetrievalConfig
 from cf_knowledge_kiln.retrieval.types import Conflict, Warning
+from cf_knowledge_kiln.retrieval.warning_variants import (
+    IsolatedMatchWarning,
+    downgrade_to_flat,
+)
 
 DEFAULT_RRF_K: int = 60
 """Standard RRF constant per the Cormack et al. paper; tuneable later."""
@@ -350,24 +354,42 @@ def isolated_match_warning(
         if weak_evidence_threshold is None
         else weak_evidence_threshold
     )
-    sorted_scores = sorted((c.score for c in chunks), reverse=True)
-    top, runner_up = sorted_scores[0], sorted_scores[1]
+    # #310 step 2 (item 1 of N): sort BY CHUNK (not just scalar score)
+    # so we can attach source_id + chunk_id to the variant. Tie-break
+    # by chunk_id for deterministic ordering when two chunks share the
+    # same score — same convention as the rest of the engine.
+    sorted_chunks = sorted(chunks, key=lambda c: (-c.score, str(c.chunk_id)))
+    top_chunk, runner_up_chunk = sorted_chunks[0], sorted_chunks[1]
+    top, runner_up = top_chunk.score, runner_up_chunk.score
     if top < weak_floor:
         return []
     gap = top - runner_up
     if gap <= drop_threshold:
         return []
-    return [
-        Warning(
-            type="isolated_match",
-            message=(
-                f"Top result scored {top:.2f}, but the next best was only "
-                f"{runner_up:.2f} (gap {gap:.2f} > {drop_threshold:.2f}). "
-                "One chunk surface-matches the query without comparable "
-                "supporting evidence."
-            ),
-        )
-    ]
+    message = (
+        f"Top result scored {top:.2f}, but the next best was only "
+        f"{runner_up:.2f} (gap {gap:.2f} > {drop_threshold:.2f}). "
+        "One chunk surface-matches the query without comparable "
+        "supporting evidence."
+    )
+    # #310 step 2: construct the discriminated variant (carries
+    # source_id + chunk_id + every per-variant scalar today's flat
+    # shape loses) and downgrade to flat at the return so the
+    # signature + wire contract are untouched. The variant is
+    # captured by the engine-internal pipeline for the eventual /v2/
+    # wire ship; until then, this is the proving ground that the
+    # variants work against real engine data. See ADR-0011.
+    variant = IsolatedMatchWarning(
+        type="isolated_match",
+        message=message,
+        top_score=top,
+        runner_up_score=runner_up,
+        gap=gap,
+        drop_threshold=drop_threshold,
+        source_id=top_chunk.document_id,
+        chunk_id=top_chunk.chunk_id,
+    )
+    return [downgrade_to_flat(variant)]
 
 
 # ─── Conflict detection ─────────────────────────────────────────────
