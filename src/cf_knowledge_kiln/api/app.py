@@ -37,6 +37,7 @@ from cf_knowledge_kiln.api.health import router as health_router
 from cf_knowledge_kiln.api.observability import configure_observability
 from cf_knowledge_kiln.api.preview import router as preview_router
 from cf_knowledge_kiln.api.rate_limit import TokenBucketLimiter
+from cf_knowledge_kiln.api.registry import router as registry_router
 from cf_knowledge_kiln.api.request_id import install_request_id_middleware
 from cf_knowledge_kiln.api.request_log import install_request_logging
 from cf_knowledge_kiln.api.retrieval import router as retrieval_router
@@ -220,6 +221,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(retrieval_router)
     app.include_router(answer_router)
+    app.include_router(registry_router)
     app.include_router(web_router)
     app.include_router(preview_router)
     app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")

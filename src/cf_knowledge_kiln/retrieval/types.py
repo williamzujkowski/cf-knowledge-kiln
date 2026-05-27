@@ -12,7 +12,7 @@ Pydantic models are the runtime form, and these must agree.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
@@ -453,6 +453,66 @@ class AnswerResponse(BaseModel):
     untrusted_content_notice_pinned_phrases: list[str] = Field(default_factory=list)
 
 
+# ─── /v1/registry shapes (#359) ───────────────────────────────────────
+
+
+# Closed set of dimensions the kiln exposes via /v1/registry. Lifted
+# from the `RetrievalFilters` field names that actually back DB
+# columns — `tags` / `path_prefix` / `control_id` aren't here because
+# the schema doesn't aggregate them yet (filed as follow-ups under
+# the parent epic). An agent calling /v1/registry without a query
+# parameter receives every dimension; with ``?dimension=<name>`` it
+# receives just that one.
+RegistryDimension = Literal[
+    "status",
+    "doc_type",
+    "owner",
+    "repo",
+    "authority",
+    "sensitivity",
+    "system",
+]
+"""Dimension enum — matches openapi.yaml RegistryDimension."""
+
+
+class RegistryValue(BaseModel):
+    """One vocabulary entry for a registry dimension."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    # The literal string an agent would pass in `RetrievalFilters`
+    # (e.g. ``"runbook"`` for ``doc_type``, ``"active"`` for
+    # ``status``). Whatever the DB has — no normalization.
+    value: str
+    # How many documents currently carry this value. Useful for
+    # agents that want to skip filter values with zero documents
+    # (which would silently return empty results otherwise).
+    count: int = Field(ge=0)
+    # Most-recent ``last_reviewed`` date among documents with this
+    # value, or None when no document carries a date. Helps an
+    # agent gauge how stale the bucket is.
+    last_indexed: date | None = None
+
+
+class RegistryResponse(BaseModel):
+    """GET /v1/registry response body.
+
+    Cached server-side keyed on the ingestion-version bump (see
+    ``KILN_REGISTRY_CACHE_SECONDS``) so a high-QPS callers re-fetching
+    the registry doesn't aggregate the docs table on every request.
+
+    ``as_of`` is the server clock at cache-key time. Consumers
+    bootstrapping at startup can ignore staleness within the cache
+    window; consumers building auto-complete UIs should re-fetch
+    after each ingestion run completes.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    dimensions: dict[str, list[RegistryValue]]
+    as_of: datetime
+
+
 __all__ = [
     "MAX_FILTER_ITEMS",
     "MAX_QUERY_LENGTH",
@@ -465,6 +525,9 @@ __all__ = [
     "ContextPackRequest",
     "ContextPackResponse",
     "EvidenceChunk",
+    "RegistryDimension",
+    "RegistryResponse",
+    "RegistryValue",
     "RelatedSource",
     "Relationship",
     "ResultCard",
