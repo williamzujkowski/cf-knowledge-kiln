@@ -156,6 +156,27 @@
             spellcheck="false"
             value="{{ filters.tags or '' }}">
         </label>
+
+        {# #347 reset filters: editorial "Reset filters" affordance.
+           Renders only when there's something to reset (so the
+           form's resting state doesn't carry visible chrome that
+           does nothing). Uses native <input type="reset"> to clear
+           inputs to their form-defaults (status active+approved
+           checked, everything else empty), then JS in kiln-app.js
+           re-fires the HTMX submit so the results update with the
+           cleared filters. The button is type=reset so even
+           without JS the click clears the form — graceful
+           degradation. #}
+        {% if _rail_active %}
+          <div class="rail-field rail-field-reset">
+            <button
+              type="reset"
+              class="filter-reset-button"
+              data-action="reset-filters">
+              <em>Reset filters</em>
+            </button>
+          </div>
+        {% endif %}
       </div>
     </details>
   </form>

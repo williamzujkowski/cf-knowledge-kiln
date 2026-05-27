@@ -841,6 +841,50 @@ a[data-tooltip]:not([data-tooltip=""]) {
   grid-column: 1 / -1;
 }
 
+/* ── #347 Reset filters button ─────────────────────────────────────
+ *
+ * Renders only when at least one filter is active (server-side
+ * conditional on _rail_active). Same column-span as
+ * .rail-field-wide so it sits below the tag input on the same row,
+ * not floating in the grid.
+ *
+ * Voice (italic past-tense per docs/copy-voice.md) and treatment
+ * (oxblood text on no fill) match the editorial register the rest
+ * of the UI uses for advisory/undo actions.
+ * ─────────────────────────────────────────────────────────── */
+.rail-field-reset {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  padding-block-start: 0.25rem;
+}
+
+.filter-reset-button {
+  font-family: var(--serif);
+  font-size: 0.85rem;
+  background: transparent;
+  border: 0;
+  color: var(--oxblood);
+  cursor: pointer;
+  padding: 0.15rem 0.4rem;
+  border-radius: 2px;
+  transition: background 120ms ease;
+}
+
+.filter-reset-button em {
+  font-style: italic;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+  text-decoration-color: var(--rule-strong);
+  transition: text-decoration-color 120ms ease;
+}
+
+.filter-reset-button:hover em,
+.filter-reset-button:focus-visible em {
+  text-decoration-color: var(--oxblood);
+}
+
 .rail-field-multi {
   /* Doc-type pills wrap horizontally inside this fieldset. */
   flex-direction: column;
