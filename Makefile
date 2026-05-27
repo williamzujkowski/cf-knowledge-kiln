@@ -115,6 +115,7 @@ build-css: ## Concatenate the static/kiln/*.css partials into static/kiln.css.
 	     src/cf_knowledge_kiln/api/static/kiln/_empty.css \
 	     src/cf_knowledge_kiln/api/static/kiln/_motion.css \
 	     src/cf_knowledge_kiln/api/static/kiln/_print.css \
+	     src/cf_knowledge_kiln/api/static/kiln/_forced_colors.css \
 	     >> src/cf_knowledge_kiln/api/static/kiln.css
 
 verify-css: ## Rebuild kiln.css from partials and fail if the file drifted.

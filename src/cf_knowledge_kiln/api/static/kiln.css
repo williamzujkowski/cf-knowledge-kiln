@@ -3282,3 +3282,159 @@ a.source-link:focus-visible {
     text-decoration: underline;
   }
 }
+/* ─── #352 Windows High Contrast / forced-colors full pass ──────────
+ *
+ * Audit Finding #20: under @media (forced-colors: active) the OS
+ * strips every author-set colour and replaces it with system tokens
+ * (CanvasText, Canvas, ButtonText, ButtonFace, Highlight, etc.).
+ * Without explicit rules the kiln's five-channel deprecation signal,
+ * the per-tier score widget, and several other colour-bearing
+ * affordances collapse to identical visual states.
+ *
+ * Some surfaces already had their own forced-colors blocks (the score
+ * widget in #354, the warning pill glyphs in #355, the focus-visible
+ * ring in #356). This partial adds the remaining surfaces:
+ *
+ *   * Deprecation stripe (color-only on the result card)
+ *   * Status badge (color-coded teal / gold / oxblood)
+ *   * Status pills (checked vs unchecked is fill-color)
+ *   * Shortcut-hint banner background
+ *   * Untrusted-content notice gradient
+ *   * Filter-reset button (italic underline relies on color)
+ *
+ * Approach: pin shapes + system tokens. Where colour is the ONLY
+ * signal, add a border or background pattern as the WHC fallback.
+ *
+ * Audit Finding #20 / Epic C #328. Pairs with #354 (score),
+ * #355 (warning glyphs), #356 (focus rings), #351 (prefers-contrast).
+ * ─────────────────────────────────────────────────────────── */
+
+@media (forced-colors: active) {
+  /* ── Deprecation stripe — color-only background pattern that WHC
+     strips. Substitute a hatch pattern via repeating-linear-gradient
+     in CanvasText system token (which DOES survive WHC because it's
+     a system color, not an author color), plus a heavier left
+     border that reads as the gutter-rule fallback. */
+  .result-card.status-deprecated,
+  .result-card.status-archived,
+  .result-card.status-superseded {
+    forced-color-adjust: none;
+    background: transparent;
+    /* Left border = the only WHC-surviving gutter mark. 4px so it
+       reads at a glance even when everything else is monochrome. */
+    border-inline-start: 4px solid CanvasText;
+    padding-inline-start: 0.75rem;
+  }
+
+  /* The deprecation stamp's text was carrying colour and small-caps
+     weight. WHC strips the colour; pin the weight + border to keep
+     it visually distinct from the card title. */
+  .deprecation-stamp,
+  .deprecation-stamp-text {
+    forced-color-adjust: none;
+    color: CanvasText;
+    border: 1px solid CanvasText;
+    padding: 0 0.3rem;
+    font-weight: 700;
+  }
+
+  /* ── Status badge — colored small-caps that loses its hue + leading
+     hairline under WHC. Substitute a thin all-around border so the
+     badge reads as a chip. */
+  .status-badge {
+    forced-color-adjust: none;
+    color: CanvasText;
+    border: 1px solid CanvasText;
+    padding: 0 0.4rem;
+  }
+  .status-badge::before {
+    /* The leading hairline is decorative + relies on currentColor;
+       hide entirely in WHC where the border carries the chip shape. */
+    display: none;
+  }
+
+  /* ── Status pills (filter row) — checked vs unchecked is the
+     primary control state. Color-only fill under WHC = identical
+     visual. Use system Highlight (the user-chosen "selection"
+     colour) for the checked state, plus a thicker border. */
+  .pill {
+    forced-color-adjust: none;
+    border: 1px solid ButtonText;
+    background: Canvas;
+    color: ButtonText;
+  }
+  .pill:has(input:checked) {
+    background: Highlight;
+    color: HighlightText;
+    border-color: Highlight;
+  }
+  .pill:has(input:focus-visible) {
+    /* The author focus rule from #356 already handles this for
+       input:focus-visible at the global level. The pill wraps the
+       input so the ring is drawn there too. */
+    outline: 3px solid Highlight;
+    outline-offset: 2px;
+  }
+
+  /* ── Untrusted-content notice — relies on the oxblood-tint
+     gradient + oxblood left rule. WHC strips the gradient; keep
+     the left rule via CanvasText so the editorial-margin shape
+     survives. */
+  .notice {
+    forced-color-adjust: none;
+    background: Canvas;
+    color: CanvasText;
+    border-inline-start: 3px solid CanvasText;
+  }
+  .notice-label {
+    color: CanvasText;
+    border-block-end: 1px solid CanvasText;
+  }
+
+  /* ── Shortcut hint banner — background colour disappears under WHC.
+     Substitute a top + bottom border so the banner shape survives. */
+  .shortcut-hint {
+    forced-color-adjust: none;
+    background: Canvas;
+    color: CanvasText;
+    border-block: 1px solid CanvasText;
+  }
+  .shortcut-hint kbd {
+    background: Canvas;
+    color: CanvasText;
+    border: 1px solid CanvasText;
+  }
+
+  /* ── Filter-reset button — italic underline relies on a colour
+     transition. Force the underline to render in WHC + use
+     Highlight on hover/focus for the action affordance. */
+  .filter-reset-button em {
+    forced-color-adjust: none;
+    text-decoration: underline;
+    color: LinkText;
+  }
+  .filter-reset-button:hover em,
+  .filter-reset-button:focus-visible em {
+    color: Highlight;
+  }
+
+  /* ── Hover-hairline rule under result cards — color-driven slide
+     that's invisible under WHC. Replace with a static border so
+     the focused/hovered card is still distinguishable. */
+  .result-card::after {
+    display: none;
+  }
+  .result-card:hover,
+  .result-card:focus-within {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+
+  /* ── Result-title button hover/focus underline — color-shift only
+     in light + dark themes; WHC needs an explicit text-decoration. */
+  .result-title-button:hover,
+  .result-title-button:focus-visible {
+    forced-color-adjust: none;
+    text-decoration: underline;
+  }
+}
