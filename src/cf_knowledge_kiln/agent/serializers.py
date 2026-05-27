@@ -227,6 +227,7 @@ def assemble_context_pack(
     max_chunks: int,
     max_tokens: int,
     weak_evidence_threshold: float | None = None,
+    embed_warnings_in_text: bool = False,
 ) -> ContextPackResponse:
     """Compose the full :class:`ContextPackResponse` for an agent caller.
 
@@ -248,6 +249,15 @@ def assemble_context_pack(
         safe_inputs, contents=contents, max_chunks=max_chunks, max_tokens=max_tokens
     )
     evidence = [_to_evidence_chunk(c, inputs.chunk_text, inputs.document_refs) for c in kept]
+    # #361: opt-in inline-warning markers. Each chunk's text is suffixed
+    # with one ``[KILN-WARN: <type> — <message>]`` line per non-blocking
+    # warning whose source_id matches the chunk's document_id. Blocking-
+    # severity warnings are skipped (those chunks are already dropped;
+    # re-emitting their warnings via the inline marker would re-introduce
+    # the injection vector). Markers are deterministically sorted by
+    # (type, message) so the same inputs produce byte-identical output.
+    if embed_warnings_in_text:
+        evidence = _embed_inline_warning_markers(evidence, inputs.warnings)
     # #189: a kept chunk with no DocumentRef is effectively uncited —
     # _to_evidence_chunk fills a "(unknown)" placeholder with null
     # repo/path/source_url. That conflicts with the "cited or silent"
@@ -339,6 +349,62 @@ def _to_evidence_chunk(
 
 def _coerce_date(value: date | None) -> date | None:
     return value
+
+
+# #361: inline-warning markers. Non-blocking only — blocking-severity
+# chunks are already dropped from the pack body upstream, and embedding
+# their warnings inline would re-introduce the injection vector via
+# the marker's message text. The marker format is greppable
+# (``[KILN-WARN:`` prefix is namespaced and unlikely to collide with
+# chunk content) and deterministic (warnings sorted by (type, message)
+# before joining).
+_INLINE_MARKER_ELIGIBLE_SEVERITIES: frozenset[str] = frozenset({"advisory", "warning"})
+
+
+def _embed_inline_warning_markers(
+    evidence: list[EvidenceChunk],
+    warnings: list[Warning],
+) -> list[EvidenceChunk]:
+    """Return a copy of ``evidence`` with KILN-WARN markers suffixed.
+
+    Each chunk's text is appended with one ``[KILN-WARN: <type> — <message>]``
+    line per non-blocking warning whose ``source_id`` matches the
+    chunk's ``document_id``. Order: warnings sorted by
+    ``(type, message)`` so the output is deterministic (idempotent
+    across re-assemblies on identical inputs).
+    """
+    if not warnings:
+        return evidence
+    # Group eligible warnings by source_id once.
+    by_doc: dict[UUID, list[Warning]] = {}
+    for w in warnings:
+        if w.severity not in _INLINE_MARKER_ELIGIBLE_SEVERITIES:
+            continue
+        if w.source_id is None:
+            # Global warnings (no source_id) stay in the warnings[]
+            # array; they don't attach to any specific chunk.
+            continue
+        by_doc.setdefault(w.source_id, []).append(w)
+    if not by_doc:
+        return evidence
+    out: list[EvidenceChunk] = []
+    for chunk in evidence:
+        chunk_warnings = by_doc.get(chunk.document_id)
+        if not chunk_warnings:
+            out.append(chunk)
+            continue
+        # Deterministic order; multiple warnings on one chunk read as
+        # a stack of footnotes after the chunk text.
+        sorted_w = sorted(chunk_warnings, key=lambda w: (w.type, w.message))
+        markers = "\n".join(f"[KILN-WARN: {w.type} — {w.message}]" for w in sorted_w)
+        # Suffix (not prefix): an LLM reading the chunk should see the
+        # actual content first, then the kiln's annotations as
+        # footnote-like markers. Matches the editorial-voice register.
+        # ``model_copy(update=...)`` keeps EvidenceChunk's other fields
+        # intact + immutability-friendly.
+        new_text = f"{chunk.text}\n\n{markers}" if chunk.text else markers
+        out.append(chunk.model_copy(update={"text": new_text}))
+    return out
 
 
 def _review_reasons(

@@ -231,6 +231,7 @@ class HybridRetriever:
         filters: RetrievalFilters,
         max_chunks: int = 8,
         max_tokens: int = 3000,
+        embed_warnings_in_text: bool = False,
         session: AsyncSession | None = None,
     ) -> ContextPackResponse:
         """Build a bounded, cited :class:`ContextPackResponse` for an agent.
@@ -319,6 +320,7 @@ class HybridRetriever:
                     max_chunks=max_chunks,
                     max_tokens=max_tokens,
                     weak_evidence_threshold=self._config.weak_evidence_score_threshold,
+                    embed_warnings_in_text=embed_warnings_in_text,
                 )
                 asm_span.set_attribute(
                     "retrieval.tokens_used_estimate", pack.token_budget.used_estimate

@@ -804,6 +804,19 @@ components:
         require_citations:
           type: boolean
           default: true
+        embed_warnings_in_text:
+          type: boolean
+          default: false
+          description: |
+            #361 — when `true`, every `EvidenceChunk.text` is suffixed
+            with one `[KILN-WARN: <type> — <message>]` line per
+            non-blocking warning matching its `document_id`.
+            Blocking-severity warnings (`prompt_injection_pattern`,
+            `sensitive_content`) are NOT embedded — those chunks
+            were already dropped from the pack body, and embedding
+            their messages would re-introduce the injection vector
+            via the marker text. Idempotent: re-assembling the same
+            pack produces a byte-identical evidence text.
 
     ContextPackResponse:
       type: object
