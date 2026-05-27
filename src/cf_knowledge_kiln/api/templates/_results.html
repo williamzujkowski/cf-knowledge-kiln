@@ -211,6 +211,24 @@
               {% if r.owner %}
                 <span class="owner">— by <em>{{ r.owner }}</em></span>
               {% endif %}
+              {# #337 chunk index — the section number within the
+                 source doc, displayed as 1-based so the user sees
+                 "section 7" rather than "section 6". The total
+                 chunk count per document is the follow-up tracked
+                 in #384; once it lands the template renders
+                 "section 7 of 32". For now the index alone tells
+                 a scanner "matched section 2 (intro)" vs "section
+                 12 (deep config)" — enough to triage at a glance. #}
+              {# Use ``is defined and is not none`` so test fixtures
+                 that don't supply chunk_index (existing affordance +
+                 status-badge tests) render cleanly. The real ResultCard
+                 always carries the field; only synthetic dict-shaped
+                 fixtures need the defense-in-depth. #}
+              {% if r.chunk_index is defined and r.chunk_index is not none %}
+                <span class="chunk-index" aria-hidden="true">·
+                  <em>section {{ r.chunk_index + 1 }}</em>
+                </span>
+              {% endif %}
               {% if r.last_reviewed %}
                 <time datetime="{{ r.last_reviewed }}" class="freshness">
                   Reviewed {{ r.last_reviewed }}

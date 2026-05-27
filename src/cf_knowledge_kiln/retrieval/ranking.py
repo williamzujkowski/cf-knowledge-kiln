@@ -71,6 +71,13 @@ class RankedChunk:
     has_prompt_injection: bool = False
     has_sensitive_content: bool = False
     chunk_metadata: dict[str, object] = field(default_factory=dict)
+    # #337: 0-based section index within the document. Flows from
+    # SearchRow → ResultCard so the result card can render
+    # "section N" without re-querying the chunks table. Defaults to
+    # 0 for synthetic ranked chunks (tests, mocks) that don't carry
+    # a real index — same default as DocumentChunk's column would
+    # apply for a freshly-inserted row at section position 1.
+    chunk_index: int = 0
 
 
 # ─── RRF fusion ─────────────────────────────────────────────────────
@@ -135,6 +142,7 @@ def _apply_boost_to_chunk(
         has_prompt_injection=chunk.has_prompt_injection,
         has_sensitive_content=chunk.has_sensitive_content,
         chunk_metadata=chunk.chunk_metadata,
+        chunk_index=chunk.chunk_index,
     )
 
 

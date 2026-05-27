@@ -216,6 +216,12 @@ class ResultCard(BaseModel):
     last_reviewed: date | None = None
     score: float = Field(ge=0)
     warnings: list[Warning] | None = None
+    # #337: 0-based section index within the document. The template
+    # renders as ``section {{ r.chunk_index + 1 }}`` so a sighted
+    # user sees "section 7" not "section 6". Optional on the wire
+    # (additive per ADR-0011) — older clients that don't ask for it
+    # keep working.
+    chunk_index: int | None = Field(default=None, ge=0)
 
 
 class SearchResponse(BaseModel):

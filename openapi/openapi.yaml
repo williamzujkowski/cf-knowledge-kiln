@@ -754,6 +754,18 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Warning"
+        chunk_index:
+          type: integer
+          minimum: 0
+          nullable: true
+          description: |
+            #337 — 0-based section index within the document
+            (`document_chunks.chunk_index`). The UI renders this as
+            `section {{ chunk_index + 1 }}` (1-based for readability)
+            inline on the source-line. Useful for triaging "matched
+            section 2 vs section 12" at scan speed without opening
+            the preview. Total `chunk_count` per document is a
+            follow-up — see #384.
 
     Warning:
       type: object

@@ -48,6 +48,7 @@ def row_to_ranked_chunk(row: SearchRow) -> RankedChunk:
         has_prompt_injection=row.has_prompt_injection,
         has_sensitive_content=row.has_sensitive_content,
         chunk_metadata=row.chunk_metadata,
+        chunk_index=row.chunk_index,
     )
 
 
