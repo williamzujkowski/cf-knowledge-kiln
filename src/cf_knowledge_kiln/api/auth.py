@@ -576,12 +576,22 @@ class OIDCAuthMiddleware:
 
         # Enforce iss + aud + exp explicitly. authlib's validate()
         # honors a claims_options dict.
+        #
+        # The expected issuer comes from the discovery document's `issuer`
+        # field, NOT from rstrip("/")-ing the configured KILN_OIDC_ISSUER.
+        # Per OpenID Connect Discovery the id_token `iss` is byte-for-byte
+        # equal to the discovery `issuer`, and authlib does exact-string
+        # equality. Some IdPs (e.g. Authentik) advertise an issuer that
+        # ends in a trailing slash; rstrip("/") on the configured value
+        # produced `…/slug` while the token carried `…/slug/`, failing
+        # with `invalid_claim: Invalid claim 'iss'`. Using the discovery
+        # issuer verbatim makes the comparison provider-agnostic. Falls
+        # back to the configured issuer if discovery omits `issuer`.
+        discovery = await self._ensure_discovery()
+        expected_issuer = discovery.get("issuer") or (self._settings.oidc_issuer or "")
         expected_audience = self._settings.oidc_audience or self._settings.oidc_client_id
         claims.options = {
-            "iss": {
-                "essential": True,
-                "value": (self._settings.oidc_issuer or "").rstrip("/"),
-            },
+            "iss": {"essential": True, "value": expected_issuer},
             "aud": {"essential": True, "value": expected_audience},
             "exp": {"essential": True},
         }
