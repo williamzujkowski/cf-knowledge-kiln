@@ -182,6 +182,11 @@
     // Allow focus-grab again next time the drawer reopens.
     p.removeAttribute("data-focus-grabbed");
     delete p.dataset.openerKey;
+    // #346: drop the mobile-drawer modal semantics so the next open
+    // on a desktop viewport (orientation flip, dev-tools resize)
+    // doesn't inherit a stale role=dialog on the sticky rail.
+    p.removeAttribute("role");
+    p.removeAttribute("aria-modal");
     p.innerHTML = "";
     if (opener && typeof opener.focus === "function") {
       // Inside a requestAnimationFrame so the focus lands AFTER the
@@ -200,6 +205,13 @@
   // itself isn't stored (DOM refs go stale across HTMX swaps); we
   // re-query by chunk-id at close time so the result-card the user
   // came from gets focus even if results were re-rendered.
+  //
+  // #346: on a mobile viewport the panel is presenting as a drawer
+  // that visually obscures the page. Set role=dialog + aria-modal so
+  // AT announces it as a modal; the Tab trap below loops focus inside
+  // the panel for the sighted-keyboard user. Desktop sticky rail must
+  // NOT carry these — it's a panel, not a modal — so the assignment
+  // is gated on the same matchMedia query the focus-grab uses (#120).
   const _openPreview = (opener) => {
     const p = document.getElementById("preview");
     if (!p) return;
@@ -209,10 +221,69 @@
     } else {
       delete p.dataset.openerKey;
     }
+    if (window.matchMedia("(max-width: 959px)").matches) {
+      p.setAttribute("role", "dialog");
+      p.setAttribute("aria-modal", "true");
+    }
   };
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") _closePreview();
+  });
+
+  // #346 mobile drawer focus trap. While the preview drawer is open
+  // on a (max-width: 959px) viewport, Tab + Shift+Tab loop focus
+  // within the panel instead of walking out into the obscured page
+  // beneath the backdrop. Pattern mirrors the cheatsheet trap in
+  // kiln-keys.js:188-198, generalized for N focusables (the cheatsheet
+  // only has one — the close button).
+  //
+  // Desktop: bails out at the matchMedia check so the sticky rail is
+  // a regular page region. Drawer closed: bails on the data-open
+  // check — no trap when the panel isn't presenting.
+  //
+  // Focusable selector covers what _preview.html actually renders:
+  // the close <button>, the canonical-source <a>, and the
+  // prev/next <summary> rows. Hidden / disabled elements are
+  // filtered out via the :not(...) selectors so the trap doesn't
+  // land focus on something the user can't see.
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Tab") return;
+    const p = document.getElementById("preview");
+    if (!p || !p.hasAttribute("data-open")) return;
+    if (!window.matchMedia("(max-width: 959px)").matches) return;
+    const focusables = Array.from(
+      p.querySelectorAll(
+        'button:not([disabled]), [href], summary, ' +
+          '[tabindex]:not([tabindex="-1"])'
+      )
+    ).filter((el) => el.offsetParent !== null || el === p);
+    if (focusables.length === 0) {
+      // Degenerate: nothing focusable inside (e.g. preview-missing
+      // fragment). Keep focus on the panel itself so the user can
+      // still Esc out without Tab dropping them onto the masthead.
+      e.preventDefault();
+      p.focus();
+      return;
+    }
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    const active = document.activeElement;
+    // Focus outside the panel (race condition — should not happen
+    // once the focus-grab on open has fired, but guard anyway):
+    // pull it back to the first focusable.
+    if (!p.contains(active)) {
+      e.preventDefault();
+      first.focus();
+      return;
+    }
+    if (e.shiftKey && (active === first || active === p)) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && active === last) {
+      e.preventDefault();
+      first.focus();
+    }
   });
 
   // Single delegated click listener. Order of checks matches the
