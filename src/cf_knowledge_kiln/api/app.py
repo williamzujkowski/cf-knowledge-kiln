@@ -42,6 +42,7 @@ from cf_knowledge_kiln.api.request_id import install_request_id_middleware
 from cf_knowledge_kiln.api.request_log import install_request_logging
 from cf_knowledge_kiln.api.retrieval import router as retrieval_router
 from cf_knowledge_kiln.api.web import router as web_router
+from cf_knowledge_kiln.api.web_feedback import router as web_feedback_router
 from cf_knowledge_kiln.api.web_url_state import router as web_url_state_router
 from cf_knowledge_kiln.config import get_settings
 from cf_knowledge_kiln.db import Database, resolve_database_url
@@ -228,6 +229,9 @@ def create_app() -> FastAPI:
     # to the 400-line cap. Mount order is irrelevant — the routes
     # don't collide (GET /search vs POST /search).
     app.include_router(web_url_state_router)
+    # #391: POST /feedback extracted to its own module for the same
+    # cap-compliance reason. Same template + dependency surface.
+    app.include_router(web_feedback_router)
     app.include_router(preview_router)
     app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
     return app

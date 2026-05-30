@@ -252,7 +252,7 @@ class TestResultCardViewSurfacesBothFields:
         from datetime import date
         from uuid import uuid4
 
-        from cf_knowledge_kiln.api.web import _result_card_view
+        from cf_knowledge_kiln.api.result_cards import result_card_view as _result_card_view
 
         @dataclass
         class _Chunk:
@@ -293,7 +293,7 @@ class TestResultCardViewSurfacesBothFields:
         from datetime import date
         from uuid import uuid4
 
-        from cf_knowledge_kiln.api.web import _result_card_view
+        from cf_knowledge_kiln.api.result_cards import result_card_view as _result_card_view
 
         @dataclass
         class _Chunk:
