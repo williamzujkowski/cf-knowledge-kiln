@@ -182,6 +182,31 @@ class TestGetSearchPrePopulatesFormFields:
         response = client.get("/search?q=x&last_reviewed_after=2026-01-15")
         assert 'value="2026-01-15"' in response.text
 
+    def test_multi_value_status_round_trip(self, client: TestClient) -> None:
+        """``?status=active&status=draft`` (two values) must both check.
+
+        Regression guard for the FastAPI ``Query()`` annotation: without
+        it, FastAPI picks up only the first value and the second silently
+        disappears from the rendered form. Pin both boxes are checked
+        AND the unselected ones aren't."""
+        response = client.get("/search?q=x&status=active&status=draft")
+        body = response.text
+        # Both selected statuses must be checked.
+        for st in ("active", "draft"):
+            idx = body.find(f'value="{st}"')
+            assert idx != -1, f"status={st!r} checkbox missing from form"
+            end = body.find(">", idx)
+            tag = body[idx - 50 : end + 1]
+            assert "checked" in tag, (
+                f"status={st!r} must be checked when URL carries it; "
+                "regression on the FastAPI Query() multi-value handling."
+            )
+        # An unselected status (e.g. deprecated) must NOT be checked.
+        idx = body.find('value="deprecated"')
+        end = body.find(">", idx)
+        tag = body[idx - 50 : end + 1]
+        assert "checked" not in tag
+
 
 class TestGetSearchRunsRetrieval:
     """When the URL carries a query, the page renders WITH results

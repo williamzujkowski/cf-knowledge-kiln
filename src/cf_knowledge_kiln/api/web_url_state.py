@@ -141,7 +141,17 @@ async def search_page_from_url(
             "search.html",
             {
                 "query": query,
-                "initial_results": {"cards": [], "warnings": [], "query_id": None},
+                "initial_results": {
+                    "cards": [],
+                    "warnings": [],
+                    "query_id": None,
+                    # #371 reviewer-fix: same shape as the success path
+                    # so the {% with %} include in search.html doesn't
+                    # silently fall through to Jinja's undefined coercion.
+                    # _results.html's widen-buttons need this list (even
+                    # empty) to decide which one-click options to surface.
+                    "selected_statuses": [],
+                },
                 "filters": filters_view,
                 "rail_active_count": rail_filters_active_count(filters_view),
                 "selected_statuses": [],
