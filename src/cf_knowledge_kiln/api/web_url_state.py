@@ -4,7 +4,9 @@ Split out from :mod:`cf_knowledge_kiln.api.web` so that module stays
 manageable (the POST handler + presentation helpers there are large
 enough on their own). The GET handler is logically distinct:
 
-* No rate limiter (page-shell GET, not high-frequency POST debounce).
+* Shares the search rate limiter with POST /search (security review
+  found the bare GET path was a DoS vector — same retrieval cost
+  per request, no upstream throttle).
 * No telemetry write (URL-arrival isn't an authored query).
 * Renders the full ``search.html`` page (POST returns a fragment).
 
@@ -23,12 +25,18 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from cf_knowledge_kiln.api.dependencies import get_hybrid_retriever, get_session
+from cf_knowledge_kiln.api.dependencies import (
+    get_hybrid_retriever,
+    get_search_limiter,
+    get_session,
+    get_trust_xff,
+)
 from cf_knowledge_kiln.api.forms import (
     DEFAULT_STATUSES,
     filters_from_form,
     selected_statuses,
 )
+from cf_knowledge_kiln.api.rate_limit import TokenBucketLimiter, client_ip
 from cf_knowledge_kiln.api.views import (
     humanize_warning,
     rail_filters_active_count,
@@ -68,6 +76,8 @@ async def search_page_from_url(
     request: Request,
     retriever: Annotated[HybridRetriever, Depends(get_hybrid_retriever)],
     session: Annotated[AsyncSession, Depends(get_session)],
+    limiter: Annotated[TokenBucketLimiter, Depends(get_search_limiter)],
+    trust_xff: Annotated[bool, Depends(get_trust_xff)],
     q: Annotated[str, Query()] = "",
     # Multi-value query params (``?status=a&status=b``) require explicit
     # ``Query()`` annotation; without it, FastAPI picks up only the first
@@ -85,11 +95,11 @@ async def search_page_from_url(
     a copy/pasted URL reproduces the query + filters + results in
     one round-trip.
 
-    No rate limiter here — this is the page-shell GET, not the
-    high-frequency POST debounce. Operators sharing a link aren't
-    a DoS vector; if that changes, gate this behind a separate
-    page-load limiter that lets the rate budget stay focused on
-    POST traffic.
+    Rate limit: shares :func:`get_search_limiter` with POST /search.
+    Each request costs one retrieval-pipeline run (vector + FTS),
+    same as POST — so the same per-IP token budget applies. Security
+    review caught the bare GET path as a DoS vector since arbitrary
+    expensive queries could be hammered without throttling.
 
     Telemetry: not logged. The POST handler persists
     ``rag_queries`` rows for explicit submissions, but a GET arrival
@@ -102,6 +112,22 @@ async def search_page_from_url(
     # import time but the symmetry keeps future-proofing simple).
     from cf_knowledge_kiln.api.web import _result_card_view, templates
 
+    key = client_ip(request, trust_xff=trust_xff)
+    if not limiter.hit(key):
+        retry = limiter.retry_after(key)
+        # Plain HTML error page (not the HTMX-friendly fragment the
+        # POST handler returns) because this route always renders the
+        # full page, not a swappable fragment.
+        return templates.TemplateResponse(
+            request,
+            "_error.html",
+            {
+                "label": "Too many requests",
+                "message": f"Please retry in {retry}s.",
+            },
+            status_code=429,
+            headers={"Retry-After": str(retry)},
+        )
     query = q.strip()
     fs = status is not None  # any explicit status param → ``filters_set``
     if not query:

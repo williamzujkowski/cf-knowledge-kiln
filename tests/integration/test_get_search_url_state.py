@@ -240,6 +240,37 @@ class TestGetSearchRunsRetrieval:
         assert "result-card" not in response.text
 
 
+class TestRateLimited:
+    """Security review caught the bare GET path as a DoS vector —
+    arbitrary expensive queries could be hammered without throttling.
+    The handler now shares :func:`get_search_limiter` with POST /search.
+    Pin that the dependency is wired so a refactor that drops it
+    breaks this test rather than silently re-opening the DoS surface."""
+
+    def test_get_search_handler_uses_search_limiter_dependency(self) -> None:
+        """Source-grep the route module: the handler MUST declare a
+        ``get_search_limiter`` dependency. Less brittle than driving
+        429 via the test client (which would require a custom limiter
+        fixture mirroring the POST tests)."""
+        from pathlib import Path as _Path
+
+        src = (
+            _Path(__file__).resolve().parents[2]
+            / "src"
+            / "cf_knowledge_kiln"
+            / "api"
+            / "web_url_state.py"
+        ).read_text(encoding="utf-8")
+        assert "Depends(get_search_limiter)" in src, (
+            "GET /search must share the search rate limiter with POST "
+            "/search; without it, an attacker can hammer expensive "
+            "queries unthrottled (security review MEDIUM)."
+        )
+        assert "TokenBucketLimiter" in src
+        # The 429 branch must call retry_after to populate the header.
+        assert "retry_after" in src
+
+
 class TestNoJsFormFallback:
     """Browsers without JS get a GET-form submission. The
     ``<form>`` must carry ``action="/search" method="get"`` so the
