@@ -20,19 +20,22 @@ from pathlib import Path
 
 import pytest
 
-_KILN_APP_JS = (
+# #394: URL-state JS extracted from kiln-app.js to kiln-url-state.js.
+# Tests pin the new file; fixture name stays ``js_source`` so the
+# test bodies don't change.
+_KILN_URL_STATE_JS = (
     Path(__file__).resolve().parents[2]
     / "src"
     / "cf_knowledge_kiln"
     / "api"
     / "static"
-    / "kiln-app.js"
+    / "kiln-url-state.js"
 )
 
 
 @pytest.fixture(scope="module")
 def js_source() -> str:
-    return _KILN_APP_JS.read_text(encoding="utf-8")
+    return _KILN_URL_STATE_JS.read_text(encoding="utf-8")
 
 
 class TestReplaceStateOnSubmit:
@@ -118,10 +121,16 @@ class TestFormFieldPopulation:
     def test_populates_status_checkboxes(self, js_source: str) -> None:
         """Status is a multi-value param. The handler must walk all
         ``input[name=status]`` checkboxes and check/uncheck based on
-        which values are in the URL."""
-        idx = js_source.find("popstate")
-        assert idx != -1
-        body = js_source[idx : idx + 2000]
+        which values are in the URL.
+
+        Anchor on the listener registration (not the first
+        ``popstate`` mention, which on the extracted file is inside
+        the header comment) so the window covers the handler body."""
+        idx = js_source.find('addEventListener("popstate"')
+        if idx == -1:
+            idx = js_source.find("addEventListener('popstate'")
+        assert idx != -1, "popstate listener must be registered"
+        body = js_source[idx : idx + 2500]
         assert "name=status" in body or "name='status'" in body or '"status"' in body
 
     def test_does_not_double_replacestate_inside_popstate(self, js_source: str) -> None:
