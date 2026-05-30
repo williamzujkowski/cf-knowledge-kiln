@@ -191,10 +191,33 @@ def require_nonempty(query: str) -> None:
         raise ValueError("query must be a non-empty string")
 
 
+async def embedding_text_for_vector_arm(query: str, hyde: object | None) -> tuple[str, bool]:
+    """Decide what text the embedding provider should encode for the
+    vector arm of hybrid retrieval (#333).
+
+    Returns ``(text, used_hyde)``. ``used_hyde=True`` means the engine
+    expanded the query into a pseudo-doc and embedded THAT instead of
+    the bare query; the FTS arm continues to use the original query.
+
+    ``hyde`` is typed loosely as ``object | None`` to avoid pulling
+    the hyde module into every consumer of this helper; the runtime
+    contract is :meth:`HydeEngine.expand` returning ``str | None``.
+    A ``None`` hyde (the common case — feature off, or no generator)
+    skips the call entirely.
+    """
+    if hyde is None:
+        return query, False
+    expanded = await hyde.expand(query)  # type: ignore[attr-defined]
+    if not expanded:
+        return query, False
+    return expanded, True
+
+
 __all__ = [
     "collect_warnings",
     "conflict_warnings",
     "document_refs_from_rows",
+    "embedding_text_for_vector_arm",
     "query_normalized_warning",
     "require_nonempty",
     "row_to_ranked_chunk",

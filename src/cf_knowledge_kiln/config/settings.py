@@ -67,6 +67,19 @@ class Settings(BaseSettings):
     generator_api_key: str | None = None
     generator_base_url: str | None = None
 
+    # #332 / #333: HyDE query expansion. ``hyde_enabled`` is the master
+    # switch; the other six tune behavior when on. ``hyde_enabled=true``
+    # with no generator configured is a no-op (one INFO log at startup;
+    # search behaves exactly as if the flag were off). See
+    # docs/configuration.md HyDE section for tuning guidance.
+    hyde_enabled: bool = False
+    hyde_query_token_threshold: int = 8
+    hyde_jargon_density_threshold: float = 0.4
+    hyde_cache_max_entries: int = 1000
+    hyde_cache_ttl_seconds: int = 86400
+    hyde_generator_max_tokens: int = 200
+    hyde_generator_timeout_seconds: float = 3.0
+
     # Ingestion.
     ingest_concurrency: int = 4
     ingest_max_file_bytes: int = 1_048_576

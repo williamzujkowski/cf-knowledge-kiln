@@ -40,6 +40,9 @@ from cf_knowledge_kiln.retrieval._engine_helpers import (
     document_refs_from_rows as _document_refs_from_rows,
 )
 from cf_knowledge_kiln.retrieval._engine_helpers import (
+    embedding_text_for_vector_arm as _embedding_text_for_vector_arm,
+)
+from cf_knowledge_kiln.retrieval._engine_helpers import (
     query_normalized_warning as _query_normalized_warning,
 )
 from cf_knowledge_kiln.retrieval._engine_helpers import (
@@ -145,16 +148,18 @@ class HybridRetriever:
         *,
         ef_search: int = 200,
         prompt_injection_phrases: list[str] | None = None,
+        hyde: object | None = None,
     ) -> None:
         self._db = db
         self._provider = embedding_provider
         self._config = config
         self._ef_search = ef_search
-        # #100: phrases used by normalize_query() to strip operator
-        # markers from the inbound query. None / empty list disables
-        # normalization — the retrieval path then behaves exactly as
-        # it did before the feature landed.
         self._prompt_injection_phrases = prompt_injection_phrases or []
+        # #333: HyDE engine, optional. None = standard retrieval. Typed
+        # ``object`` to avoid the import cycle (retrieval/hyde/engine.py
+        # depends on retrieval helpers); runtime contract is ``async
+        # def expand(query) -> str | None``.
+        self._hyde = hyde
 
     async def search(
         self,
@@ -380,14 +385,19 @@ class HybridRetriever:
                 rows = await repo.search_by_fts(query_text=query, filters=filters)
                 span.set_attribute("retrieval.rows_returned", len(rows))
             return list(rows)
+        with _TRACER.start_as_current_span("retrieval.hyde") as hyde_span:
+            # #333: consult HyDE. None / no-expand → use raw query.
+            embed_text, used_hyde = await _embedding_text_for_vector_arm(query, self._hyde)
+            hyde_span.set_attribute("retrieval.hyde.gated_on", used_hyde)
         with _TRACER.start_as_current_span("retrieval.embed_query") as embed_span:
             embed_span.set_attribute("retrieval.embedding.provider", self._provider.provider)
             embed_span.set_attribute("retrieval.embedding.model", self._provider.model)
             embed_span.set_attribute("retrieval.embedding.dimensions", self._provider.dimensions)
-            # #204: the user's query is a QUERY (not a passage). The
-            # provider applies the model-family query prefix (e5
-            # ``query: ``, Nomic ``search_query: ``) inside embed_query.
-            embedding = await self._provider.embed_query(query)
+            # #204: the provider applies the model-family query prefix
+            # (e5 ``query: ``, Nomic ``search_query: ``) inside
+            # embed_query. #333: pass either the raw query or the HyDE
+            # pseudo-doc; FTS arm below still uses the original query.
+            embedding = await self._provider.embed_query(embed_text)
         with _TRACER.start_as_current_span("retrieval.sql.hybrid_search") as sql_span:
             sql_span.set_attribute("retrieval.ef_search", self._ef_search)
             rows = await repo.hybrid_search(

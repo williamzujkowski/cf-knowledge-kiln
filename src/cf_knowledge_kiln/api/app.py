@@ -164,6 +164,35 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.feedback_limiter = TokenBucketLimiter(
         capacity=settings.rate_limit_feedback_per_min, window_seconds=60.0
     )
+    # #333: construct HyDE once per app. Only when the master flag is on
+    # AND a generator is configured — otherwise the engine would no-op
+    # every call and just add wiring noise. ``None`` means "skip HyDE";
+    # the dependency wires that through to HybridRetriever.
+    app.state.hyde_engine = None
+    if settings.hyde_enabled:
+        if generator_provider is None:
+            logger.info("hyde: KILN_HYDE_ENABLED=true but no generator configured; HyDE will no-op")
+        else:
+            from cf_knowledge_kiln.retrieval.hyde import HydeCache, HydeEngine
+
+            hyde_cache = HydeCache(
+                ttl_seconds=settings.hyde_cache_ttl_seconds,
+                max_entries=settings.hyde_cache_max_entries,
+            )
+            app.state.hyde_engine = HydeEngine(
+                generator=generator_provider,
+                cache=hyde_cache,
+                token_threshold=settings.hyde_query_token_threshold,
+                jargon_density_threshold=settings.hyde_jargon_density_threshold,
+                max_tokens=settings.hyde_generator_max_tokens,
+            )
+            logger.info(
+                "hyde: enabled (provider=%s model=%s cache_ttl=%ds cache_size=%d)",
+                generator_provider.provider,
+                generator_provider.model,
+                settings.hyde_cache_ttl_seconds,
+                settings.hyde_cache_max_entries,
+            )
     try:
         yield
     finally:
