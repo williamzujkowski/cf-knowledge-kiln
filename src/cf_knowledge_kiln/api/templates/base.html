@@ -37,6 +37,10 @@
   <script defer src="{{ url_for('static', path='kiln-keys.js').path }}"></script>
   <!-- #123 empty-state polish: exemplars, recent queries, hint banner. -->
   <script defer src="{{ url_for('static', path='kiln-empty.js').path }}"></script>
+  <!-- #371 URL-shareable filter state (replaceState + popstate).
+       Extracted from kiln-app.js in #394 for file-size compliance.
+       Independent IIFE; no shared state with kiln-app.js. -->
+  <script defer src="{{ url_for('static', path='kiln-url-state.js').path }}"></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to results</a>
