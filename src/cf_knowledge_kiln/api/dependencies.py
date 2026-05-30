@@ -136,6 +136,7 @@ def get_prompt_injection_phrases(request: Request) -> list[str]:
 
 
 def get_hybrid_retriever(
+    request: Request,
     db: Annotated[Database, Depends(get_db)],
     provider: Annotated[EmbeddingProvider | None, Depends(get_embedding_provider)],
     config: Annotated[RetrievalConfig, Depends(get_retrieval_config)],
@@ -150,13 +151,20 @@ def get_hybrid_retriever(
     config and the #100 prompt-injection phrase list — are loaded once
     at startup and read from ``app.state`` (#183), so only the
     lightweight object assembly happens per request.
+
+    #333: optional ``HydeEngine`` from ``app.state.hyde_engine``. When
+    HyDE is disabled (or enabled with no generator) the attribute is
+    ``None``; the retriever then behaves byte-identically to its
+    pre-#333 self.
     """
+    hyde = getattr(request.app.state, "hyde_engine", None)
     return HybridRetriever(
         db=db,
         embedding_provider=provider,
         config=config,
         ef_search=settings.hnsw_ef_search,
         prompt_injection_phrases=phrases,
+        hyde=hyde,
     )
 
 
