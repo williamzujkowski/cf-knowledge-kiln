@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from cf_knowledge_kiln.api.result_cards import highlight_excerpt as _highlight_excerpt
 from cf_knowledge_kiln.api.views import humanize_warning as _humanize_warning
-from cf_knowledge_kiln.api.web import _highlight_excerpt
 
 
 class TestHighlightExcerpt:

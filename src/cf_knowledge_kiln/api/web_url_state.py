@@ -11,9 +11,9 @@ enough on their own). The GET handler is logically distinct:
 * Renders the full ``search.html`` page (POST returns a fragment).
 
 Both handlers share the same retrieval pipeline + presentation
-shape via the imports from :mod:`cf_knowledge_kiln.api.web` and
-``api.views`` — the duplication is in the call-site wiring, not
-the rendering.
+shape via :mod:`cf_knowledge_kiln.api.result_cards` and
+:mod:`cf_knowledge_kiln.api.views` — the duplication is in the
+call-site wiring, not the rendering.
 """
 
 from __future__ import annotations
@@ -25,6 +25,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from cf_knowledge_kiln.api._templates import templates
 from cf_knowledge_kiln.api.dependencies import (
     get_hybrid_retriever,
     get_search_limiter,
@@ -37,6 +38,7 @@ from cf_knowledge_kiln.api.forms import (
     selected_statuses,
 )
 from cf_knowledge_kiln.api.rate_limit import TokenBucketLimiter, client_ip
+from cf_knowledge_kiln.api.result_cards import result_card_view
 from cf_knowledge_kiln.api.views import (
     humanize_warning,
     rail_filters_active_count,
@@ -107,11 +109,6 @@ async def search_page_from_url(
     submission was already logged on whoever first ran it. Logging
     here would inflate query-volume metrics on every link click.
     """
-    # Lazy import to avoid a circular dependency with web.py (which
-    # imports nothing from this module, so the cycle is one-way at
-    # import time but the symmetry keeps future-proofing simple).
-    from cf_knowledge_kiln.api.web import _result_card_view, templates
-
     key = client_ip(request, trust_xff=trust_xff)
     if not limiter.hit(key):
         retry = limiter.retry_after(key)
@@ -206,7 +203,7 @@ async def search_page_from_url(
             status_code=503,
         )
     cards = [
-        _result_card_view(
+        result_card_view(
             c,
             result.document_refs.get(c.document_id),
             result.chunk_text.get(c.chunk_id, ""),
