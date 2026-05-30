@@ -44,6 +44,7 @@ from cf_knowledge_kiln.api.dependencies import (
     get_trust_xff,
 )
 from cf_knowledge_kiln.api.forms import (
+    DEFAULT_STATUSES,
     FEEDBACK_COMMENT_MAX_LEN,
     FEEDBACK_TYPES,
     empty_filters_view,
@@ -102,8 +103,19 @@ async def search_page(request: Request) -> HTMLResponse:
             "initial_results": None,
             "filters": filters_view,
             "rail_active_count": rail_filters_active_count(filters_view),
+            # #371: status checkboxes consult ``selected_statuses`` to
+            # decide ``checked``. On the empty shell, default to the
+            # same set the engine uses when no filter is set
+            # (DEFAULT_STATUSES) so the rendered form matches what
+            # POST /search would do.
+            "selected_statuses": list(DEFAULT_STATUSES),
         },
     )
+
+
+# NOTE: ``GET /search`` lives in :mod:`cf_knowledge_kiln.api.web_url_state`
+# (issue #371) — extracted so this module stays close to the 400-line
+# AGENTS soft cap. The app factory mounts both routers.
 
 
 @router.post("/search", response_class=HTMLResponse)

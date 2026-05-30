@@ -130,6 +130,86 @@
     }
   });
 
+  // #371 URL-shareable filter state. After every successful HTMX
+  // submit on the search form, replace the URL with one that
+  // reflects the form's current state — so a user can copy/paste
+  // the address bar and reproduce their query + filters in any
+  // tab. ``replaceState`` (not ``pushState``) so the 300ms-
+  // debounced keystroke search doesn't pollute the back-button
+  // stack with one entry per character.
+  //
+  // The ``popstate`` listener handles back/forward navigation by
+  // re-populating the form fields from the URL and re-triggering
+  // the HTMX submit. ``_popstateInFlight`` prevents the resulting
+  // ``htmx:afterRequest`` from re-writing the URL (which would
+  // clobber the forward-history entry the user just left).
+  let _popstateInFlight = false;
+  document.addEventListener("htmx:afterRequest", (e) => {
+    if (_popstateInFlight) {
+      _popstateInFlight = false;
+      return;
+    }
+    const form = e.target && e.target.closest && e.target.closest("form.search-form");
+    if (!form) return;
+    if (!e.detail || !e.detail.successful) return;
+    const params = new URLSearchParams();
+    // FormData walks the form, including multi-checked inputs.
+    // Translate ``query`` (form name) to ``q`` (URL param) since
+    // the GET /search route expects ``q`` — matches the natural
+    // short URL convention and the route signature.
+    const data = new FormData(form);
+    for (const [k, v] of data.entries()) {
+      if (k === "_filters_set") continue;  // server-internal marker
+      if (typeof v !== "string") continue;
+      if (k === "query") {
+        if (v) params.append("q", v);
+      } else if (v !== "") {
+        params.append(k, v);
+      }
+    }
+    const next = params.toString() ? `/search?${params.toString()}` : "/search";
+    history.replaceState(null, "", next);
+  });
+
+  window.addEventListener("popstate", () => {
+    const form = document.querySelector("form.search-form");
+    if (!form) return;
+    const params = new URLSearchParams(window.location.search);
+    // Reset multi-value status checkboxes to URL state. If no
+    // status params present at all → leave defaults; otherwise the
+    // URL is canonical.
+    const statusBoxes = form.querySelectorAll('input[name=status]');
+    const statusVals = params.getAll("status");
+    if (statusVals.length > 0) {
+      statusBoxes.forEach((cb) => {
+        cb.checked = statusVals.includes(cb.value);
+      });
+    }
+    // doc_type same shape
+    const docTypeBoxes = form.querySelectorAll('input[name=doc_type]');
+    const docTypeVals = params.getAll("doc_type");
+    if (docTypeVals.length > 0) {
+      docTypeBoxes.forEach((cb) => {
+        cb.checked = docTypeVals.includes(cb.value);
+      });
+    }
+    // Single-value text/date fields. URL param ``q`` → form name
+    // ``query`` (single mapping); everything else is the same name.
+    const q = form.querySelector('input[name=query]');
+    if (q) q.value = params.get("q") || "";
+    for (const name of ["repo", "owner", "last_reviewed_after", "tags"]) {
+      const el = form.querySelector(`input[name=${name}]`);
+      if (el) el.value = params.get(name) || "";
+    }
+    // Re-fire the HTMX submit so the results match the URL.
+    _popstateInFlight = true;
+    if (window.htmx && typeof window.htmx.trigger === "function") {
+      window.htmx.trigger(form, "submit");
+    } else {
+      form.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
+    }
+  });
+
   // HTMX 2.x drops 4xx/5xx swaps by default. We deliberately render
   // a swap-friendly fragment on 429 (rate limit) and 503 (retrieval
   // outage) — let those statuses swap so the user sees the inline

@@ -4,8 +4,15 @@
 
 {% block content %}
 <section class="search search-with-preview">
+  {# #371: action+method on the form so a no-JS browser submit
+     produces a shareable URL — HTMX overrides at runtime via
+     hx-post when its script loaded. The native form fallback uses
+     the same GET /search route the URL-shareable feature owns,
+     so behavior is consistent in both paths. #}
   <form
     class="search-form"
+    action="/search"
+    method="get"
     hx-post="/search"
     hx-target="#results"
     hx-swap="innerHTML"
@@ -40,28 +47,42 @@
          status boxes" (POST with `_filters_set=1` + status=[]) from
          "no form submitted yet" (no _filters_set field at all). #}
       <input type="hidden" name="_filters_set" value="1">
+      {# #371 URL-shareable filter state: each ``checked`` derived
+         from ``selected_statuses`` (server-rendered to match what
+         the GET ``/search`` route received). Pre-#371 the active/
+         approved boxes were statically checked, which made the
+         render disagree with the URL on a ``?status=deprecated``
+         arrival. The handler ALWAYS sets ``selected_statuses`` for
+         search.html renders, so the conditional has no
+         backward-compat path to guard. #}
       <label class="pill">
-        <input type="checkbox" name="status" value="active" checked>
+        <input type="checkbox" name="status" value="active"
+               {% if 'active' in selected_statuses %}checked{% endif %}>
         <span>Active</span>
       </label>
       <label class="pill">
-        <input type="checkbox" name="status" value="approved" checked>
+        <input type="checkbox" name="status" value="approved"
+               {% if 'approved' in selected_statuses %}checked{% endif %}>
         <span>Approved</span>
       </label>
       <label class="pill">
-        <input type="checkbox" name="status" value="draft">
+        <input type="checkbox" name="status" value="draft"
+               {% if 'draft' in selected_statuses %}checked{% endif %}>
         <span>Draft</span>
       </label>
       <label class="pill pill-warn">
-        <input type="checkbox" name="status" value="deprecated">
+        <input type="checkbox" name="status" value="deprecated"
+               {% if 'deprecated' in selected_statuses %}checked{% endif %}>
         <span>Deprecated</span>
       </label>
       <label class="pill pill-warn">
-        <input type="checkbox" name="status" value="archived">
+        <input type="checkbox" name="status" value="archived"
+               {% if 'archived' in selected_statuses %}checked{% endif %}>
         <span>Archived</span>
       </label>
       <label class="pill pill-warn">
-        <input type="checkbox" name="status" value="superseded">
+        <input type="checkbox" name="status" value="superseded"
+               {% if 'superseded' in selected_statuses %}checked{% endif %}>
         <span>Superseded</span>
       </label>
     </fieldset>
@@ -223,7 +244,18 @@
   <div class="search-grid">
     <section id="results" class="results" aria-busy="false">
       {% if initial_results is not none %}
-        {% include "_results.html" %}
+        {# #371 URL-state arrival: render the same fragment HTMX
+           would have swapped in on a POST. Pass the cards / warnings
+           / query_id under the names ``_results.html`` expects —
+           ``results`` (cards), ``warnings`` (query-global), and
+           ``query_id`` (for the feedback widget). Per-card warnings
+           are already on each card's ``warnings`` field. #}
+        {% with results=initial_results.cards,
+                warnings=initial_results.warnings,
+                query_id=initial_results.query_id,
+                selected_statuses=initial_results.selected_statuses %}
+          {% include "_results.html" %}
+        {% endwith %}
       {% else %}
         {# #123 empty state — italic invitation + exemplar prompts.
            Each exemplar is a button that JS handles: sets the input

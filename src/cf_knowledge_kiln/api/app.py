@@ -42,6 +42,7 @@ from cf_knowledge_kiln.api.request_id import install_request_id_middleware
 from cf_knowledge_kiln.api.request_log import install_request_logging
 from cf_knowledge_kiln.api.retrieval import router as retrieval_router
 from cf_knowledge_kiln.api.web import router as web_router
+from cf_knowledge_kiln.api.web_url_state import router as web_url_state_router
 from cf_knowledge_kiln.config import get_settings
 from cf_knowledge_kiln.db import Database, resolve_database_url
 from cf_knowledge_kiln.db.migrations import run_upgrade_head
@@ -223,6 +224,10 @@ def create_app() -> FastAPI:
     app.include_router(answer_router)
     app.include_router(registry_router)
     app.include_router(web_router)
+    # #371: GET /search lives in its own module so web.py stays close
+    # to the 400-line cap. Mount order is irrelevant — the routes
+    # don't collide (GET /search vs POST /search).
+    app.include_router(web_url_state_router)
     app.include_router(preview_router)
     app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
     return app
