@@ -257,7 +257,7 @@
         'button:not([disabled]), [href], summary, ' +
           '[tabindex]:not([tabindex="-1"])'
       )
-    ).filter((el) => el.offsetParent !== null || el === p);
+    ).filter((el) => el.offsetParent !== null);
     if (focusables.length === 0) {
       // Degenerate: nothing focusable inside (e.g. preview-missing
       // fragment). Keep focus on the panel itself so the user can
@@ -277,14 +277,44 @@
       first.focus();
       return;
     }
+    // Focus on the panel itself (the focus-grab landing state):
+    // forward Tab → first focusable, Shift+Tab → last. Without the
+    // panel-itself carve-out on BOTH sides, the loop is asymmetric
+    // and either direction lets the user Tab out into the obscured
+    // page underneath the drawer.
     if (e.shiftKey && (active === first || active === p)) {
       e.preventDefault();
       last.focus();
-    } else if (!e.shiftKey && active === last) {
+    } else if (!e.shiftKey && (active === last || active === p)) {
       e.preventDefault();
       first.focus();
     }
   });
+
+  // #346 viewport-change cleanup. If the user opens the drawer on a
+  // mobile viewport (role=dialog + aria-modal applied), then rotates
+  // the device or resizes past 960px without closing, the modal
+  // semantics would otherwise persist on what is now a desktop
+  // sticky rail — and AT would announce a "dialog" that isn't
+  // presenting as one. Listen on the same matchMedia query and
+  // strip the stale attributes when we cross the threshold while
+  // the drawer is open. (The Tab trap is already viewport-gated, so
+  // it stops firing automatically — only the ARIA attrs need this
+  // cleanup.)
+  const _mobileMq = window.matchMedia("(max-width: 959px)");
+  const _onViewportChange = (mq) => {
+    if (mq.matches) return;
+    const p = document.getElementById("preview");
+    if (!p || !p.hasAttribute("data-open")) return;
+    p.removeAttribute("role");
+    p.removeAttribute("aria-modal");
+  };
+  if (typeof _mobileMq.addEventListener === "function") {
+    _mobileMq.addEventListener("change", _onViewportChange);
+  } else if (typeof _mobileMq.addListener === "function") {
+    // Safari < 14 fallback. Drop when min target moves past 14.
+    _mobileMq.addListener(_onViewportChange);
+  }
 
   // Single delegated click listener. Order of checks matches the
   // prior inline implementation: backdrop-close → cheatsheet-close

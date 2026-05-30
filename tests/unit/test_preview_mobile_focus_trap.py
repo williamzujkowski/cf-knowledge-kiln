@@ -188,6 +188,82 @@ class TestFocusLoopsFirstAndLast:
         assert "first" in body and "last" in body
 
 
+class TestPanelItselfTraps:
+    """Regression guard: the focus-grab on open lands focus on the
+    panel element itself (kiln-app.js:105). From that state, both
+    Tab AND Shift+Tab must loop inside the panel — without the
+    panel-itself carve-out on the forward-Tab branch, the user
+    presses Tab and native focus advance walks them into the
+    obscured page beneath the drawer."""
+
+    def test_shift_tab_from_panel_loops_to_last(self, js_source: str) -> None:
+        body = TestTabKeyTrapped._tab_handler_window(js_source)
+        # Shift+Tab branch must accept active===p (the panel itself).
+        # Pattern is ``e.shiftKey && (active === first || active === p)``.
+        assert "active === p" in body, (
+            "Shift+Tab handler must accept the panel itself as the "
+            "from-state so it loops to last instead of letting native "
+            "focus walk out of the drawer."
+        )
+
+    def test_forward_tab_from_panel_loops_to_first(self, js_source: str) -> None:
+        """The forward-Tab branch must be symmetric with Shift+Tab.
+        Without ``(active === last || active === p)`` here, a user
+        whose focus is on the panel (the open-state) escapes the
+        drawer on the very first Tab."""
+        body = TestTabKeyTrapped._tab_handler_window(js_source)
+        # Find the forward-Tab branch (the ``else if (!e.shiftKey ...``
+        # block) and pin the panel-itself carve-out is there too.
+        idx = body.find("!e.shiftKey")
+        assert idx != -1, "forward-Tab branch missing"
+        forward = body[idx : idx + 400]
+        assert "active === p" in forward, (
+            "Forward-Tab branch must accept the panel itself as the "
+            "from-state (mirror of the Shift+Tab branch). Otherwise "
+            "the very first Tab after open escapes the drawer."
+        )
+
+
+class TestViewportChangeStripsStaleDialog:
+    """Regression guard: orientation flip / dev-tools resize from
+    a mobile viewport (where role=dialog was applied) to a desktop
+    viewport (where it would mislead AT) must strip role + aria-modal
+    even without an intervening close. matchMedia ``change`` event
+    is the standard hook."""
+
+    def test_mq_change_listener_registered(self, js_source: str) -> None:
+        # The standard contemporary API.
+        assert "matchMedia" in js_source
+        # The listener uses ``addEventListener("change", ...)`` —
+        # pin the literal so a switch to ``onchange = ...`` (which
+        # would clobber any other listeners) is caught.
+        assert '"change"' in js_source
+
+    def test_mq_change_handler_removes_role(self, js_source: str) -> None:
+        """The change handler body must call removeAttribute('role')
+        + removeAttribute('aria-modal') when the viewport crosses
+        out of mobile range while the drawer is open."""
+        # The handler is named _onViewportChange in the source.
+        idx = js_source.find("_onViewportChange")
+        assert idx != -1, "viewport-change handler missing"
+        # Find the function body (the const declaration follows).
+        body_start = js_source.find("=", idx)
+        body = js_source[body_start : body_start + 600]
+        assert 'removeAttribute("role")' in body
+        assert 'removeAttribute("aria-modal")' in body
+
+    def test_mq_change_handler_guards_on_data_open(self, js_source: str) -> None:
+        """If the drawer is closed we don't need to strip anything —
+        the close handler already did. The change handler must check
+        ``data-open`` before touching anything, otherwise it would
+        thrash the panel attributes on every viewport change."""
+        idx = js_source.find("_onViewportChange")
+        assert idx != -1
+        body_start = js_source.find("=", idx)
+        body = js_source[body_start : body_start + 600]
+        assert "data-open" in body
+
+
 class TestNoTrapOnDesktop:
     """Per the spec: desktop sticky rail is NOT a focus trap —
     it's a panel, not a modal. The Tab handler must early-return
