@@ -142,6 +142,36 @@ def test_static_css_is_served(client: TestClient) -> None:
     assert "result-card" in response.text  # sanity: real CSS body
 
 
+def test_static_asset_urls_are_relative(client: TestClient) -> None:
+    """Static asset refs must be same-origin relative paths (#395).
+
+    ``url_for('static', ...)`` renders an ABSOLUTE URL using the app's own
+    host. When the UI is served through a reverse proxy on a different
+    hostname (e.g. Authentik-fronted kiln.lab.grenlan.com vs the CF route
+    cf-knowledge-kiln-api.cf-apps...), those absolute URLs are cross-origin
+    and the ``style-src 'self'`` / ``script-src 'self'`` CSP blocks them —
+    the page loads undecorated. Appending ``.path`` makes them relative
+    (``/static/...``), same-origin behind any proxy.
+
+    Guards against regressing back to the bare absolute ``url_for(...)``.
+    """
+    import re
+
+    response = client.get("/")
+    assert response.status_code == 200
+    body = response.text
+
+    static_refs = re.findall(r'(?:href|src)="([^"]*?/static/[^"]+)"', body)
+    assert static_refs, "expected at least one /static/ asset reference"
+    for ref in static_refs:
+        assert ref.startswith("/static/"), (
+            f"static asset must be a same-origin relative path, got {ref!r} "
+            "(use url_for('static', ...).path, not the bare absolute url_for)"
+        )
+    # Spot-check the load-bearing stylesheet specifically.
+    assert 'href="/static/kiln.css"' in body
+
+
 # ─── POST /search (HTMX fragment) ───────────────────────────────────
 
 

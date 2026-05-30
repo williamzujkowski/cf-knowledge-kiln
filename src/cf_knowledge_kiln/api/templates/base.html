@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>{% block title %}cf-knowledge-kiln{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('static', path='kiln.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='kiln.css').path }}">
   <!-- Fraunces (display + body) + JetBrains Mono (paths/scores).
        #144: self-hosted under /static/vendor/ so the runtime CSP can
        stay at `font-src 'self'; style-src 'self'` with no third-party
@@ -18,13 +18,13 @@
         as="font"
         type="font/woff2"
         crossorigin
-        href="{{ url_for('static', path='vendor/fraunces-v38-latin-variable.woff2') }}">
+        href="{{ url_for('static', path='vendor/fraunces-v38-latin-variable.woff2').path }}">
   <!-- HTMX 2.0 self-hosted (#144). No build step; SRI hash pinned. The
        integrity attribute still validates even though the asset is
        same-origin — defense in depth against a compromised static
        mount. `defer` lets the parser finish before HTMX initializes
        so first paint isn't blocked on the network fetch. -->
-  <script defer src="{{ url_for('static', path='vendor/htmx-2.0.4.min.js') }}" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous"></script> <!-- pragma: allowlist secret -->
+  <script defer src="{{ url_for('static', path='vendor/htmx-2.0.4.min.js').path }}" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous"></script> <!-- pragma: allowlist secret -->
   <!-- #131 application lifecycle JS (htmx hooks, preview drawer,
        cheatsheet close, data-action delegation). Loaded BEFORE the
        other scripts so its event listeners register first — both
@@ -32,11 +32,11 @@
        after this file is parsed. Extracted from base.html so a
        future Content-Security-Policy (`script-src 'self'`) doesn't
        break the UI. -->
-  <script defer src="{{ url_for('static', path='kiln-app.js') }}"></script>
+  <script defer src="{{ url_for('static', path='kiln-app.js').path }}"></script>
   <!-- #121 keyboard nav. Vanilla, no deps. Defer so it runs after parse. -->
-  <script defer src="{{ url_for('static', path='kiln-keys.js') }}"></script>
+  <script defer src="{{ url_for('static', path='kiln-keys.js').path }}"></script>
   <!-- #123 empty-state polish: exemplars, recent queries, hint banner. -->
-  <script defer src="{{ url_for('static', path='kiln-empty.js') }}"></script>
+  <script defer src="{{ url_for('static', path='kiln-empty.js').path }}"></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to results</a>
