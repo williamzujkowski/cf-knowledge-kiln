@@ -155,3 +155,63 @@ class TestFormFieldPopulation:
             "the popstate-triggered submit doesn't clobber the URL "
             "(double replaceState). Add a flag like _popstateInFlight."
         )
+
+
+class TestPopstateRestoresRailOpenState:
+    """#390: when popstate fires on a URL whose rail params are
+    populated (repo / doc_type / owner / last_reviewed_after / tags),
+    the filter-rail ``<details>`` must open. Without this, a user
+    navigating back to a URL with active filters sees a closed rail
+    that hides the filters they're presumably interested in.
+
+    Status doesn't count for rail-open — the status pills live
+    outside the rail. Mirrors the server-side
+    :func:`rail_filters_active_count` semantics.
+    """
+
+    @staticmethod
+    def _popstate_body(source: str) -> str:
+        idx = source.find('addEventListener("popstate"')
+        if idx == -1:
+            idx = source.find("addEventListener('popstate'")
+        assert idx != -1, "popstate listener must be registered"
+        return source[idx : idx + 3000]
+
+    def test_handler_targets_filter_rail(self, js_source: str) -> None:
+        body = self._popstate_body(js_source)
+        # The rail container is ``details.filter-rail`` (search.html:108).
+        assert "filter-rail" in body, (
+            "popstate handler must locate the .filter-rail <details> "
+            "element to toggle its open state."
+        )
+
+    def test_handler_toggles_open_attribute(self, js_source: str) -> None:
+        """The handler manipulates the ``open`` attribute. Either
+        ``setAttribute("open", ...)`` / ``removeAttribute("open")``,
+        or ``rail.open = ...`` is acceptable — pin both."""
+        body = self._popstate_body(js_source)
+        opens_via_attr = 'setAttribute("open"' in body and 'removeAttribute("open"' in body
+        opens_via_property = ".open = " in body
+        assert opens_via_attr or opens_via_property, (
+            "popstate must toggle the rail <details> open state; "
+            "without it, a navigation back to a URL with rail "
+            "filters hides those filters behind a closed rail."
+        )
+
+    def test_status_alone_does_not_open_rail(self, js_source: str) -> None:
+        """Status pills live OUTSIDE the rail (search.html:42-87). A
+        URL with only ``?status=deprecated`` and no rail params must
+        NOT open the rail — that would surface chrome for filters
+        the user didn't set. The implementation must consult the
+        five rail field names (NOT ``status``).
+
+        Pin that the rail-open decision references at least the
+        rail-field names that exist server-side
+        (api.views._RAIL_FIELDS)."""
+        body = self._popstate_body(js_source)
+        # Pin two unambiguous rail-field names. ``repo`` alone could
+        # ambiguously match the form field name handling, so also
+        # pin ``last_reviewed_after`` which only appears in rail logic.
+        assert "last_reviewed_after" in body, (
+            "rail-open determination must consult the rail-field params (not just status)."
+        )

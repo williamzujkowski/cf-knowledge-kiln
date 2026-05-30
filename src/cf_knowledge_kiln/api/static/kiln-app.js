@@ -201,6 +201,24 @@
       const el = form.querySelector(`input[name=${name}]`);
       if (el) el.value = params.get(name) || "";
     }
+    // #390: restore the filter-rail <details> open state from URL.
+    // Server-side render uses ``rail_filters_active_count`` to decide
+    // ``<details open>``; popstate must mirror that semantics so a
+    // navigation back to a URL with rail filters doesn't hide them
+    // behind a closed rail. Status pills live OUTSIDE the rail
+    // (search.html:42-87) so status doesn't count for rail-open.
+    const rail = form.querySelector("details.filter-rail");
+    if (rail) {
+      const hasRailParams =
+        ["repo", "owner", "last_reviewed_after", "tags"].some((k) =>
+          (params.get(k) || "").trim() !== ""
+        ) || params.getAll("doc_type").length > 0;
+      if (hasRailParams) {
+        rail.setAttribute("open", "");
+      } else {
+        rail.removeAttribute("open");
+      }
+    }
     // Re-fire the HTMX submit so the results match the URL.
     _popstateInFlight = true;
     if (window.htmx && typeof window.htmx.trigger === "function") {
