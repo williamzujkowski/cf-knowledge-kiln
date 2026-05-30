@@ -78,6 +78,9 @@ class Settings(BaseSettings):
     hyde_cache_max_entries: int = 1000
     hyde_cache_ttl_seconds: int = 86400
     hyde_generator_max_tokens: int = 200
+    # NOTE(#333): declared but not yet wired — HydeEngine doesn't take
+    # a timeout param today (the underlying generator client owns its
+    # own timeout). Plumb through in #334 alongside the eval harness.
     hyde_generator_timeout_seconds: float = 3.0
 
     # Ingestion.
