@@ -98,6 +98,47 @@ partial-success work worth committing, so the loud-failure
 semantics still hold. Before #151 a single bad batch would discard
 every sibling batch's successful work.
 
+## HyDE query expansion (`KILN_HYDE_*`)
+
+ADR-0013. Off by default; needs a configured generator (see
+`KILN_GENERATOR_*`) to actually do anything. When enabled, the
+retriever expands gate-triggering queries into a short pseudo-doc
+via the configured generator and embeds the pseudo-doc (NOT the
+raw query) for the vector arm; the FTS arm always uses the raw
+query. Failure modes (no generator, generator error, empty output)
+degrade silently to bare retrieval — the retriever NEVER turns a
+successful search into a 503 because of HyDE.
+
+| Env var | Default | What it does |
+| --- | --- | --- |
+| `KILN_HYDE_ENABLED` | `false` | Master switch. When `false`, search behavior is byte-identical to pre-HyDE. |
+| `KILN_HYDE_QUERY_TOKEN_THRESHOLD` | `8` | Queries with fewer tokens than this fire the gate (short queries benefit most from expansion). |
+| `KILN_HYDE_JARGON_DENSITY_THRESHOLD` | `0.4` | Fraction of jargon-like tokens (kebab-case, acronyms, camelCase, ≥12-char compounds) above which the gate fires regardless of length. |
+| `KILN_HYDE_CACHE_MAX_ENTRIES` | `1000` | In-process LRU cap. Hot-path queries should fit comfortably; an operator with a long-tail query mix may want this higher. |
+| `KILN_HYDE_CACHE_TTL_SECONDS` | `86400` (24h) | TTL on cached pseudo-docs. A model rotation invalidates without an explicit flush because the cache key includes `(provider, model, normalized_query)`. |
+| `KILN_HYDE_GENERATOR_MAX_TOKENS` | `200` | Per-call output cap on the generator. ~150 tokens is the target pseudo-doc length; the cap leaves headroom for sentence-finishing. |
+| `KILN_HYDE_GENERATOR_TIMEOUT_SECONDS` | `3.0` | Reserved for #404 — declared but not yet wired (the underlying generator client owns its own timeout). Will move from "stub" to "enforced" in a follow-up. |
+
+Three things that DON'T need a config knob:
+
+* The classifier's imperative-prefix list (`how`, `what is`, `explain`,
+  ...). It's tuned to the calibration-222 + homelab-iac operator-speak
+  surface. Edit `src/cf_knowledge_kiln/retrieval/hyde/classifier.py` to
+  change the list; a future PR may expose this as YAML.
+* The prompt template. Single canonical declarative-voice template; if
+  an operator wants a different shape, change `prompt.py` and run the
+  calibration eval to confirm the new template moves hit rates the
+  expected direction.
+* The cache itself is in-process only. No Redis, no cross-process
+  sharing. Per-CF-instance scope is sufficient because the worker
+  process is single-tenant and HyDE expansion is short-lived.
+
+Operational note: `KILN_HYDE_ENABLED=true` with no generator
+configured logs one INFO line at startup and otherwise no-ops
+(`HydeEngine` returns `None` for every call → search degrades to bare
+retrieval). It is safe to leave the flag on in environments that
+sometimes have a generator and sometimes don't.
+
 ## Connection pool sizing (`KILN_PG_POOL_*`)
 
 Each Python process opens up to `KILN_PG_POOL_SIZE +

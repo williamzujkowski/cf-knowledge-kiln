@@ -33,6 +33,7 @@ the underlying retrieval score these reports track.
 
 from __future__ import annotations
 
+import argparse
 import json
 import statistics
 import sys
@@ -120,7 +121,27 @@ def search(q: str, k: int = 5) -> dict:
         return json.loads(resp.read())
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="run_calibration_eval",
+        description="Calibration eval against the homelab-iac golden set.",
+    )
+    # #334: --with-hyde just labels the markdown output. The HyDE
+    # ENABLED state is server-side (KILN_HYDE_ENABLED); the script
+    # cannot toggle it on the live API from here. Operators run two
+    # passes — one with the env var off, one with it on — and the
+    # label distinguishes the reports.
+    parser.add_argument(
+        "--with-hyde",
+        action="store_true",
+        help=(
+            "Label this run as the HyDE arm. Does NOT toggle HyDE — "
+            "start the API with KILN_HYDE_ENABLED=true and a "
+            "generator configured to actually exercise it."
+        ),
+    )
+    args = parser.parse_args(argv)
+    hyde_label = "WITH HyDE" if args.with_hyde else "baseline"
     try:
         urllib.request.urlopen(f"{API}/healthz", timeout=5).read()  # noqa: S310 — hardcoded localhost
     except urllib.error.URLError as exc:
@@ -181,12 +202,22 @@ def main() -> int:
             )
 
     # ── report ──
-    print("# Calibration eval — homelab-iac corpus")
+    print(f"# Calibration eval — homelab-iac corpus ({hyde_label})")
     print()
     print(
-        f"Active embedding: from `config/models.yaml`. Queries: {len(QUERIES)} "
+        f"Active embedding: from `config/models.yaml`. "
+        f"Arm: **{hyde_label}**. "
+        f"Queries: {len(QUERIES)} "
         f"({positive_count} positives, {negative_count} negatives)."
     )
+    if args.with_hyde:
+        print()
+        print(
+            "> HyDE arm assumes ``KILN_HYDE_ENABLED=true`` plus a configured "
+            "generator. If the server-side state doesn't match this label, "
+            "the report is mislabeled — verify via the ``retrieval.hyde.gated_on`` "
+            "span attribute. See ADR-0013."
+        )
     print()
 
     if positives_top1:
