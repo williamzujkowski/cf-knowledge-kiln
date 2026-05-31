@@ -112,6 +112,7 @@ build-css: ## Concatenate the static/kiln/*.css partials into static/kiln.css.
 	     src/cf_knowledge_kiln/api/static/kiln/_deprecation.css \
 	     src/cf_knowledge_kiln/api/static/kiln/_excerpt_score.css \
 	     src/cf_knowledge_kiln/api/static/kiln/_freshness.css \
+	     src/cf_knowledge_kiln/api/static/kiln/_legends.css \
 	     src/cf_knowledge_kiln/api/static/kiln/_warnings.css \
 	     src/cf_knowledge_kiln/api/static/kiln/_results_mobile.css \
 	     src/cf_knowledge_kiln/api/static/kiln/_feedback.css \

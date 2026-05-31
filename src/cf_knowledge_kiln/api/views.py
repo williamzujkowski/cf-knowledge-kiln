@@ -226,6 +226,60 @@ _AUTHORITY_TOOLTIPS: dict[str, str] = {
 }
 
 
+# #408 F18 — authority legend ordering. The visible legend lists
+# authorities in descending-authority order so a new user reads the
+# vocabulary top-down: canonical owner doc → standards-backed →
+# team-curated → peer-contributed → under evaluation. The order
+# isn't enforced in retrieval (the authority field isn't used as
+# a boost weight today); it's purely a teaching aid.
+_AUTHORITY_ORDER: tuple[str, ...] = (
+    "platform",
+    "security",
+    "standards",
+    "compliance",
+    "ops",
+    "engineering",
+    "operator",
+    "community",
+    "experimental",
+)
+
+
+def authority_vocabulary() -> tuple[tuple[str, str], ...]:
+    """Return ``((authority, tooltip), ...)`` for the legend (#408 F18).
+
+    Tuple-of-tuples so the template can iterate in display order
+    without re-sorting. Each entry: ``(short_name, sentence_tooltip)``.
+    Pure function — no I/O, no global state outside this module.
+    """
+    return tuple((a, _AUTHORITY_TOOLTIPS[a]) for a in _AUTHORITY_ORDER)
+
+
+# #408 F2 — score legend. Maps each tier to a one-word qualifier
+# the user can scan. The tier vocabulary mirrors the score_tier()
+# bucketing (5 = strong both-arm hit, 1 = below the weak-evidence
+# floor). Pinned as a separate constant so a future renaming pass
+# touches the legend AND the score-tier bucketing in one place.
+_SCORE_TIER_LABELS: tuple[tuple[int, str], ...] = (
+    (5, "strong both-arm match"),
+    (4, "cross-arm match"),
+    (3, "single-arm match"),
+    (2, "at the weak-evidence floor"),
+    (1, "below the weak-evidence floor"),
+)
+
+
+def score_legend_tiers() -> tuple[tuple[int, str], ...]:
+    """Return ``((tier, label), ...)`` for the score legend (#408 F2).
+
+    Listed strong → weak so the legend reads top-down as a quality
+    ladder. The tier integers match :func:`score_tier` output, so
+    the legend chip can render the same 5-dot widget the result-card
+    score uses (only with the tier hard-coded).
+    """
+    return _SCORE_TIER_LABELS
+
+
 def authority_tooltip(authority: str | None) -> str | None:
     """Return the editorial gloss for an authority value, or None.
 
@@ -475,6 +529,7 @@ async def log_human_query(
 __all__ = [
     "agent_guide_url",
     "authority_tooltip",
+    "authority_vocabulary",
     "deprecation_label",
     "feedback_categories",
     "freshness_bucket",
@@ -482,6 +537,7 @@ __all__ = [
     "humanize_warning",
     "log_human_query",
     "rail_filters_active_count",
+    "score_legend_tiers",
     "score_tier",
     "split_warnings",
     "status_tooltip",
