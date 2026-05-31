@@ -30,7 +30,7 @@ Ship HyDE as the query-rewriting strategy. Default off. Three reasons over the a
 
 * **Multi-query (generate N paraphrases, embed each, fuse the candidate sets)** — strictly more expensive (N generator calls + N vector queries + a fusion pass). The marginal lift over HyDE on operator-style queries is unproven against this corpus.
 * **Dictionary expansion (server-side synonym table)** — operationally cheap but adds a corpus-curation burden (who edits the synonyms? when?). HyDE generalizes via the LLM's general-purpose embedding instead of a hand-curated vocabulary.
-* **Symmetric-prefix retrieval (embed the query with the doc-side prefix instead of the query-side prefix)** — already tested in #228. The prefix-swap moved scores but not hit rate. Different problem.
+* **Symmetric-prefix retrieval (embed the query with the doc-side prefix instead of the query-side prefix)** — not tested against this corpus. The e5 / Nomic query-side prefix is already correctly applied per #216; flipping to the doc-side prefix would let same-prefix similarity drive scoring but would also break the model's intended query→passage asymmetric retrieval. Reserved for a future experiment if HyDE underperforms on the corpus-reconciled eval (#399 + the next calibration pass).
 
 ### Default-off rationale
 
@@ -84,7 +84,7 @@ The per-bucket floor changes in `tests/eval/test_golden.py` are **NOT** in this 
 
 Per-query when gated on:
 
-* +1 LLM round-trip on cache miss (typically 50-200 ms wall-clock against a self-hosted Llama-class model).
+* +1 LLM round-trip on cache miss (typically 50-200 ms wall-clock against a self-hosted Llama-class model). Per-call timeout enforcement is **deferred to #404** — today the underlying generator client owns its own timeout; the `KILN_HYDE_GENERATOR_TIMEOUT_SECONDS` env var is declared but not yet wired.
 * +1 small in-memory cache write.
 * No additional DB round-trip — the embedding API still gets one `embed_query` call; HyDE only changes what text gets embedded.
 
