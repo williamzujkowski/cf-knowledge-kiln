@@ -22,6 +22,8 @@ from markupsafe import Markup, escape
 from cf_knowledge_kiln.api.views import (
     authority_tooltip,
     deprecation_label,
+    freshness_bucket,
+    freshness_label,
     score_tier,
     status_tooltip,
 )
@@ -93,6 +95,13 @@ def result_card_view(
         "owner": getattr(ref, "owner", None),
         "status": chunk.status,
         "last_reviewed": chunk.last_reviewed,
+        # #408 F17 staleness signal — bucket the review date so the
+        # template can grade the visual treatment, and surface the
+        # relative-time label so users don't do calendar math at scan
+        # speed. ``None`` when no review date so the template's
+        # existing ``{% if r.last_reviewed %}`` guard short-circuits.
+        "freshness_bucket": freshness_bucket(chunk.last_reviewed),
+        "freshness_label": freshness_label(chunk.last_reviewed),
         "score": chunk.score,
         # #259 5-dot visualization tier. The Jinja template renders the
         # dots from this integer instead of recomputing the threshold
