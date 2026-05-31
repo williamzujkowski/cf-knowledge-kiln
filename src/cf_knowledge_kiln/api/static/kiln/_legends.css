@@ -1,0 +1,218 @@
+/* ─── Score + authority legends (#408 F2 + F18) ─────────────────────
+   Collapsible <details> under the results-count line. Closed by
+   default so the legend doesn't compete with results; opens to
+   reveal the dot-tier ladder + the 9 authority bands with their
+   editorial glosses.
+
+   New users learn the vocabulary; experienced users see chrome
+   that doesn't push them into hover-tooltip discovery. Mouse +
+   keyboard users get the same treatment because <details> is
+   keyboard-accessible natively. */
+
+.results-legend {
+  /* Quiet wrapper — pushes against the .results-count line above
+     but doesn't add a heavy rule. ``inline-size`` capped so the
+     opened legend doesn't stretch full-width on desktop where it
+     would compete with the result-card alignment. */
+  margin-block: 0.5em 1.5em;
+  max-inline-size: var(--measure, 44rem);
+}
+
+.results-legend-toggle {
+  /* The clickable summary. Tiny, italic, muted; matches the
+     ``.filter-rail-toggle`` voice so the two collapsible chrome
+     elements read as the same affordance. */
+  list-style: none;
+  cursor: pointer;
+  color: var(--ink-faded);
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 0.88rem;
+  padding: 0.3em 0;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5em;
+}
+
+/* Hide the default <details> marker so we can use our own. */
+.results-legend-toggle::-webkit-details-marker {
+  display: none;
+}
+.results-legend-toggle::marker {
+  content: "";
+}
+
+/* Custom disclosure marker via ::before. Rotates 90° when the
+   parent <details> is [open]. Pure CSS — no JS coupling. */
+.results-legend-toggle::before {
+  content: "›";
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 1em;
+  font-style: normal;
+  color: var(--ink-faded);
+  transition: transform 150ms ease;
+  transform: rotate(0deg);
+}
+.results-legend[open] .results-legend-toggle::before {
+  transform: rotate(90deg);
+}
+
+.results-legend-label {
+  /* The visible "Legend" word — the only part the user needs to
+     read to discover the feature. */
+  color: var(--ink-soft);
+  font-style: normal;
+}
+
+.results-legend-hint {
+  /* Inline gloss telling the user what the legend covers. Muted
+     enough that a returning user can ignore it. */
+  font-size: 0.85em;
+  color: var(--ink-faded);
+}
+
+.results-legend-body {
+  /* Two-column flow on desktop so the score + authority legends
+     sit side-by-side; stacks on narrow viewports. */
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5em;
+  padding-block: 0.8em;
+  padding-inline-start: 0.5em;
+  border-inline-start: 1px solid var(--rule);
+  margin-block-start: 0.4em;
+}
+
+@media (min-width: 720px) {
+  .results-legend-body {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  }
+}
+
+.results-legend-section {
+  /* Per-vocabulary box. The heading drives the grouping — score on
+     one side, authority on the other. */
+  margin: 0;
+}
+
+.results-legend-heading {
+  /* Editorial section title — small, italic, slightly muted.
+     ``h3`` so the heading order in the results list reads:
+     h2 (result-title) > h3 (legend section) without skipping.
+     Matches the ``.filters-legend`` voice. */
+  font-family: var(--serif);
+  font-size: 0.95rem;
+  font-style: italic;
+  font-weight: 500;
+  color: var(--ink-soft);
+  margin: 0 0 0.5em 0;
+  font-variation-settings: "opsz" 24;
+}
+
+.results-legend-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.4em;
+}
+
+.results-legend-item {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: baseline;
+  gap: 0.5em 0.7em;
+}
+
+.results-legend-text {
+  font-family: var(--serif);
+  font-size: 0.88rem;
+  color: var(--ink);
+  line-height: 1.35;
+}
+
+/* Reuse the existing .score-dot / .authority-band styles inside
+   the legend — the chip rendering matches the per-card rendering
+   so the user sees the same vocabulary in both places. The legend-
+   specific wrappers below scope size + alignment.
+
+   The .score-dot rule lives in _excerpt_score.css; do NOT redefine
+   it here. Just constrain the container size so the dots align
+   uniformly across legend rows. */
+.legend-score-dots {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+  /* Match the .score-dot existing dimensions so the legend dots
+     visually equal the per-card dots. The container is just an
+     alignment anchor. */
+}
+
+.legend-score-tier-num {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--ink-faded);
+  min-inline-size: 2.5em;  /* keep "5/5" right-aligned across rows */
+}
+
+/* Authority chips in the legend inherit the .authority-band styles
+   from _excerpt_score.css. No override needed. The list-item
+   layout above sizes the chip + tooltip column uniformly. */
+
+/* Focus visibility — the <summary> must show a clear focus ring
+   for keyboard users. The default browser ring is inconsistent
+   across UA; explicit rule using --teal for the focus ring. */
+.results-legend-toggle:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+/* Reduced motion: skip the marker rotation transition. */
+@media (prefers-reduced-motion: reduce) {
+  .results-legend-toggle::before {
+    transition: none;
+  }
+}
+
+/* Forced colors (Windows High Contrast): drop editorial palette
+   and surface the chrome via system tokens. The score-dots /
+   authority-band rules already have forced-colors blocks in their
+   own partials, so we only need to handle the legend wrapper +
+   summary here. */
+@media (forced-colors: active) {
+  .results-legend-toggle {
+    color: CanvasText;
+  }
+  .results-legend-label {
+    color: CanvasText;
+  }
+  .results-legend-hint {
+    color: GrayText;
+  }
+  .results-legend-toggle::before {
+    color: CanvasText;
+  }
+  .results-legend-body {
+    border-inline-start-color: CanvasText;
+  }
+  .results-legend-heading {
+    color: CanvasText;
+  }
+  .results-legend-text {
+    color: CanvasText;
+  }
+}
+
+/* prefers-contrast: more — lift the muted labels back to ink-soft
+   so the AAA contrast target is hit. */
+@media (prefers-contrast: more) {
+  .results-legend-toggle,
+  .results-legend-hint {
+    color: var(--ink-soft);
+  }
+  .results-legend-heading {
+    color: var(--ink);
+  }
+}

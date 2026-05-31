@@ -29,6 +29,51 @@
     {% if results | length == 1 %}result{% else %}results{% endif %}
     for &ldquo;{{ query }}&rdquo;.
   </p>
+  {# #408 F2 + F18: collapsible legend for the score + authority
+     vocabularies. <details>/<summary> is keyboard-accessible by
+     default, closed by default so the chrome doesn't compete with
+     the results, opens to reveal the dot-tier ladder + authority
+     band glosses. Mouse users no longer have to hover individual
+     chips to learn the vocabulary; AT users get the same on demand.
+     Lives only when results are present — the empty-state has
+     its own teaching surface (kiln-empty.js onboarding).
+     ``is defined`` guards keep older test-private Jinja envs (which
+     don't register the helper globals) from blowing up when this
+     template renders — production routes use api._templates which
+     registers both helpers. #}
+  {% if score_legend_tiers is defined and authority_vocabulary is defined %}
+  <details class="results-legend">
+    <summary class="results-legend-toggle">
+      <span class="results-legend-label">Legend</span>
+      <span class="results-legend-hint" aria-hidden="true">— relevance dots + authority bands</span>
+    </summary>
+    <div class="results-legend-body">
+      <section class="results-legend-section">
+        <h3 class="results-legend-heading">Relevance</h3>
+        <ul class="results-legend-list">
+          {% for tier, label in score_legend_tiers() %}
+            <li class="results-legend-item">
+              <span class="legend-score-dots" aria-hidden="true">{% for i in range(1, 6) %}<span class="score-dot{% if i <= tier %} score-dot-on{% endif %}"></span>{% endfor %}</span>
+              <span class="legend-score-tier-num" aria-hidden="true">{{ tier }}/5</span>
+              <span class="results-legend-text">{{ label }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+      </section>
+      <section class="results-legend-section">
+        <h3 class="results-legend-heading">Authority</h3>
+        <ul class="results-legend-list">
+          {% for authority, tooltip in authority_vocabulary() %}
+            <li class="results-legend-item">
+              <span class="authority-band authority-{{ authority }}">{{ authority }}</span>
+              <span class="results-legend-text">{{ tooltip }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+      </section>
+    </div>
+  </details>
+  {% endif %}
   <ol class="results-list">
     {% for r in results %}
       <li class="result-card status-{{ r.status }}"
