@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from cf_knowledge_kiln.api.dependencies import get_session
 from cf_knowledge_kiln.api.forms import parse_uuid
+from cf_knowledge_kiln.api.markdown_render import render_markdown_safe
 from cf_knowledge_kiln.db.repositories import ChunksRepository, DocumentsRepository
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -70,6 +71,12 @@ async def preview_chunk(
                 "chunk_index": target.chunk_index,
                 "heading_path": list(target.heading_path or []),
                 "content": target.content,
+                # #405: render the target chunk's full content as
+                # sanitized HTML so headings/lists/code blocks/tables
+                # show as formatted prose, not raw markdown. Neighbors
+                # stay as plaintext (they're truncated at 500 chars
+                # which can chop a fence mid-block).
+                "content_html": render_markdown_safe(target.content),
             },
             "prev": [
                 {

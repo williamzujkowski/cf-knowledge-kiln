@@ -57,7 +57,18 @@
 
     <section class="preview-target" aria-label="Selected chunk">
       <p class="preview-target-label"><em>Selected chunk</em> <span class="preview-target-index">#{{ '%02d' % (target.chunk_index + 1) }}</span></p>
-      <pre class="preview-body">{{ target.content }}</pre>
+      {# #405: render the target chunk as sanitized markdown HTML so
+         users see formatted prose, not raw ``##`` and ``` ``` ```
+         fences. ``content_html`` is a markupsafe.Markup from
+         api.markdown_render.render_markdown_safe — autoescape lets
+         it through. Falls back to the raw <pre> rendering when the
+         renderer returned an empty result (whitespace-only chunk)
+         so the panel never shows a blank box. #}
+      {% if target.content_html %}
+        <div class="preview-body kiln-prose markdown" tabindex="0" role="region" aria-label="Selected chunk content">{{ target.content_html }}</div>
+      {% else %}
+        <pre class="preview-body">{{ target.content }}</pre>
+      {% endif %}
     </section>
 
     {% if next %}

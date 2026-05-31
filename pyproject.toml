@@ -48,6 +48,24 @@ dependencies = [
   # Compat confirmed empirically: fastapi 0.135.1 + starlette 1.0.1
   # passes 677 unit + 174 integration tests.
   "starlette>=1.0.1,<2.0",
+  # #405 rendered-content pipeline (api/markdown_render.py). The web
+  # API renders surfaced corpus markdown → sanitized HTML at request
+  # time, so these are CORE web-runtime deps (not the `ingestion`
+  # extra — mistune happens to live there too, but the renderer must
+  # not depend on the ingestion extra being installed).
+  #   * mistune — parse markdown with escape=True (raw HTML never
+  #     passed through). Floor matches the ingestion pin's CVE floor.
+  #   * nh3 — maintained ammonia binding (preferred over deprecated
+  #     bleach); allowlist-sanitizes the rendered HTML (drops style/
+  #     on*, caps URL schemes, forces rel).
+  #   * pygments — fenced-code highlighting in CLASS mode (no inline
+  #     styles; the CSP ships no unsafe-inline — colors live in the
+  #     vendored static/kiln/_code.css).
+  # All three were present only transitively before; pinned explicitly
+  # so a clean runtime install can't lose them.
+  "mistune>=3.2.1,<4.0",
+  "nh3>=0.2.21,<1.0",
+  "pygments>=2.19,<3.0",
 ]
 
 [project.optional-dependencies]
@@ -233,6 +251,14 @@ module = [
   # #315 OIDC optional extra:
   "authlib.*",
   "itsdangerous",
+  # #405 rendered-content pipeline. nh3 ships type info via the .pyi
+  # stub but mypy doesn't pick it up reliably; pygments has no
+  # py.typed marker.
+  "nh3",
+  "pygments",
+  "pygments.formatters",
+  "pygments.lexers",
+  "pygments.util",
 ]
 ignore_missing_imports = true
 

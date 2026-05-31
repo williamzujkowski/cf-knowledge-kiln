@@ -117,6 +117,7 @@ build-css: ## Concatenate the static/kiln/*.css partials into static/kiln.css.
 	     src/cf_knowledge_kiln/api/static/kiln/_results_mobile.css \
 	     src/cf_knowledge_kiln/api/static/kiln/_feedback.css \
 	     src/cf_knowledge_kiln/api/static/kiln/_preview.css \
+	     src/cf_knowledge_kiln/api/static/kiln/_code.css \
 	     src/cf_knowledge_kiln/api/static/kiln/_keyboard.css \
 	     src/cf_knowledge_kiln/api/static/kiln/_empty.css \
 	     src/cf_knowledge_kiln/api/static/kiln/_onboarding.css \

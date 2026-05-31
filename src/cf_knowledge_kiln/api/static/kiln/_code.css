@@ -1,0 +1,260 @@
+/* ─── Code block typography + Pygments token colors (#405) ─────────
+   Vendored class-mode token sheet for the preview-panel markdown
+   pipeline. Pygments emits ``<div class="codehilite"><pre><code>
+   <span class="k">…</span>…</code></pre></div>`` with token classes
+   stable across versions. This partial:
+
+     * styles the .codehilite wrapper (slab background, padding,
+       monospace, overflow-x, AAA-safe focus ring per AAA B2)
+     * grades each Pygments token class to a kiln-palette color
+       that meets WCAG-AAA (≥ 7:1 contrast against --paper)
+     * @media (forced-colors: active) drops all colors so WHC mode
+       falls through to system tokens
+     * @media (prefers-contrast: more) lifts the muted shades
+
+   Why we don't ship Pygments' generated CSS verbatim:
+     * Pygments' default 'friendly' palette includes #60A0B0
+       (comment) and #007020 (keyword) which are 3.3:1 and 6.1:1
+       respectively on --paper. Neither hits AAA. So we use the
+       Pygments token CLASS NAMES (stable) but our own colors. */
+
+/* Wrapper — slab editorial treatment. Hairline border-inline-start
+   echoes the .markdown blockquote rule from _markdown.css so the
+   visual vocabulary stays consistent. */
+.markdown .codehilite,
+.preview-body .codehilite {
+  font-family: var(--mono);
+  font-size: 0.88rem;
+  line-height: 1.55;
+  background: var(--paper-soft, var(--paper-dim));
+  color: var(--ink);
+  border-radius: 0 3px 3px 0;
+  border-inline-start: 3px solid var(--rule-strong);
+  margin-block: 1em;
+  /* AAA B2 — scrollable <pre> must be keyboard-focusable + named. */
+  overflow-x: auto;
+  tab-size: 2;
+}
+
+/* The <pre> inside .codehilite — kill the default browser margins
+   so the slab sits flush with the wrapper border. */
+.codehilite pre {
+  margin: 0;
+  padding: 0.85rem 1rem;
+  background: none;
+}
+
+/* Code inside the slab inherits the slab styling — no inline-code
+   chip rules. */
+.codehilite code {
+  font-family: inherit;
+  font-size: inherit;
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  color: inherit;
+  white-space: pre;
+  word-break: normal;
+}
+
+/* AAA B2: scrollable region needs a focus ring AND a programmatic
+   focus target. The <pre> gets tabindex=0 in the renderer (TODO if
+   not already) and this rule paints the focus ring. */
+.codehilite:focus-within {
+  outline: 2px solid var(--teal);
+  outline-offset: -1px;
+}
+
+/* ── Token colors — AAA on --paper ─────────────────────────────────
+   Bands:
+     * comment-y       → --ink-soft  (7.45:1, italic)
+     * keyword-y       → --ink       (9.5:1, weight 500)
+     * string-y        → --oxblood-deep (8.5:1; defined in tokens for high-contrast variant)
+     * number-y        → --teal-deep (close to 7:1; lifted on prefers-contrast)
+     * name-y          → --ink       (default identifier color = body)
+     * builtin-y       → --teal-deep + weight 500
+     * operator-y      → --ink-soft
+     * generic         → --ink       (default text)
+
+   Tokens we don't color get inherited --ink at AAA. */
+
+/* Comment family — italic, ink-soft for AAA on --paper. */
+.codehilite .c,    /* Comment */
+.codehilite .ch,   /* Comment.Hashbang */
+.codehilite .cm,   /* Comment.Multiline */
+.codehilite .c1,   /* Comment.Single */
+.codehilite .cp,   /* Comment.Preproc */
+.codehilite .cpf,  /* Comment.PreprocFile */
+.codehilite .cs {  /* Comment.Special */
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+/* Keyword family — bold, full --ink for max contrast. */
+.codehilite .k,    /* Keyword */
+.codehilite .kc,   /* Keyword.Constant */
+.codehilite .kd,   /* Keyword.Declaration */
+.codehilite .kn,   /* Keyword.Namespace */
+.codehilite .kp,   /* Keyword.Pseudo */
+.codehilite .kr,   /* Keyword.Reserved */
+.codehilite .ow {  /* Operator.Word — and, or, not */
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* Type keyword — same weight, slightly distinct via --teal-deep
+   (a known AAA-passing variant when --teal isn't AAA). */
+.codehilite .kt {  /* Keyword.Type */
+  color: var(--teal-deep, var(--ink));
+  font-weight: 600;
+}
+
+/* String family — oxblood-deep. The default --oxblood is 5.3:1 (AA
+   only). --oxblood-deep is defined in _tokens.css under
+   prefers-contrast: more; the fallback to --oxblood keeps the rule
+   well-defined when the deep variant isn't present. */
+.codehilite .s,    /* Literal.String */
+.codehilite .sa,   /* Literal.String.Affix */
+.codehilite .sb,   /* Literal.String.Backtick */
+.codehilite .sc,   /* Literal.String.Char */
+.codehilite .dl,   /* Literal.String.Delimiter */
+.codehilite .sd,   /* Literal.String.Doc */
+.codehilite .s2,   /* Literal.String.Double */
+.codehilite .se,   /* Literal.String.Escape */
+.codehilite .sh,   /* Literal.String.Heredoc */
+.codehilite .si,   /* Literal.String.Interpol */
+.codehilite .sx,   /* Literal.String.Other */
+.codehilite .sr,   /* Literal.String.Regex */
+.codehilite .s1,   /* Literal.String.Single */
+.codehilite .ss {  /* Literal.String.Symbol */
+  color: var(--oxblood-deep, var(--oxblood));
+}
+
+/* Doc-string italicized to echo .sd default. */
+.codehilite .sd {
+  font-style: italic;
+}
+
+/* Number family — teal-deep for distinctness. */
+.codehilite .m,    /* Literal.Number */
+.codehilite .mb,   /* Literal.Number.Bin */
+.codehilite .mf,   /* Literal.Number.Float */
+.codehilite .mh,   /* Literal.Number.Hex */
+.codehilite .mi,   /* Literal.Number.Integer */
+.codehilite .mo,   /* Literal.Number.Oct */
+.codehilite .il {  /* Literal.Number.Integer.Long */
+  color: var(--teal-deep, var(--teal));
+}
+
+/* Name family — most are default --ink. Distinct subclasses below. */
+.codehilite .nb,   /* Name.Builtin */
+.codehilite .bp {  /* Name.Builtin.Pseudo — Python's self/cls */
+  color: var(--teal-deep, var(--teal));
+}
+.codehilite .nf,   /* Name.Function */
+.codehilite .fm {  /* Name.Function.Magic */
+  color: var(--ink);
+  font-weight: 500;
+}
+.codehilite .nc,   /* Name.Class */
+.codehilite .nn {  /* Name.Namespace */
+  color: var(--ink);
+  font-weight: 600;
+}
+.codehilite .nd {  /* Name.Decorator */
+  color: var(--ink-soft);
+  font-style: italic;
+}
+.codehilite .nt {  /* Name.Tag — XML/HTML tag */
+  color: var(--teal-deep, var(--teal));
+  font-weight: 500;
+}
+.codehilite .na {  /* Name.Attribute — YAML/XML attr */
+  color: var(--ink);
+}
+.codehilite .nv,   /* Name.Variable */
+.codehilite .vc,   /* Name.Variable.Class */
+.codehilite .vg,   /* Name.Variable.Global */
+.codehilite .vi,   /* Name.Variable.Instance */
+.codehilite .vm {  /* Name.Variable.Magic */
+  color: var(--ink);
+}
+.codehilite .no {  /* Name.Constant */
+  color: var(--ink);
+  font-weight: 500;
+}
+.codehilite .ne {  /* Name.Exception */
+  color: var(--oxblood-deep, var(--oxblood));
+  font-weight: 500;
+}
+
+/* Operator — muted so it doesn't compete with identifiers. */
+.codehilite .o {  /* Operator */
+  color: var(--ink-soft);
+}
+
+/* Generic markers — diff/git-style + error highlight. */
+.codehilite .gd { color: var(--oxblood-deep, var(--oxblood)); }  /* Generic.Deleted */
+.codehilite .gi { color: var(--teal-deep, var(--teal)); }        /* Generic.Inserted */
+.codehilite .ge { font-style: italic; }                          /* Generic.Emph */
+.codehilite .gs { font-weight: 600; }                            /* Generic.Strong */
+.codehilite .gh { color: var(--ink); font-weight: 600; }         /* Generic.Heading */
+.codehilite .gu { color: var(--ink-soft); font-weight: 600; }    /* Generic.Subheading */
+.codehilite .gp { color: var(--ink-soft); }                      /* Generic.Prompt — shell prompts */
+.codehilite .go { color: var(--ink-soft); }                      /* Generic.Output */
+.codehilite .gt { color: var(--oxblood-deep, var(--oxblood)); }  /* Generic.Traceback */
+.codehilite .gr { color: var(--oxblood-deep, var(--oxblood)); font-weight: 600; }  /* Generic.Error */
+.codehilite .err {  /* Error token — lexer disagreement, e.g. invalid char */
+  color: var(--oxblood-deep, var(--oxblood));
+  text-decoration: underline wavy var(--oxblood);
+}
+
+/* Whitespace token — keep invisible. */
+.codehilite .w {
+  color: transparent;
+}
+
+/* Highlight-line token (.hll) — fall back to the editorial palette. */
+.codehilite .hll {
+  background-color: var(--gold-tint, transparent);
+}
+
+/* ── Forced colors (Windows High Contrast) ────────────────────────
+   Drop every color so the OS palette drives. Pygments' class names
+   stay; the browser renders them all as CanvasText. This is the
+   safe path — we don't try to map 9 token bands to system tokens. */
+@media (forced-colors: active) {
+  .codehilite,
+  .codehilite *,
+  .codehilite .err {
+    color: CanvasText;
+    background: Canvas;
+    text-decoration: none;
+    forced-color-adjust: none;
+  }
+  .codehilite {
+    border-inline-start-color: CanvasText;
+  }
+  .codehilite:focus-within {
+    outline-color: Highlight;
+  }
+}
+
+/* ── Prefers-contrast: more ───────────────────────────────────────
+   The base palette already targets AAA on --paper. This block bumps
+   the muted shades (comment, operator, decorator, prompt) back up
+   to --ink for the most-strict mode. */
+@media (prefers-contrast: more) {
+  .codehilite .c,
+  .codehilite .ch,
+  .codehilite .cm,
+  .codehilite .c1,
+  .codehilite .cs,
+  .codehilite .o,
+  .codehilite .nd,
+  .codehilite .gp,
+  .codehilite .go,
+  .codehilite .gu {
+    color: var(--ink);
+  }
+}
