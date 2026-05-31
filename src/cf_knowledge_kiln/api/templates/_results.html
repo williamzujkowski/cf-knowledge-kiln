@@ -47,21 +47,35 @@
       <span class="results-legend-label">Legend</span>
       <span class="results-legend-hint" aria-hidden="true">— relevance dots + authority bands</span>
     </summary>
+    {# Section labels render as <p> (styled like a heading) rather
+       than <h3> so they don't appear in the heading-navigation
+       hierarchy. With <h3>s, the outline would jump h1 (brand) →
+       h3 (legend) → h2 (result-title) which fails axe's
+       heading-order rule. The <summary> is a labeled control that
+       describes the disclosed content; AT users still discover
+       the sections via section.aria-label below. #}
     <div class="results-legend-body">
-      <section class="results-legend-section">
-        <h3 class="results-legend-heading">Relevance</h3>
+      <section class="results-legend-section" aria-label="Relevance">
+        <p class="results-legend-heading">Relevance</p>
         <ul class="results-legend-list">
           {% for tier, label in score_legend_tiers() %}
             <li class="results-legend-item">
-              <span class="legend-score-dots" aria-hidden="true">{% for i in range(1, 6) %}<span class="score-dot{% if i <= tier %} score-dot-on{% endif %}"></span>{% endfor %}</span>
-              <span class="legend-score-tier-num" aria-hidden="true">{{ tier }}/5</span>
+              {# Wrap the dots + tier-num in a single inline-flex
+                 cluster so each row has exactly 2 grid children
+                 (chip-cluster, label) — same shape as the authority
+                 rows below. Keeps the .results-legend-item rule
+                 simple (auto 1fr). #}
+              <span class="legend-score-chip" aria-hidden="true">
+                <span class="legend-score-dots">{% for i in range(1, 6) %}<span class="score-dot{% if i <= tier %} score-dot-on{% endif %}"></span>{% endfor %}</span>
+                <span class="legend-score-tier-num">{{ tier }}/5</span>
+              </span>
               <span class="results-legend-text">{{ label }}</span>
             </li>
           {% endfor %}
         </ul>
       </section>
-      <section class="results-legend-section">
-        <h3 class="results-legend-heading">Authority</h3>
+      <section class="results-legend-section" aria-label="Authority">
+        <p class="results-legend-heading">Authority</p>
         <ul class="results-legend-list">
           {% for authority, tooltip in authority_vocabulary() %}
             <li class="results-legend-item">

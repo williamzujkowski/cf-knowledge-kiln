@@ -119,10 +119,22 @@
 }
 
 .results-legend-item {
+  /* Two-column row: [chip-cluster] [label/tooltip]. Score rows wrap
+     their dots + tier-num in a .legend-score-chip inline-flex so
+     both vocabularies fit this same shape — keeps the column
+     alignment uniform across rows within a section. */
   display: grid;
-  grid-template-columns: auto auto 1fr;
+  grid-template-columns: auto 1fr;
   align-items: baseline;
   gap: 0.5em 0.7em;
+}
+
+.legend-score-chip {
+  /* Combines the 5-dot + the "N/5" tier-num into one chip-cluster
+     so the parent grid sees a single child in column 1. */
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4em;
 }
 
 .results-legend-text {
