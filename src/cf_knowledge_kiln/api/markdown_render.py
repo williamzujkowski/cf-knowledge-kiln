@@ -201,8 +201,12 @@ def render_markdown_safe(text: str) -> Markup:
         strip_comments=True,
     )
     # The renderer + nh3 are the trust boundary; wrap so Jinja
-    # autoescape lets the result through verbatim.
-    return Markup(cleaned)  # noqa: S704 - safety enforced upstream
+    # autoescape lets the result through verbatim. nh3.clean() above
+    # ran tag/attr/url allowlists; mistune ran with escape=True. Both
+    # tools are designed exactly for this "render untrusted markdown
+    # to safe HTML" use case. The bandit B704 flag is the right
+    # general-purpose warning but doesn't apply here.
+    return Markup(cleaned)  # noqa: S704 # nosec B704 — safety enforced upstream
 
 
 def pygments_token_css(*, prefix: str = ".codehilite") -> str:
