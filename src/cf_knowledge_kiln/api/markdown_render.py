@@ -174,18 +174,6 @@ _ALLOWED_ATTRS: dict[str, set[str]] = {
 _URL_SCHEMES: set[str] = {"http", "https", "mailto"}
 
 
-def _force_link_attrs(element: dict[str, str | None]) -> dict[str, str | None]:
-    """nh3 attribute-filter callback. Force rel + target on every
-    external <a>. Same approach as result_cards.highlight_excerpt
-    would have needed but mistune's URL handling already forces the
-    rel on external links — this is the belt to nh3's braces."""
-    href = element.get("href") or ""
-    if href.startswith(("http://", "https://")):
-        element["rel"] = "noopener noreferrer"
-        element["target"] = "_blank"
-    return element
-
-
 def render_markdown_safe(text: str) -> Markup:
     """Render markdown → CSP-safe, XSS-safe HTML wrapped in :class:`Markup`.
 
