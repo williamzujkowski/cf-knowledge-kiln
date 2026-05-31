@@ -50,11 +50,15 @@ class TestFreshnessBucket:
     def test_3_years_ago_is_stale(self) -> None:
         assert freshness_bucket(_TODAY - timedelta(days=365 * 3), today=_TODAY) == "stale"
 
-    def test_future_date_treated_as_fresh(self) -> None:
-        """Clock skew / bad metadata: future-dated review shouldn't
-        crash or render '-N days ago'. Fall back to fresh."""
+    def test_future_date_treated_as_stale(self) -> None:
+        """Clock skew / bad metadata: future-dated review is a metadata
+        error. Bucket as ``stale`` so the editorial styling calls
+        attention; the label renders the raw ISO date so the operator
+        sees the actual value and can investigate (per blind-reviewer
+        feedback — bucket + label should both telegraph the issue,
+        not bucket as fresh while label hints at a problem)."""
         future = _TODAY + timedelta(days=30)
-        assert freshness_bucket(future, today=_TODAY) == "fresh"
+        assert freshness_bucket(future, today=_TODAY) == "stale"
 
     def test_default_today_uses_real_date(self) -> None:
         """Without the ``today=`` arg, the helper consults date.today().

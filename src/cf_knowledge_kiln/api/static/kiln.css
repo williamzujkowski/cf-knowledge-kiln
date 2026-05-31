@@ -1905,26 +1905,28 @@ a.source-link:focus-visible {
 .freshness-stale {
   /* Oxblood tint + solid underline. Reads as "verify before relying
      on this." Pairs with the existing deprecation-stamp vocabulary
-     (oxblood = caution) so users learn the editorial signal once. */
+     (oxblood = caution) so users learn the editorial signal once.
+     ``font-style: normal`` overrides the italic from the base
+     ``.freshness`` rule in _excerpt_score.css so the stale chip
+     reads as a flag, not a quiet aside. */
   color: var(--oxblood);
   text-decoration: underline solid var(--oxblood);
   text-underline-offset: 2px;
+  font-style: normal;
   font-variation-settings: "opsz" 14, "wght" 450;
 }
 
-/* When the user hovers a graded freshness, surface the bucket name
-   so mouse users learn the vocabulary. Uses [data-freshness] to
-   avoid leaking the bucket class name as the tooltip text. The
-   ::after pattern follows the existing .authority-band tooltip
-   approach. */
-.freshness[data-freshness="aging"]::after,
-.freshness[data-freshness="stale"]::after {
-  content: " (" attr(data-freshness) ")";
-  font-style: normal;
-  font-size: 0.85em;
-  color: inherit;
-  opacity: 0.7;
-}
+/* No visible ::after suffix with the bucket name.
+   The aria-label already announces "Reviewed N years ago (ISO date)";
+   adding a visible "(stale)" via ::after would cause screen readers
+   to double-announce the staleness concept. Sighted users get the
+   editorial styling (color + underline) which IS the signal. The
+   bucket name is available via data-freshness for dev-tools
+   inspection but not user-visible.
+
+   Decided not to use :hover tooltips here either — the chip is a
+   <time>, not a button; users don't hover for help text in this
+   product's editorial voice. */
 
 /* High-contrast palette bump — the gold + oxblood tokens lift to
    AAA-passing variants under prefers-contrast: more (defined in
@@ -1940,8 +1942,11 @@ a.source-link:focus-visible {
 }
 
 /* Forced-colors (Windows High Contrast) — drop the editorial
-   palette and surface the bucket via system tokens. Stale → Mark
-   (the high-contrast "warning" pairing); aging → underline only. */
+   palette and surface the bucket via system tokens. Stale uses the
+   highlight pair correctly: ``MarkText`` is the foreground color
+   (text on the highlight) and ``Mark`` is the highlight background.
+   Aging stays with a dotted ``CanvasText`` underline so the chip
+   reads as graded without taking over the visual field. */
 @media (forced-colors: active) {
   .freshness-aging {
     color: CanvasText;
@@ -1949,9 +1954,12 @@ a.source-link:focus-visible {
     forced-color-adjust: none;
   }
   .freshness-stale {
-    color: Mark;
-    background: MarkText;
-    text-decoration: underline solid Mark;
+    /* MarkText on Mark — the system-defined high-contrast highlight
+       pair. Adjust if a WHC theme inverts; this matches the spec
+       intent (mark/highlighted text). */
+    color: MarkText;
+    background: Mark;
+    text-decoration: underline solid MarkText;
     padding-inline: 0.25em;
     forced-color-adjust: none;
   }

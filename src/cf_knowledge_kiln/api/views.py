@@ -14,11 +14,14 @@ Public surface:
 from __future__ import annotations
 
 import logging
-from datetime import date
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+# #408 F17 staleness signal helpers live in api/freshness.py - extracted
+# in the review-fix pass to keep views.py at the cap. Re-exported here
+# (via the __all__ list) so the import path stays stable.
+from cf_knowledge_kiln.api.freshness import freshness_bucket, freshness_label
 from cf_knowledge_kiln.db.repositories import QueriesRepository
 from cf_knowledge_kiln.retrieval import RetrievalFilters
 
@@ -221,90 +224,6 @@ _AUTHORITY_TOOLTIPS: dict[str, str] = {
     "community": "Community — peer-contributed, less authoritative.",
     "experimental": "Experimental — under evaluation.",
 }
-
-
-# #408 F17 — staleness signal on result-card freshness. For a
-# cited-search product, age IS provenance: a 3-year-old review at
-# the same visual weight as last week's actively misleads. Bucket
-# the rendered ``last_reviewed`` value so the template can apply
-# editorial styling that grades the trust signal.
-#
-# Thresholds chosen for ops/runbook content typical of the corpus:
-#   fresh:    < 180 days  — well within typical doc-review cadence
-#   recent:   180-365 d   — still trustworthy, no chrome change
-#   aging:    365-730 d   — caution; show with a muted-amber treatment
-#   stale:    > 730 d     — call attention; oxblood tint
-#
-# Operators with shorter review cycles (security-runbook corpus where
-# any 90-day-old doc is suspect) can adjust by passing a custom
-# ``today`` to the helper or by overriding the constants in a
-# future config-driven pass.
-_FRESH_DAYS: int = 180
-_RECENT_DAYS: int = 365
-_AGING_DAYS: int = 730
-
-
-def freshness_bucket(last_reviewed: date | None, *, today: date | None = None) -> str | None:
-    """Bucket a ``last_reviewed`` date into a staleness class.
-
-    Returns one of ``"fresh" | "recent" | "aging" | "stale"`` or
-    ``None`` when the input is ``None`` (no review date on the doc
-    → no staleness chrome; absence is its own kind of signal that
-    the corpus-level "unreviewed" warning surfaces separately).
-
-    Pure function. ``today`` argument is testable; production callers
-    pass ``date.today()``. Future-dated ``last_reviewed`` (clock skew,
-    bad metadata) is treated as ``"fresh"`` rather than negative-
-    delta-blowing-up downstream styling.
-    """
-    if last_reviewed is None:
-        return None
-    if today is None:
-        today = date.today()
-    delta_days = (today - last_reviewed).days
-    if delta_days < _FRESH_DAYS:
-        return "fresh"
-    if delta_days < _RECENT_DAYS:
-        return "recent"
-    if delta_days < _AGING_DAYS:
-        return "aging"
-    return "stale"
-
-
-# #408 F17: human-readable "Reviewed X ago" string. The raw ISO date
-# is still rendered in the ``datetime`` attribute (machine-readable);
-# the visible label graduates to relative time so a user scanning at
-# speed doesn't have to do calendar math to decide if a doc is stale.
-def freshness_label(last_reviewed: date | None, *, today: date | None = None) -> str | None:
-    """Return ``"Reviewed N {unit} ago"`` or ``None`` for absent dates.
-
-    Unit ladder: days (< 60), months (< 24), years. Singular/plural
-    handled. ``"Reviewed today"`` for delta=0; ``"Reviewed yesterday"``
-    for delta=1.
-    """
-    if last_reviewed is None:
-        return None
-    if today is None:
-        today = date.today()
-    delta_days = (today - last_reviewed).days
-    if delta_days < 0:
-        # Future-dated. Don't render an awkward "-3 days ago" — fall
-        # back to the bare ISO date so the user sees the raw value
-        # and understands something is off.
-        return f"Reviewed {last_reviewed.isoformat()}"
-    if delta_days == 0:
-        return "Reviewed today"
-    if delta_days == 1:
-        return "Reviewed yesterday"
-    if delta_days < 60:
-        return f"Reviewed {delta_days} days ago"
-    months = delta_days // 30
-    if months < 24:
-        unit = "month" if months == 1 else "months"
-        return f"Reviewed {months} {unit} ago"
-    years = delta_days // 365
-    unit = "year" if years == 1 else "years"
-    return f"Reviewed {years} {unit} ago"
 
 
 def authority_tooltip(authority: str | None) -> str | None:

@@ -242,7 +242,11 @@ class TestAuthorityBandTemplate:
         )
         owner_pos = body.find("platform-team")
         chip_pos = body.find("authority-band")
-        freshness_pos = body.find("Reviewed 2026-04-01")
+        # #408 F17: the visible freshness label graduated to relative time
+        # ("Reviewed 1 month ago" etc.); the ISO date now lives in the
+        # ``datetime`` attribute. Anchor on the datetime attr — it's
+        # stable across the staleness-bucket styling pass.
+        freshness_pos = body.find('datetime="2026-04-01"')
         assert -1 < owner_pos < chip_pos < freshness_pos, (
             f"unexpected order: owner={owner_pos}, chip={chip_pos}, freshness={freshness_pos}"
         )
