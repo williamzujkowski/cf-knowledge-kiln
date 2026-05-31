@@ -48,6 +48,7 @@ show where time goes inside the request:
 HTTP server span (FastAPIInstrumentor)
 └─ retrieval.search                   (human path)
    ├─ retrieval.normalize_query
+   ├─ retrieval.hyde                  (only when KILN_HYDE_ENABLED + an engine is wired — ADR-0013)
    ├─ retrieval.embed_query           (only if an embedding provider is configured)
    ├─ retrieval.sql.hybrid_search     OR retrieval.sql.fts_search
    ├─ retrieval.apply_boosts
@@ -88,6 +89,7 @@ they don't collide with HTTP / OTel-semantic-convention attributes.
 | `retrieval.chunks_in` / `.chunks_kept`     | int    | `apply_boosts`                       |
 | `retrieval.tokens_used_estimate`           | int    | `assemble_context_pack`              |
 | `retrieval.requires_human_review`          | bool   | `assemble_context_pack`              |
+| `retrieval.hyde.gated_on`                  | bool   | `retrieval.hyde` — true when HyDE emitted a pseudo-doc that replaced the raw query for the vector arm (ADR-0013). Follow-ups for `cache_hit` + `generation_ms` tracked in #404. |
 
 ## Adding new spans
 
