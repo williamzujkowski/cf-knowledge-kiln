@@ -248,8 +248,24 @@
                       {% else %}aria-label="Authority: {{ r.authority }}"{% endif %}>{{ r.authority }}</span>
               {% endif %}
               {% if r.last_reviewed %}
-                <time datetime="{{ r.last_reviewed }}" class="freshness">
-                  Reviewed {{ r.last_reviewed }}
+                {# #408 F17: relative-time label + bucketed class so
+                   age IS provenance — a 3-year-old review shouldn't
+                   render at the same visual weight as last week's.
+                   The ``datetime`` attribute keeps the raw ISO date
+                   for AT + machine-readable consumers; the visible
+                   label graduates to relative time. ``freshness-X``
+                   class lets the CSS grade the chip (fresh→stale).
+                   ``freshness_label`` is guaranteed non-None when
+                   ``last_reviewed`` is non-None (helper contract), so
+                   no fallback expression is needed. ``aria-label`` is
+                   the only staleness announce path — the CSS does
+                   NOT add visible ::after suffix text that would
+                   double-announce on screen readers. #}
+                <time datetime="{{ r.last_reviewed }}"
+                      class="freshness{% if r.freshness_bucket %} freshness-{{ r.freshness_bucket }}{% endif %}"
+                      {% if r.freshness_bucket %}data-freshness="{{ r.freshness_bucket }}"
+                      aria-label="{{ r.freshness_label }} ({{ r.last_reviewed }})"{% endif %}>
+                  {{ r.freshness_label }}
                 </time>
               {% endif %}
               {# #284: visible 'copy' affordance for the `c` shortcut.

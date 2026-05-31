@@ -1,0 +1,110 @@
+/* ─── Staleness signal on .freshness (#408 F17) ─────────────────────
+   Age IS provenance for a cited-search product. The 4-bucket
+   treatment grades visual weight so a user scanning at speed knows
+   whether the cited doc is "yesterday" or "three years ago" without
+   doing calendar math.
+
+   Buckets (see api/views.freshness_bucket):
+     fresh:   < 180 days   — no chrome change; baseline .freshness rule
+     recent:  180-365 d    — slightly muted but still neutral
+     aging:   365-730 d    — amber tint + dotted underline
+     stale:   > 730 days   — oxblood tint + solid underline, calls
+                              attention without shouting
+
+   Color choices respect AAA where the prefers-contrast: more pass
+   bumps them. Default palette uses the existing token vocabulary
+   (--gold for aging, --oxblood for stale). Forced-colors block
+   below drops the editorial palette and surfaces the bucket via
+   the existing forced-colors tokens. */
+
+.freshness-fresh {
+  /* Baseline; no change vs the existing .freshness rule. */
+}
+
+.freshness-recent {
+  /* Subtle desaturation — still trustworthy, no editorial flag. */
+  color: var(--ink-faded);
+  opacity: 0.92;
+}
+
+.freshness-aging {
+  /* Amber / warm tint. The dotted underline signals "the value is
+     graded" without claiming the doc is wrong. */
+  color: var(--gold);
+  text-decoration: underline dotted var(--gold);
+  text-underline-offset: 2px;
+}
+
+.freshness-stale {
+  /* Oxblood tint + solid underline. Reads as "verify before relying
+     on this." Pairs with the existing deprecation-stamp vocabulary
+     (oxblood = caution) so users learn the editorial signal once.
+     ``font-style: normal`` overrides the italic from the base
+     ``.freshness`` rule in _excerpt_score.css so the stale chip
+     reads as a flag, not a quiet aside. */
+  color: var(--oxblood);
+  text-decoration: underline solid var(--oxblood);
+  text-underline-offset: 2px;
+  font-style: normal;
+  font-variation-settings: "opsz" 14, "wght" 450;
+}
+
+/* No visible ::after suffix with the bucket name.
+   The aria-label already announces "Reviewed N years ago (ISO date)";
+   adding a visible "(stale)" via ::after would cause screen readers
+   to double-announce the staleness concept. Sighted users get the
+   editorial styling (color + underline) which IS the signal. The
+   bucket name is available via data-freshness for dev-tools
+   inspection but not user-visible.
+
+   Decided not to use :hover tooltips here either — the chip is a
+   <time>, not a button; users don't hover for help text in this
+   product's editorial voice. */
+
+/* High-contrast palette bump — the gold + oxblood tokens lift to
+   AAA-passing variants under prefers-contrast: more (defined in
+   _tokens.css). The .freshness-* rules already reference those
+   tokens by name so no override is needed here; this block exists
+   only to bump the muted .freshness-recent back to baseline so it
+   doesn't undercut the AAA target. */
+@media (prefers-contrast: more) {
+  .freshness-recent {
+    color: var(--ink-soft);
+    opacity: 1;
+  }
+}
+
+/* Forced-colors (Windows High Contrast) — drop the editorial
+   palette and surface the bucket via system tokens. Stale uses the
+   highlight pair correctly: ``MarkText`` is the foreground color
+   (text on the highlight) and ``Mark`` is the highlight background.
+   Aging stays with a dotted ``CanvasText`` underline so the chip
+   reads as graded without taking over the visual field. */
+@media (forced-colors: active) {
+  .freshness-aging {
+    color: CanvasText;
+    text-decoration: underline dotted CanvasText;
+    forced-color-adjust: none;
+  }
+  .freshness-stale {
+    /* MarkText on Mark — the system-defined high-contrast highlight
+       pair. Adjust if a WHC theme inverts; this matches the spec
+       intent (mark/highlighted text). */
+    color: MarkText;
+    background: Mark;
+    text-decoration: underline solid MarkText;
+    padding-inline: 0.25em;
+    forced-color-adjust: none;
+  }
+}
+
+/* Reduced motion: no transitions on the freshness chip; nothing
+   to suppress today, but pinned so a future ::before/::after
+   animation can't slip past prefers-reduced-motion. */
+@media (prefers-reduced-motion: reduce) {
+  .freshness,
+  .freshness-aging,
+  .freshness-stale {
+    transition: none;
+  }
+}

@@ -18,6 +18,10 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+# #408 F17 staleness signal helpers live in api/freshness.py - extracted
+# in the review-fix pass to keep views.py at the cap. Re-exported here
+# (via the __all__ list) so the import path stays stable.
+from cf_knowledge_kiln.api.freshness import freshness_bucket, freshness_label
 from cf_knowledge_kiln.db.repositories import QueriesRepository
 from cf_knowledge_kiln.retrieval import RetrievalFilters
 
@@ -473,6 +477,8 @@ __all__ = [
     "authority_tooltip",
     "deprecation_label",
     "feedback_categories",
+    "freshness_bucket",
+    "freshness_label",
     "humanize_warning",
     "log_human_query",
     "rail_filters_active_count",
