@@ -61,7 +61,7 @@ _PYGMENTS_FORMATTER = HtmlFormatter(
 )
 
 
-class _KilnRenderer(mistune.HTMLRenderer):  # type: ignore[misc]
+class _KilnRenderer(mistune.HTMLRenderer):  # type: ignore[misc, unused-ignore]
     r"""Mistune renderer with Pygments class-mode codeblocks + heading demotion.
 
     Inherits the default ``HTMLRenderer`` behavior for paragraphs,
