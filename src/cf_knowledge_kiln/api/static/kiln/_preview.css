@@ -32,7 +32,7 @@
 
 .preview-eyebrow {
   font-family: var(--serif);
-  font-size: 0.7rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.2em;
@@ -171,7 +171,7 @@
 }
 .preview-target-index {
   font-family: var(--mono);
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   margin-inline-start: 0.4rem;
 }
 
@@ -212,7 +212,7 @@
 }
 .preview-neighbor summary::-webkit-details-marker { display: none; }
 .preview-neighbor-label { font-style: italic; }
-.preview-neighbor-index { font-family: var(--mono); font-size: 0.7rem; }
+.preview-neighbor-index { font-family: var(--mono); font-size: var(--text-xs); }
 
 .preview-missing {
   margin: 0;

@@ -104,7 +104,7 @@
    editorial mark, not a tag. */
 .deprecation-stamp {
   font-family: var(--serif);
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   font-weight: 500;
   font-variant-caps: all-small-caps;
   letter-spacing: 0.16em;

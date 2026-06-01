@@ -570,7 +570,7 @@ input:focus-visible,
   text-transform: uppercase;
   letter-spacing: 0.22em;
   font-variant-caps: all-small-caps;
-  font-size: 0.7rem;
+  font-size: var(--text-xs);
   color: var(--oxblood-deep);
   margin-inline-end: 0.5rem;
   font-weight: 600;
@@ -591,7 +591,7 @@ input:focus-visible,
 .shortcut-hint kbd {
   font-family: var(--mono);
   font-style: normal;
-  font-size: 0.7rem;
+  font-size: var(--text-xs);
   /* --paper-soft sits one shade lighter than --paper-dim (the banner
      background), so the chip reads as a raised tile in both light and
      dark mode (#138 reviewer LOW — kbd was invisible against banner). */
@@ -973,7 +973,7 @@ a[data-tooltip]:not([data-tooltip=""]) {
   text-transform: uppercase;
   letter-spacing: 0.22em;
   font-variant-caps: all-small-caps;
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--ink-faded);
   padding: 0;
@@ -1091,7 +1091,7 @@ a[data-tooltip]:not([data-tooltip=""]) {
   text-transform: uppercase;
   letter-spacing: 0.22em;
   font-variant-caps: all-small-caps;
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--ink-faded);
 }
@@ -1116,7 +1116,7 @@ a[data-tooltip]:not([data-tooltip=""]) {
   text-transform: uppercase;
   letter-spacing: 0.22em;
   font-variant-caps: all-small-caps;
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--ink);
   /* The leading "· " is part of the text content so it reflows with
@@ -1221,7 +1221,7 @@ a[data-tooltip]:not([data-tooltip=""]) {
   text-transform: uppercase;
   letter-spacing: 0.22em;
   font-variant-caps: all-small-caps;
-  font-size: 0.7rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--ink-faded);
   padding: 0;
@@ -1594,7 +1594,7 @@ a[data-tooltip]:not([data-tooltip=""]) {
    editorial mark, not a tag. */
 .deprecation-stamp {
   font-family: var(--serif);
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   font-weight: 500;
   font-variant-caps: all-small-caps;
   letter-spacing: 0.16em;
@@ -1887,7 +1887,7 @@ a.source-link:focus-visible {
 
 .score-tier-num {
   font-family: var(--mono);
-  font-size: 0.7rem;
+  font-size: var(--text-xs);
   color: var(--ink-soft);
   font-variant-numeric: tabular-nums;
   /* Subtle separator from the dots so the row reads as
@@ -3053,7 +3053,7 @@ a.source-link:focus-visible {
 
 .preview-eyebrow {
   font-family: var(--serif);
-  font-size: 0.7rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.2em;
@@ -3192,7 +3192,7 @@ a.source-link:focus-visible {
 }
 .preview-target-index {
   font-family: var(--mono);
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   margin-inline-start: 0.4rem;
 }
 
@@ -3233,7 +3233,7 @@ a.source-link:focus-visible {
 }
 .preview-neighbor summary::-webkit-details-marker { display: none; }
 .preview-neighbor-label { font-style: italic; }
-.preview-neighbor-index { font-family: var(--mono); font-size: 0.7rem; }
+.preview-neighbor-index { font-family: var(--mono); font-size: var(--text-xs); }
 
 .preview-missing {
   margin: 0;
@@ -3771,7 +3771,7 @@ a.source-link:focus-visible {
 .cheatsheet-row dd { margin: 0; color: var(--ink); }
 .cheatsheet kbd {
   font-family: var(--mono);
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   background: var(--paper-soft, var(--paper));
   border: 1px solid var(--rule);
   border-block-end-width: 2px;
@@ -4179,7 +4179,7 @@ a.source-link:focus-visible {
   }
   .result-index {
     padding-block-start: 0.4rem;
-    font-size: 0.7rem;
+    font-size: var(--text-xs);
   }
 
   .colophon {
