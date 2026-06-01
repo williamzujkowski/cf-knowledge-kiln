@@ -152,6 +152,10 @@
   font-size: 0.86rem;
   line-height: 1.55;
   color: var(--ink);
+  /* #407 A2: AAA WCAG 1.4.8 caps prose at 80 chars. The mono font
+     is denser than the serif so the same --measure-prose value
+     yields ~85ch in practice — still well under the AAA bar. */
+  max-inline-size: var(--measure-prose, 38rem);
 }
 .preview-body-neighbor {
   font-size: 0.78rem;
@@ -193,7 +197,7 @@
   font-size: 0.8rem;
 }
 .preview-source-link {
-  color: var(--teal);
+  color: var(--teal-deep);
   text-decoration: none;
   border-block-end: 1px solid currentColor;
 }

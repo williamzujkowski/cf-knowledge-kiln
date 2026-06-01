@@ -35,7 +35,7 @@
   outline: 0;
   width: 100%;
   padding: 0.15rem 0;
-  caret-color: var(--oxblood);
+  caret-color: var(--oxblood-deep);
 }
 
 .query-input::placeholder {
@@ -48,7 +48,7 @@
 }
 
 .query-row:focus-within {
-  border-block-end-color: var(--oxblood);
+  border-block-end-color: var(--oxblood-deep);
   border-block-end-width: 2px;
   margin-block-end: -1px;
 }
@@ -139,7 +139,7 @@
 
 .pill-warn:has(input:checked) {
   background: var(--oxblood);
-  border-color: var(--oxblood);
+  border-color: var(--oxblood-deep);
 }
 
 .pill:has(input:focus-visible) {
@@ -257,7 +257,7 @@
 }
 
 .filter-rail-active:not([open]) .filter-rail-count {
-  color: var(--oxblood);
+  color: var(--oxblood-deep);
 }
 
 .filter-rail-grid {
@@ -311,7 +311,7 @@
   font-size: 0.85rem;
   background: transparent;
   border: 0;
-  color: var(--oxblood);
+  color: var(--oxblood-deep);
   cursor: pointer;
   padding: 0.15rem 0.4rem;
   border-radius: 2px;
@@ -329,7 +329,7 @@
 
 .filter-reset-button:hover em,
 .filter-reset-button:focus-visible em {
-  text-decoration-color: var(--oxblood);
+  text-decoration-color: var(--oxblood-deep);
 }
 
 .rail-field-multi {
@@ -374,7 +374,7 @@
 
 .rail-field-input:focus-visible {
   outline: 0;
-  border-block-end-color: var(--oxblood);
+  border-block-end-color: var(--oxblood-deep);
   border-block-end-width: 2px;
   padding-block-end: 0.25rem;
 }

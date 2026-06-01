@@ -16,7 +16,7 @@
   margin-block: 0.5rem 0;
 }
 .notice-alert .error-message {
-  color: var(--oxblood);
+  color: var(--oxblood-deep);
 }
 /* ─── #122 Feedback widget (inline italic phrase) ──────────────── */
 
@@ -66,8 +66,8 @@
   transition: color 120ms ease, border-color 120ms ease;
 }
 .feedback-link:hover {
-  color: var(--oxblood);
-  border-block-end-color: var(--oxblood);
+  color: var(--oxblood-deep);
+  border-block-end-color: var(--oxblood-deep);
 }
 .feedback-link:focus-visible {
   outline: 2px solid var(--oxblood);
@@ -89,7 +89,7 @@
   gap: 0.45rem;
   padding: 0.3rem 0.7rem;
   background: var(--teal-tint);
-  color: var(--teal);
+  color: var(--teal-deep);
   font-family: var(--serif);
   font-style: italic;
   font-size: 0.85rem;

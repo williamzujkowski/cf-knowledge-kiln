@@ -61,7 +61,7 @@
 
 .onboarding-title em {
   font-style: italic;
-  color: var(--oxblood);
+  color: var(--oxblood-deep);
 }
 
 .onboarding-body {
@@ -120,7 +120,7 @@
 .onboarding-primary:hover,
 .onboarding-primary:focus-visible {
   background: var(--oxblood);
-  border-color: var(--oxblood);
+  border-color: var(--oxblood-deep);
 }
 
 .onboarding-secondary {
@@ -130,8 +130,8 @@
 
 .onboarding-secondary:hover,
 .onboarding-secondary:focus-visible {
-  color: var(--oxblood);
-  border-color: var(--oxblood);
+  color: var(--oxblood-deep);
+  border-color: var(--oxblood-deep);
 }
 
 @keyframes onboarding-scrim-fade {

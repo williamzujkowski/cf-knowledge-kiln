@@ -31,7 +31,16 @@
   --paper-dim:    #e7ecf5;
   --ink:          #333e4f;
   --ink-soft:     #475365;
-  --ink-faded:    #5d6a7d;
+  /* #407 A1: --ink-faded was #5d6a7d (5.26:1, AA only). Lifted to
+     #3f4a5e (8.32:1, AAA — same value the prefers-contrast: more
+     block uses, so the two modes now converge for this token).
+     Every usage of --ink-faded in the codebase is text (.freshness,
+     .owner, .results-count, .tagline, .colophon, .source-line,
+     etc.) — for AAA normal-text conformance the default must clear
+     7:1. An earlier review-fix tried #4d586a but a contrast-ratio
+     re-check landed it at 6.70:1 (below AAA); #3f4a5e is the
+     conservative AAA choice. */
+  --ink-faded:    #3f4a5e;
   --rule:         #c8d2e0;
   --rule-strong:  #9aa5b8;
 
@@ -42,6 +51,22 @@
   --teal-tint:    #cde3ed;
   --gold:         #904b1a;
   --gold-tint:    #f1dec8;
+
+  /* #407 A1: AAA-passing deep variants of the accent palette.
+     The default --oxblood/--teal/--gold land at AA (5.05–5.31:1
+     on --paper) — fine for UI components (borders, badges, caret,
+     focus rings) that only need WCAG 1.4.11's 3:1 bar. These
+     -deep variants meet AAA's 7:1 normal-text bar and get used
+     where the accent carries body text (.error-message,
+     .superseded-by-link, .preview-source-link, code-block tokens,
+     .warning-prefix etc.). Already in use by _code.css and
+     _freshness.css with var(--*-deep, var(--*)) fallback.
+     The prefers-contrast: more block below already drives the
+     AA tokens to ~these same values; explicit -deep tokens make
+     the AAA path available at default contrast too. */
+  --oxblood-deep:      #7e1820;  /* 8.0:1 — AAA */
+  --teal-deep:         #00475e;  /* 7.0:1 — AAA */
+  --gold-deep:         #6b3712;  /* 7.5:1 — AAA */
   /* Deprecation-stripe carries the oxblood RGB so the dark-mode
      override can boost the alpha for visibility against #212121.
      #268: bumped from 0.06 → 0.14 so the hatched pattern is
@@ -56,7 +81,14 @@
   --mono:  "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
 
   /* Geometry */
-  --measure:    44rem;          /* reading column */
+  --measure:    44rem;          /* reading column — page-level */
+  /* #407 A2: AAA WCAG 1.4.8 caps prose at 80 chars. The default
+     --measure (44rem ≈ 95-100 chars of serif body) is above the
+     bar; --measure-prose narrows long-form text columns
+     (.excerpt, .preview-body, .notice, .markdown) to ~80ch
+     without shrinking the page-level grid. Apply via
+     `max-inline-size: var(--measure-prose)`. */
+  --measure-prose: 38rem;       /* ~80ch serif body — AAA 1.4.8 */
   --gutter:     2.75rem;         /* index-number gutter */
   --rule-thin:  1px;
   --rule-mid:   2px;
@@ -80,7 +112,8 @@
     --paper-dim:    #181818;
     --ink:          #f8f8f2;
     --ink-soft:     #c5c5bc;
-    --ink-faded:    #8d8d8d;
+    /* #407 A1: lifted from #8d8d8d (4.85:1 AA) → #b8b8b8 (~7.5:1 AAA). */
+    --ink-faded:    #b8b8b8;
     --rule:         #3a3a3a;
     --rule-strong:  #545454;
 
@@ -90,6 +123,12 @@
     --teal-tint:    #1f3a44;
     --gold:         #ffcb6b;
     --gold-tint:    #3a2e1f;
+    /* #407 A1: dark-mode AAA-passing -deep variants. Dracula+
+       accents that were already AAA on #212121 stay; --oxblood
+       (5.12:1 AA) bumps to #ff8888 (7.4:1 AAA). */
+    --oxblood-deep:      #ff8888;  /* ~7.4:1 AAA on #212121 */
+    --teal-deep:         #b6f0ff;  /* AAA on #212121 (already brighter than --teal) */
+    --gold-deep:         #ffe199;  /* AAA on #212121 */
     /* Dark-mode stripe uses the bright dracula red RGB so the
        deprecation pattern remains visible against #212121.
        #268: bumped 0.06 → 0.12 (dark theme can carry less alpha

@@ -70,8 +70,8 @@ a {
 }
 
 a:hover {
-  text-decoration-color: var(--oxblood);
-  color: var(--oxblood);
+  text-decoration-color: var(--oxblood-deep);
+  color: var(--oxblood-deep);
 }
 
 a:focus-visible,
@@ -257,10 +257,13 @@ input:focus-visible,
   font-size: 0.9rem;
   color: var(--ink-soft);
   line-height: 1.5;
+  /* #407 A2: cap prose at the AAA 80-char measure so the notice
+     reads as a quiet aside, not a wall of text. */
+  max-inline-size: var(--measure-prose, 38rem);
 }
 
 .notice em {
-  color: var(--oxblood);
+  color: var(--oxblood-deep);
   font-style: italic;
   font-weight: 500;
 }
@@ -272,7 +275,7 @@ input:focus-visible,
   letter-spacing: 0.22em;
   font-variant-caps: all-small-caps;
   font-size: 0.7rem;
-  color: var(--oxblood);
+  color: var(--oxblood-deep);
   margin-inline-end: 0.5rem;
   font-weight: 600;
 }

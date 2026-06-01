@@ -66,7 +66,7 @@
   font: inherit;
   font-family: var(--serif);
   font-style: italic;
-  color: var(--teal);
+  color: var(--teal-deep);
   cursor: pointer;
   text-decoration: underline;
   text-decoration-style: dotted;
@@ -76,8 +76,8 @@
 }
 .empty-exemplar:hover,
 .empty-exemplar:focus-visible {
-  color: var(--oxblood);
-  text-decoration-color: var(--oxblood);
+  color: var(--oxblood-deep);
+  text-decoration-color: var(--oxblood-deep);
 }
 .empty-exemplar:focus-visible {
   outline: 2px solid var(--oxblood);
@@ -118,15 +118,15 @@
   font: inherit;
   font-family: var(--serif);
   font-style: italic;
-  color: var(--teal);
+  color: var(--teal-deep);
   cursor: pointer;
   border-block-end: 1px solid var(--rule);
   transition: color 120ms ease, border-color 120ms ease;
 }
 .widen-button:hover,
 .widen-button:focus-visible {
-  color: var(--oxblood);
-  border-block-end-color: var(--oxblood);
+  color: var(--oxblood-deep);
+  border-block-end-color: var(--oxblood-deep);
 }
 .widen-button:focus-visible {
   outline: 2px solid var(--oxblood);

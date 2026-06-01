@@ -161,7 +161,7 @@
   padding: 0 0.1rem;
   border: 0;
   background: transparent;
-  color: var(--teal);
+  color: var(--teal-deep);
   white-space: nowrap;
   align-self: baseline;
   display: inline-flex;
@@ -178,11 +178,10 @@
 }
 
 .status-badge.status-approved,
-.status-badge.status-active { color: var(--teal); }
+.status-badge.status-active { color: var(--teal-deep); }
 
-.status-badge.status-draft { color: var(--gold); }
+.status-badge.status-draft { color: var(--gold-deep); }
 
 .status-badge.status-deprecated,
 .status-badge.status-archived,
-.status-badge.status-superseded { color: var(--oxblood); }
-
+.status-badge.status-superseded { color: var(--oxblood-deep); }

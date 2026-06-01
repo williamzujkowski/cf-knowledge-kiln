@@ -52,8 +52,8 @@ a.source-link {
 
 a.source-link:hover,
 a.source-link:focus-visible {
-  color: var(--teal);
-  border-bottom-color: var(--teal);
+  color: var(--teal-deep);
+  border-bottom-color: var(--teal-deep);
 }
 
 a.source-link:focus-visible {
@@ -167,11 +167,11 @@ a.source-link:focus-visible {
                        but flagged
    - Tier 1 (<  0.46): oxblood — below configured threshold; only
                        visible if operator tuned it down */
-.score-tier-5 { color: var(--teal); }
-.score-tier-4 { color: var(--teal); opacity: 0.85; }
+.score-tier-5 { color: var(--teal-deep); }
+.score-tier-4 { color: var(--teal-deep); opacity: 0.85; }
 .score-tier-3 { color: var(--ink-soft); }
-.score-tier-2 { color: var(--gold); }
-.score-tier-1 { color: var(--oxblood); }
+.score-tier-2 { color: var(--gold-deep); }
+.score-tier-1 { color: var(--oxblood-deep); }
 
 /* ── #354 color-blind safety ────────────────────────────────────
  *
@@ -295,8 +295,8 @@ a.source-link:focus-visible {
 .authority-band.authority-security,
 .authority-band.authority-standards,
 .authority-band.authority-compliance {
-  border-left-color: var(--teal);
-  border-right-color: var(--teal);
+  border-left-color: var(--teal-deep);
+  border-right-color: var(--teal-deep);
   color: var(--ink);
 }
 

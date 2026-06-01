@@ -29,9 +29,12 @@
 
 .freshness-aging {
   /* Amber / warm tint. The dotted underline signals "the value is
-     graded" without claiming the doc is wrong. */
-  color: var(--gold);
-  text-decoration: underline dotted var(--gold);
+     graded" without claiming the doc is wrong. Both color AND
+     text-decoration-color use --gold-deep (AAA 8.98:1 on --paper)
+     — when the decoration is the visual signal on body text, it
+     must hit AAA per WCAG 1.4.6. */
+  color: var(--gold-deep);
+  text-decoration: underline dotted var(--gold-deep);
   text-underline-offset: 2px;
 }
 
@@ -41,9 +44,10 @@
      (oxblood = caution) so users learn the editorial signal once.
      ``font-style: normal`` overrides the italic from the base
      ``.freshness`` rule in _excerpt_score.css so the stale chip
-     reads as a flag, not a quiet aside. */
-  color: var(--oxblood);
-  text-decoration: underline solid var(--oxblood);
+     reads as a flag, not a quiet aside. Both color AND
+     text-decoration-color at --oxblood-deep (AAA 9.60:1 on --paper). */
+  color: var(--oxblood-deep);
+  text-decoration: underline solid var(--oxblood-deep);
   text-underline-offset: 2px;
   font-style: normal;
   font-variation-settings: "opsz" 14, "wght" 450;

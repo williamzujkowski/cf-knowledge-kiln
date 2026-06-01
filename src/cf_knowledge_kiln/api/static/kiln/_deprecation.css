@@ -80,7 +80,7 @@
 .result-card.status-superseded .result-title {
   color: var(--ink-soft);
   text-decoration: line-through;
-  text-decoration-color: var(--oxblood);
+  text-decoration-color: var(--oxblood-deep);
   text-decoration-thickness: 1px;
   text-decoration-skip-ink: auto;
 }
@@ -108,7 +108,7 @@
   font-weight: 500;
   font-variant-caps: all-small-caps;
   letter-spacing: 0.16em;
-  color: var(--oxblood);
+  color: var(--oxblood-deep);
   white-space: nowrap;
   align-self: baseline;
   display: inline-flex;
@@ -155,7 +155,7 @@
   /* The leading "Superseded by" reads as a margin-note label —
      italic-on-italic with the oxblood echo from the stamp. */
   font-style: italic;
-  color: var(--oxblood);
+  color: var(--oxblood-deep);
 }
 
 .superseded-by-link {
@@ -170,8 +170,8 @@
 
 .superseded-by-link:hover,
 .superseded-by-link:focus-visible {
-  color: var(--oxblood);
-  text-decoration-color: var(--oxblood);
+  color: var(--oxblood-deep);
+  text-decoration-color: var(--oxblood-deep);
 }
 
 .heading-path {
@@ -191,10 +191,11 @@
   color: var(--ink);
   line-height: 1.6;
   font-size: 1rem;
+  /* #407 A2: AAA WCAG 1.4.8 caps prose at 80 chars. */
+  max-inline-size: var(--measure-prose, 38rem);
   /* Limit to 4 lines to keep result density. */
   display: -webkit-box;
   -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-
