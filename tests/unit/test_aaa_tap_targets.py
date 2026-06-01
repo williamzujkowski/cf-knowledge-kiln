@@ -58,26 +58,45 @@ def _rule_block(css: str, selector: str) -> str:
     return m.group(0)
 
 
-def _parse_inset_min_slop(block: str) -> float:
-    """Return the minimum slop (in rem) across all inset values
-    declared in a ``::before`` rule.
+def _parse_inset_block_slop(block: str) -> float:
+    """Return the BLOCK-axis slop (in rem) declared in an ``inset``
+    rule on a ``::before`` pseudo. The block-axis is the one that
+    matters for the 44-px bar on inline-laid-out text; the inline
+    axis is either also extended (symmetric inset) or stays at 0
+    when the surrounding flex layout makes extending inline-ward
+    unsafe (e.g. .result-title-button can't grow inline without
+    overlapping the .status-badge / score-row siblings).
 
     Accepts:
-        inset: -0.7rem;
-        inset: -0.85rem -0.5rem;
-        inset: -1rem -2rem -1rem -2rem;
-    Picks the smallest absolute magnitude so the test enforces the
-    weakest direction meets the bar.
+        inset: -0.7rem;                 (block = inline = 0.7)
+        inset: -0.85rem -0.5rem;        (block = 0.85, inline = 0.5)
+        inset: -0.65rem 0;              (block = 0.65, inline = 0)
+        inset: -1rem -2rem -1rem -2rem; (top, right, bottom, left)
     """
     m = re.search(r"inset:\s*([^;]+);", block)
     assert m is not None, f"::before block has no inset declaration:\n{block}"
     parts = m.group(1).strip().split()
-    rem_values: list[float] = []
-    for part in parts:
-        match = re.match(r"(-?\d+(?:\.\d+)?)rem", part)
-        assert match is not None, f"unsupported inset unit in {part!r}"
-        rem_values.append(abs(float(match.group(1))))
-    return min(rem_values)
+
+    def _to_rem(token: str) -> float:
+        if token == "0":
+            return 0.0
+        match = re.match(r"(-?\d+(?:\.\d+)?)rem", token)
+        assert match is not None, f"unsupported inset unit in {token!r}"
+        return abs(float(match.group(1)))
+
+    values = [_to_rem(p) for p in parts]
+    # CSS inset shorthand axes: 1=all, 2=block/inline, 3=top/inline/bottom, 4=t/r/b/l.
+    # Return the block-axis (vertical) slop in every case.
+    if len(values) == 1:
+        return values[0]
+    if len(values) == 2:
+        return values[0]  # block axis
+    if len(values) == 3:
+        # top, inline, bottom — average top+bottom for block representation.
+        return (values[0] + values[2]) / 2
+    if len(values) == 4:
+        return (values[0] + values[2]) / 2  # top + bottom average
+    raise AssertionError(f"unexpected inset shape: {values!r}")
 
 
 # (partial, selector, smallest_visible_dim_px): the third value is the
@@ -106,6 +125,19 @@ _TARGETS = [
         ".feedback-link",
         18.0,
         id="feedback-link",
+    ),
+    # #415 follow-up — result title is its own clickable button.
+    # Font-size 1.35rem * line-height 1.25 = 27px block axis on a
+    # single-line title. Inline axis is the title text width (always
+    # well over 44px for any non-empty title), so the smallest-dim
+    # constraint is block-axis. The ::before inset is asymmetric
+    # (block-axis only) to avoid overlapping the .status-badge / score-
+    # row siblings to the right.
+    pytest.param(
+        "_results.css",
+        ".result-title-button",
+        27.0,
+        id="result-title-button",
     ),
 ]
 
@@ -148,15 +180,15 @@ def test_44px_hit_area_via_pseudo(
     assert "position: absolute" in block, (
         f"{selector}::before missing position: absolute; pseudo won't overlay the button."
     )
-    min_slop_rem = _parse_inset_min_slop(block)
-    min_slop_px = min_slop_rem * 16
+    block_slop_rem = _parse_inset_block_slop(block)
+    block_slop_px = block_slop_rem * 16
     needed_slop_px_per_side = (44 - smallest_dim) / 2
-    assert min_slop_px >= needed_slop_px_per_side, (
-        f"{selector}::before inset slop is {min_slop_rem}rem "
-        f"({min_slop_px:.1f}px per side). To bring a {smallest_dim}px "
+    assert block_slop_px >= needed_slop_px_per_side, (
+        f"{selector}::before block-axis inset slop is {block_slop_rem}rem "
+        f"({block_slop_px:.1f}px per side). To bring a {smallest_dim}px "
         f"glyph past 44px we need at least "
         f"{needed_slop_px_per_side:.1f}px per side — short by "
-        f"{needed_slop_px_per_side - min_slop_px:.1f}px."
+        f"{needed_slop_px_per_side - block_slop_px:.1f}px."
     )
 
 
