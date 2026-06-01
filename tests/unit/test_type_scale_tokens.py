@@ -179,42 +179,65 @@ def test_body_line_height_uses_leading_body_token() -> None:
 _KILN_DIR = _REPO / "src" / "cf_knowledge_kiln" / "api" / "static" / "kiln"
 
 
-_TEXT_XS_LEGACY = ("0.7rem", "0.72rem", "0.78rem")
-_TEXT_SM_LEGACY = (
-    "0.82rem",
-    "0.84rem",
-    "0.85rem",
-    "0.86rem",
-    "0.88rem",
-    "0.9rem",
-    "0.92rem",
-)
+_CLUSTERS: dict[str, tuple[str, ...]] = {
+    "--text-2xs": ("0.65rem",),
+    "--text-xs": ("0.7rem", "0.72rem", "0.78rem"),
+    "--text-sm": (
+        "0.82rem",
+        "0.84rem",
+        "0.85rem",
+        "0.86rem",
+        "0.88rem",
+        "0.9rem",
+        "0.92rem",
+    ),
+    "--text-base": ("0.95rem",),
+    "--text-md": ("1.15rem",),
+    "--text-xl": ("1.32rem", "1.35rem", "1.4rem"),
+}
+
+# Documented per-partial exemptions. ``.preview-close`` keeps
+# ``font-size: 1.4rem`` because promoting it to var(--text-xl) (24px)
+# made the close glyph visually heavy next to the preview-title -
+# caught by the #424 review. The rationale lives in the CSS comment
+# too; this allowlist is the test-side mirror so a future sweep
+# doesn't catch the deliberate exception.
+_LEGACY_EXEMPTIONS: dict[str, frozenset[str]] = {
+    "1.4rem": frozenset({"_preview.css"}),
+}
+
+_CLUSTER_PARAMS = [
+    pytest.param(token, legacy, id=f"{legacy}->{token}")
+    for token, legacies in _CLUSTERS.items()
+    for legacy in legacies
+]
 
 
-@pytest.mark.parametrize("legacy_value", _TEXT_XS_LEGACY)
-def test_no_orphan_text_xs_cluster(legacy_value: str) -> None:
-    """The --text-xs cluster (0.7 / 0.72 / 0.78 → 0.75) has been
-    fully migrated. Pin each legacy value separately for clearer
-    output when a regression sneaks one in."""
-    _assert_no_orphan_font_size(legacy_value, target_token="--text-xs")
+@pytest.mark.parametrize("target_var,legacy_value", _CLUSTER_PARAMS)
+def test_no_orphan_legacy_font_size(target_var: str, legacy_value: str) -> None:
+    """Every legacy ad-hoc font-size value has been migrated to its
+    cluster token, EXCEPT for the partial-specific exemptions in
+    :data:`_LEGACY_EXEMPTIONS`. Pinning legacy values separately
+    gives a precise failure message when one regresses."""
+    exemptions = _LEGACY_EXEMPTIONS.get(legacy_value, frozenset())
+    _assert_no_orphan_font_size(legacy_value, target_var=target_var, exempted_partials=exemptions)
 
 
-@pytest.mark.parametrize("legacy_value", _TEXT_SM_LEGACY)
-def test_no_orphan_text_sm_cluster(legacy_value: str) -> None:
-    """The --text-sm cluster (0.82 / 0.84 / 0.85 / 0.86 / 0.88 / 0.9
-    / 0.92 → 0.875) has been fully migrated. Same shape as the
-    --text-xs guard."""
-    _assert_no_orphan_font_size(legacy_value, target_token="--text-sm")
-
-
-def _assert_no_orphan_font_size(legacy_value: str, *, target_token: str) -> None:
+def _assert_no_orphan_font_size(
+    legacy_value: str,
+    *,
+    target_var: str,
+    exempted_partials: frozenset[str] = frozenset(),
+) -> None:
     offenders: list[str] = []
     needle = f"font-size: {legacy_value}"
     for partial in sorted(_KILN_DIR.glob("_*.css")):
+        if partial.name in exempted_partials:
+            continue
         css = partial.read_text(encoding="utf-8")
         if needle in css:
             offenders.append(partial.name)
     assert not offenders, (
         f"font-size: {legacy_value} should have migrated to "
-        f"var({target_token}) under #406. Still present in: {offenders}."
+        f"var({target_var}) under #406. Still present in: {offenders}."
     )

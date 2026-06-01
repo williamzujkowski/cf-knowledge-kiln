@@ -116,8 +116,11 @@ def test_mobile_card_shrinks_gutter(kiln_css: str) -> None:
 def test_mobile_index_softens_not_dropped(kiln_css: str) -> None:
     """The numbered gutter ('01', '02') is a signature element — it
     must SOFTEN on mobile, not disappear. Display-grade opsz drops to
-    text-grade because the curves only earn their keep above ~1.4rem."""
-    assert "font-size: 1.15rem" in kiln_css  # mid-tier
+    text-grade because the curves only earn their keep above the
+    title size."""
+    # #406 migration: was font-size: 1.15rem, now var(--text-md)
+    # which is 1.125rem (18px) — same mid-tier rhythm.
+    assert "font-size: var(--text-md)" in kiln_css  # mid-tier
     assert "font-size: 1rem" in kiln_css  # worst-case
     # Display-grade opsz 144 (desktop) is replaced with text-grade.
     assert 'font-variation-settings: "opsz" 36' in kiln_css

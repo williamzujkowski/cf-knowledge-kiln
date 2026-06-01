@@ -22,7 +22,7 @@
   font-family: var(--serif);
   font-style: italic;
   color: var(--ink-faded);
-  font-size: 0.95rem;
+  font-size: var(--text-base);
   margin: 0 0 1rem;
   font-variation-settings: "opsz" 14;
 }
@@ -111,9 +111,11 @@
   font-family: var(--serif);
   font-weight: 500;
   /* #122: opsz contrast — push opsz to 96 + SOFT 30 + slightly tighter
-     letter-spacing so titles read as display headings against the now-
-     16px body. Size pulled to 1.35rem per the typographic-depth spec. */
-  font-size: 1.35rem;
+     letter-spacing so titles read as display headings against the
+     body baseline. #406 collapsed the prior 1.35rem hard-coded value
+     into the title cluster token; the visual relationship to body
+     survives because body is also rem-based. */
+  font-size: var(--text-xl);
   line-height: 1.25;
   letter-spacing: -0.012em;
   color: var(--ink);

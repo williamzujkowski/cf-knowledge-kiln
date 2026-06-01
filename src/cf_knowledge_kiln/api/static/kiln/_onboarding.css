@@ -67,7 +67,7 @@
 .onboarding-body {
   margin: 0.65rem 0 0;
   font-family: var(--serif);
-  font-size: 0.95rem;
+  font-size: var(--text-base);
   line-height: 1.55;
   color: var(--ink-soft);
 }

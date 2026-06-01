@@ -249,7 +249,7 @@ input:focus-visible,
 .tagline {
   margin: 0.65rem 0 0;
   color: var(--ink-soft);
-  font-size: 0.95rem;
+  font-size: var(--text-base);
   font-style: italic;
   font-variation-settings: "opsz" 14;
 }

@@ -26,7 +26,7 @@
 
 .query-input {
   font-family: var(--serif);
-  font-size: 1.4rem;
+  font-size: var(--text-xl);
   font-style: italic;
   font-variation-settings: "opsz" 60;
   color: var(--ink);
@@ -375,7 +375,7 @@
 
 .rail-field-input {
   font-family: var(--serif);
-  font-size: 0.95rem;
+  font-size: var(--text-base);
   color: var(--ink);
   background: transparent;
   border: 0;

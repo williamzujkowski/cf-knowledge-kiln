@@ -19,7 +19,7 @@
 
 .preview-empty {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: var(--text-base);
   color: var(--ink-soft);
 }
 
@@ -52,6 +52,12 @@
   background: transparent;
   border: 0;
   font-family: var(--serif);
+  /* #406 — deliberately NOT migrated to var(--text-xl). The close
+     glyph sits in the preview-head alongside the preview-title
+     (which IS var(--text-xl)); promoting the × there made the
+     close button visually heavy. Held at 1.4rem (~22.4px) — the
+     pre-#406 value. If the title cluster gets a finer-grained
+     intermediate token in a future PR, swap this to that token. */
   font-size: 1.4rem;
   line-height: 1;
   color: var(--ink-soft);
@@ -100,7 +106,7 @@
   margin: 0 0 0.3rem;
   font-family: var(--serif);
   font-weight: 500;
-  font-size: 1.32rem;
+  font-size: var(--text-xl);
   line-height: 1.2;
   letter-spacing: -0.01em;
   font-variation-settings: "opsz" 48;
@@ -120,7 +126,7 @@
 .preview-source { word-break: break-all; }
 .preview-status {
   font-family: var(--serif);
-  font-size: 0.65rem;
+  font-size: var(--text-2xs);
   font-variant-caps: all-small-caps;
   letter-spacing: 0.18em;
   border: 1px solid currentColor;
@@ -216,7 +222,7 @@
 
 .preview-missing {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: var(--text-base);
   color: var(--ink-soft);
 }
 

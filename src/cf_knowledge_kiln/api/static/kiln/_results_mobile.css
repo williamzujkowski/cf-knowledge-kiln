@@ -36,7 +36,7 @@
     /* Soften — drop display-grade opsz, shrink to body-display size.
        Still italic Fraunces oldstyle nums; reads as quiet chapter
        mark, not editorial showpiece. */
-    font-size: 1.15rem;
+    font-size: var(--text-md);
     font-variation-settings: "opsz" 36;
     padding-block-start: 0.1rem;
   }
@@ -47,7 +47,7 @@
   }
 
   .result-title {
-    font-size: 1.15rem;
+    font-size: var(--text-md);
     line-height: 1.22;
     /* Drop display-grade opsz at small sizes — text-grade curves
        carry better at body sizes. */
@@ -264,7 +264,7 @@
   .result-index {
     /* opsz 72 between desktop's 144 and 640's 36 — chapter-mark
        character preserved at this width. */
-    font-size: 1.4rem;
+    font-size: var(--text-xl);
     font-variation-settings: "opsz" 72;
   }
 
