@@ -34,9 +34,6 @@ from cf_knowledge_kiln.retrieval._engine_helpers import (
     collect_warnings as _collect_warnings,
 )
 from cf_knowledge_kiln.retrieval._engine_helpers import (
-    conflict_warnings as _conflict_warnings,
-)
-from cf_knowledge_kiln.retrieval._engine_helpers import (
     document_refs_from_rows as _document_refs_from_rows,
 )
 from cf_knowledge_kiln.retrieval._engine_helpers import (
@@ -56,7 +53,6 @@ from cf_knowledge_kiln.retrieval.query_normalization import normalize_query
 from cf_knowledge_kiln.retrieval.ranking import (
     RankedChunk,
     apply_boosts,
-    detect_conflicts,
 )
 from cf_knowledge_kiln.retrieval.types import (
     ContextPackResponse,
@@ -241,102 +237,35 @@ class HybridRetriever:
     ) -> ContextPackResponse:
         """Build a bounded, cited :class:`ContextPackResponse` for an agent.
 
-        Same retrieval pipeline as :meth:`search` plus:
-
-        * :func:`detect_conflicts` — syntactic same-heading conflict
-          across distinct active documents
-        * agent serialization in
-          :func:`assemble_context_pack` — token budgeting + the
-          standard untrusted-content notice + canonical
-          ``requires_human_review`` decision
-
-        ``session`` parameter behaves identically to :meth:`search` —
-        the API handler passes its own session so retrieval +
-        telemetry share one transaction (issue #74).
+        Thin wrapper around :func:`build_context_pack` (#402) — the
+        orchestration lives in :mod:`.context_pack` to keep this
+        module under the AGENTS 400-line cap. ``session`` parameter
+        behaves identically to :meth:`search`: the API handler passes
+        its own session so retrieval + telemetry share one
+        transaction (issue #74).
         """
-        # Lazy import — see TYPE_CHECKING block at top for why.
-        from cf_knowledge_kiln.agent.serializers import (
-            SerializerInputs,
-            assemble_context_pack,
-        )
+        # Lazy import — see TYPE_CHECKING block at top + the agent
+        # serializer pulls in heavier transitive deps that the human
+        # search() path doesn't need to load.
+        from cf_knowledge_kiln.retrieval.context_pack import build_context_pack
 
-        with _TRACER.start_as_current_span(
-            "retrieval.context_pack",
-            attributes={
-                "retrieval.consumer_type": "agent",
-                "retrieval.query_length": len(query),
-                "retrieval.max_chunks": max_chunks,
-                "retrieval.max_tokens": max_tokens,
-            },
-        ) as root_span:
-            _require_nonempty(query)
-            if not task or not task.strip():
-                raise ValueError("task must be a non-empty string")
-            # #100: same normalization the human path does.
-            with _TRACER.start_as_current_span("retrieval.normalize_query") as norm_span:
-                cleaned, removed_phrases = normalize_query(query, self._prompt_injection_phrases)
-                norm_span.set_attribute("retrieval.removed_phrases_count", len(removed_phrases))
-            if removed_phrases and not cleaned:
-                raise ValueError("query consists entirely of prompt-injection markers")
-            effective = cleaned if removed_phrases else query
-            rows = await self._fetch_candidates(effective, filters, session=session)
-            with _TRACER.start_as_current_span("retrieval.apply_boosts") as boost_span:
-                chunks = [_row_to_ranked_chunk(r) for r in rows]
-                boosted = apply_boosts(chunks, config=self._config, today=date.today())
-                boosted.sort(key=lambda c: c.score, reverse=True)
-                trimmed = boosted[:max_chunks]
-                boost_span.set_attribute("retrieval.chunks_in", len(chunks))
-                boost_span.set_attribute("retrieval.chunks_kept", len(trimmed))
-            trimmed_ids = {c.chunk_id for c in trimmed}
-            with _TRACER.start_as_current_span("retrieval.collect_warnings") as warn_span:
-                warnings = _collect_warnings(
-                    trimmed,
-                    today=date.today(),
-                    stale_after_days=self._config.stale_after_days,
-                    weak_evidence_threshold=self._config.weak_evidence_score_threshold,
-                    relevance_floor=self._config.effective_relevance_floor,
-                    max_warning_rank=self._config.max_warning_rank,
-                    isolated_match_drop_threshold=self._config.isolated_match_drop_threshold,
-                )
-                warn_span.set_attribute("retrieval.warnings_count", len(warnings))
-            with _TRACER.start_as_current_span("retrieval.detect_conflicts") as conf_span:
-                conflicts = detect_conflicts(
-                    trimmed,
-                    relevance_floor=self._config.effective_relevance_floor,
-                    max_warning_rank=self._config.max_warning_rank,
-                )
-                conf_span.set_attribute("retrieval.conflicts_count", len(conflicts))
-            warnings.extend(_conflict_warnings(conflicts))
-            if removed_phrases:
-                warnings.append(_query_normalized_warning(removed_phrases))
-            inputs = SerializerInputs(
-                chunks=trimmed,
-                warnings=warnings,
-                conflicts=conflicts,
-                chunk_text={r.chunk_id: r.content for r in rows if r.chunk_id in trimmed_ids},
-                document_refs=_document_refs_from_rows(rows),
-                related_sources=[],
-            )
-            with _TRACER.start_as_current_span("retrieval.assemble_context_pack") as asm_span:
-                pack = assemble_context_pack(
-                    inputs,
-                    task=task,
-                    query=query,
-                    max_chunks=max_chunks,
-                    max_tokens=max_tokens,
-                    weak_evidence_threshold=self._config.weak_evidence_score_threshold,
-                    embed_warnings_in_text=embed_warnings_in_text,
-                )
-                asm_span.set_attribute(
-                    "retrieval.tokens_used_estimate", pack.token_budget.used_estimate
-                )
-                asm_span.set_attribute(
-                    "retrieval.requires_human_review", pack.requires_human_review
-                )
-            root_span.set_attribute("retrieval.chunks_returned", len(trimmed))
-            root_span.set_attribute("retrieval.warnings_count", len(warnings))
-            root_span.set_attribute("retrieval.conflicts_count", len(conflicts))
-            return pack
+        # Adapt _fetch_candidates' kw-only `session` to the fetcher
+        # protocol (positional-or-kw) declared in build_context_pack.
+        async def _fetcher(q: str, f: RetrievalFilters, s: AsyncSession | None) -> list[SearchRow]:
+            return await self._fetch_candidates(q, f, session=s)
+
+        return await build_context_pack(
+            fetcher=_fetcher,
+            prompt_injection_phrases=self._prompt_injection_phrases,
+            config=self._config,
+            query=query,
+            task=task,
+            filters=filters,
+            max_chunks=max_chunks,
+            max_tokens=max_tokens,
+            embed_warnings_in_text=embed_warnings_in_text,
+            session=session,
+        )
 
     async def _fetch_candidates(
         self,
