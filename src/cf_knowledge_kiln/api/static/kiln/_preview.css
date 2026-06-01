@@ -40,6 +40,14 @@
   color: var(--ink-soft);
 }
 
+/* #407 A3: WCAG 2.5.5 Enhanced (AAA) requires a 44×44 CSS-pixel
+   target. The bare × glyph rendered at ~22×26 — well under the bar
+   and the inline exception doesn't apply (it's a standalone control
+   on its own header row, not a single-word option within a sentence).
+   Fix: declare a 44×44 minimum hit area via min-inline-size /
+   min-block-size, center the glyph with flex, then pull the box back
+   into place with a negative margin so the editorial silhouette of
+   the preview-head baseline doesn't shift. */
 .preview-close {
   background: transparent;
   border: 0;
@@ -48,7 +56,13 @@
   line-height: 1;
   color: var(--ink-soft);
   cursor: pointer;
-  padding: 0.1rem 0.4rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: 44px;
+  min-inline-size: 44px;
+  padding: 0;
+  margin: -0.5rem -0.4rem;
   border-radius: 2px;
   transition: color 120ms ease, background 120ms ease;
   /* #287: stay above the loading-skeleton overlay so the close

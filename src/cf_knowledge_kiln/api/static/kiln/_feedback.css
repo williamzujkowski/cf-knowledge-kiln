@@ -52,6 +52,15 @@
   gap: 0;
 }
 
+/* #407 A3 — WCAG 2.5.5 Enhanced (AAA) tap-target sweep.
+   `.feedback-link` sits as single-word options ("yes" / "no") within
+   the feedback-row sentence ("Did this answer your question? yes
+   no"). The 2.5.5 inline exception applies — target size constrained
+   by the line-height of the surrounding non-target text. Bumping to
+   44×44 here would break the conversational typography that makes
+   this widget feel like an editorial aside instead of a SaaS prompt.
+   No size override. The exception is documented so a future reviewer
+   doesn't "fix" a non-violation. */
 .feedback-link {
   appearance: none;
   background: transparent;

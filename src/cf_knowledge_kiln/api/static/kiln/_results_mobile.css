@@ -148,6 +148,18 @@
  *
  * Hover/focus shifts to oxblood matching the editorial accent on
  * other action surfaces (.feedback-link, .result-title-button).
+ *
+ * #407 A3 — WCAG 2.5.5 Enhanced tap-target review.
+ * `.card-action-copy` sits inline alongside the source-line text in
+ * the footer. The inline exception (target size constrained by the
+ * line-height of surrounding non-target text) applies and the size
+ * stays editorial-quiet by design — bumping it to 44px would create
+ * a chunky pill where a typographic affordance is wanted. Keeping
+ * the base ``.card-action`` rule small.
+ * `.card-action-expand` is NOT covered by the inline exception:
+ * it lives on its own line between the excerpt and the footer with
+ * no surrounding text to constrain its size. The override below
+ * lifts it to the 44×44 minimum.
  */
 .card-action {
   appearance: none;
@@ -167,9 +179,19 @@
 .card-action-expand {
   /* Expand sits on its own line between the excerpt and the footer,
      pushed to the start margin so it reads as a quiet 'show more'
-     option without becoming a wide button. */
-  display: inline-block;
-  margin: 0 0 0.65rem 0;
+     option without becoming a wide button.
+     #407 A3: WCAG 2.5.5 Enhanced 44×44 target. Padding makes the
+     hit area meet the AAA bar; negative inline-axis margin pulls
+     the visible glyph back into line so the typographic offset
+     against the excerpt block doesn't double. The flex shell
+     centers the italic label + <kbd> hint inside the larger box. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-block-size: 44px;
+  min-inline-size: 44px;
+  padding: 0.6rem 0.5rem;
+  margin: -0.6rem 0 0.05rem -0.5rem;
 }
 
 .card-action:hover,

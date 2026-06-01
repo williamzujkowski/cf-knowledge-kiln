@@ -2620,6 +2620,18 @@ a.source-link:focus-visible {
  *
  * Hover/focus shifts to oxblood matching the editorial accent on
  * other action surfaces (.feedback-link, .result-title-button).
+ *
+ * #407 A3 — WCAG 2.5.5 Enhanced tap-target review.
+ * `.card-action-copy` sits inline alongside the source-line text in
+ * the footer. The inline exception (target size constrained by the
+ * line-height of surrounding non-target text) applies and the size
+ * stays editorial-quiet by design — bumping it to 44px would create
+ * a chunky pill where a typographic affordance is wanted. Keeping
+ * the base ``.card-action`` rule small.
+ * `.card-action-expand` is NOT covered by the inline exception:
+ * it lives on its own line between the excerpt and the footer with
+ * no surrounding text to constrain its size. The override below
+ * lifts it to the 44×44 minimum.
  */
 .card-action {
   appearance: none;
@@ -2639,9 +2651,19 @@ a.source-link:focus-visible {
 .card-action-expand {
   /* Expand sits on its own line between the excerpt and the footer,
      pushed to the start margin so it reads as a quiet 'show more'
-     option without becoming a wide button. */
-  display: inline-block;
-  margin: 0 0 0.65rem 0;
+     option without becoming a wide button.
+     #407 A3: WCAG 2.5.5 Enhanced 44×44 target. Padding makes the
+     hit area meet the AAA bar; negative inline-axis margin pulls
+     the visible glyph back into line so the typographic offset
+     against the excerpt block doesn't double. The flex shell
+     centers the italic label + <kbd> hint inside the larger box. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-block-size: 44px;
+  min-inline-size: 44px;
+  padding: 0.6rem 0.5rem;
+  margin: -0.6rem 0 0.05rem -0.5rem;
 }
 
 .card-action:hover,
@@ -2781,6 +2803,15 @@ a.source-link:focus-visible {
   gap: 0;
 }
 
+/* #407 A3 — WCAG 2.5.5 Enhanced (AAA) tap-target sweep.
+   `.feedback-link` sits as single-word options ("yes" / "no") within
+   the feedback-row sentence ("Did this answer your question? yes
+   no"). The 2.5.5 inline exception applies — target size constrained
+   by the line-height of the surrounding non-target text. Bumping to
+   44×44 here would break the conversational typography that makes
+   this widget feel like an editorial aside instead of a SaaS prompt.
+   No size override. The exception is documented so a future reviewer
+   doesn't "fix" a non-violation. */
 .feedback-link {
   appearance: none;
   background: transparent;
@@ -2892,6 +2923,14 @@ a.source-link:focus-visible {
   color: var(--ink-soft);
 }
 
+/* #407 A3: WCAG 2.5.5 Enhanced (AAA) requires a 44×44 CSS-pixel
+   target. The bare × glyph rendered at ~22×26 — well under the bar
+   and the inline exception doesn't apply (it's a standalone control
+   on its own header row, not a single-word option within a sentence).
+   Fix: declare a 44×44 minimum hit area via min-inline-size /
+   min-block-size, center the glyph with flex, then pull the box back
+   into place with a negative margin so the editorial silhouette of
+   the preview-head baseline doesn't shift. */
 .preview-close {
   background: transparent;
   border: 0;
@@ -2900,7 +2939,13 @@ a.source-link:focus-visible {
   line-height: 1;
   color: var(--ink-soft);
   cursor: pointer;
-  padding: 0.1rem 0.4rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: 44px;
+  min-inline-size: 44px;
+  padding: 0;
+  margin: -0.5rem -0.4rem;
   border-radius: 2px;
   transition: color 120ms ease, background 120ms ease;
   /* #287: stay above the loading-skeleton overlay so the close
