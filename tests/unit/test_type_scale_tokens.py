@@ -213,22 +213,22 @@ _CLUSTER_PARAMS = [
 ]
 
 
-@pytest.mark.parametrize("target_token,legacy_value", _CLUSTER_PARAMS)
-def test_no_orphan_legacy_font_size(target_token: str, legacy_value: str) -> None:
+@pytest.mark.parametrize("target_var,legacy_value", _CLUSTER_PARAMS)
+def test_no_orphan_legacy_font_size(target_var: str, legacy_value: str) -> None:
     """Every legacy ad-hoc font-size value has been migrated to its
     cluster token, EXCEPT for the partial-specific exemptions in
     :data:`_LEGACY_EXEMPTIONS`. Pinning legacy values separately
     gives a precise failure message when one regresses."""
     exemptions = _LEGACY_EXEMPTIONS.get(legacy_value, frozenset())
     _assert_no_orphan_font_size(
-        legacy_value, target_token=target_token, exempted_partials=exemptions
+        legacy_value, target_var=target_var, exempted_partials=exemptions
     )
 
 
 def _assert_no_orphan_font_size(
     legacy_value: str,
     *,
-    target_token: str,
+    target_var: str,
     exempted_partials: frozenset[str] = frozenset(),
 ) -> None:
     offenders: list[str] = []
@@ -241,5 +241,5 @@ def _assert_no_orphan_font_size(
             offenders.append(partial.name)
     assert not offenders, (
         f"font-size: {legacy_value} should have migrated to "
-        f"var({target_token}) under #406. Still present in: {offenders}."
+        f"var({target_var}) under #406. Still present in: {offenders}."
     )
