@@ -171,3 +171,28 @@ def test_body_line_height_uses_leading_body_token() -> None:
         "body rule should set line-height: var(--leading-body) so "
         "the prose-leading token is the single source of truth."
     )
+
+
+# ─── Migration sweeps ───────────────────────────────────────────────
+
+
+_KILN_DIR = _REPO / "src" / "cf_knowledge_kiln" / "api" / "static" / "kiln"
+
+
+def test_no_orphan_0_78rem_font_size() -> None:
+    """First migration sweep (#406): the 0.78rem cluster collapses
+    to var(--text-xs). After the sweep, no partial should still
+    declare a literal ``font-size: 0.78rem`` — every one moved to
+    the token. A grep across all partials catches the regression
+    where a new rule sneaks in with the old ad-hoc value."""
+    offenders: list[str] = []
+    for partial in sorted(_KILN_DIR.glob("_*.css")):
+        css = partial.read_text(encoding="utf-8")
+        if "font-size: 0.78rem" in css:
+            offenders.append(partial.name)
+    assert not offenders, (
+        f"font-size: 0.78rem should have migrated to var(--text-xs) "
+        f"after #406 sweep 1. Still present in: {offenders}. The "
+        f"token collapses 0.7 / 0.72 / 0.78 into one value — adding "
+        f"a new 0.78rem rule defeats the point."
+    )

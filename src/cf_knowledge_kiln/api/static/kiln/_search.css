@@ -18,7 +18,7 @@
   text-transform: uppercase;
   letter-spacing: 0.22em;
   font-variant-caps: all-small-caps;
-  font-size: 0.78rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--ink-faded);
   padding-block-end: 0.35rem;
@@ -169,7 +169,7 @@
    pills inside the rail should sit a half-step back so the rail
    reads as a single secondary surface. */
 .pill-quiet {
-  font-size: 0.78rem;
+  font-size: var(--text-xs);
   padding: 0.18rem 0.55rem;
   border-style: dashed;
   color: var(--ink-faded);
@@ -237,7 +237,7 @@
 .filter-rail-hint {
   font-family: var(--serif);
   font-style: italic;
-  font-size: 0.78rem;
+  font-size: var(--text-xs);
   color: var(--ink-faded);
   font-variation-settings: "opsz" 14;
 }
@@ -411,7 +411,7 @@
   min-block-size: 1.2rem;
   margin-block: 0.4rem 0.6rem;
   font-family: var(--serif);
-  font-size: 0.78rem;
+  font-size: var(--text-xs);
   color: var(--ink-soft);
   font-style: italic;
   font-variation-settings: "opsz" 14;
