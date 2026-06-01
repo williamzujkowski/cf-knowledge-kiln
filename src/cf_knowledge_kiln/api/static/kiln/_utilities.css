@@ -1,0 +1,32 @@
+/* ─── Shared utility classes ─────────────────────────────────────── */
+
+/* #407 A4 — visually-hidden utility for screen-reader-only text.
+ *
+ * Used by ``highlight_excerpt`` to wrap each ``<mark>`` highlight
+ * with bracket sentinels: NVDA / VoiceOver / JAWS announce
+ * ``"[ highlighted text ]"`` so the boundary of the query match is
+ * audible. The brackets themselves are off-screen (1×1 clipped box)
+ * but remain in the accessibility tree.
+ *
+ * The exact recipe is the canonical "clip-1px" pattern published by
+ * Scott O'Hara / Steve Faulkner: clip via ``clip-path: inset(50%)``
+ * with a 1×1 box and negative margin, padding 0, no border. Do NOT
+ * replace this with ``display: none`` or ``visibility: hidden`` —
+ * both remove the element from the accessibility tree, defeating
+ * the SR-boundary purpose. ``aria-hidden="true"`` would do the same.
+ *
+ * The class is intentionally global (defined here, not scoped to one
+ * component) so future a11y work — column-header announcements,
+ * decorative-icon labels, status-region prefixes — can reuse it. */
+.visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

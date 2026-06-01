@@ -184,11 +184,26 @@ def highlight_excerpt(text: str, query: str) -> Markup:
     # where no subsequence matched at that scan position.
     alts.extend(re.escape(t) for t in terms)
     pattern = re.compile("(" + "|".join(alts) + ")", re.IGNORECASE)
-    # The only literal HTML we inject is the <mark> tag. Everything
-    # else flowing through this Markup() is the output of escape(),
-    # so the result is XSS-safe by construction.
+    # #407 A4 — WCAG 1.3.1 SR boundary on highlighted matches.
+    # Bare <mark> isn't announced by NVDA/JAWS/VoiceOver, so screen-
+    # reader users lose the visual highlight cue entirely. Wrap the
+    # match content with visually-hidden bracket sentinels — SR reads
+    # "left square bracket … right square bracket" as an audible
+    # boundary without the noise of saying "match" once per highlight.
+    # The .visually-hidden utility (see _base.css) clips the brackets
+    # off-screen but keeps them in the accessibility tree.
+    #
+    # The only literal HTML we inject is the <mark> tag + two
+    # bracket-sentinel spans with a hard-coded class name. Everything
+    # else flowing through Markup() is the output of escape(), so the
+    # result is XSS-safe by construction.
     return Markup(  # noqa: S704
-        pattern.sub(r"<mark>\1</mark>", escaped)
+        pattern.sub(
+            r'<mark><span class="visually-hidden">[</span>'
+            r"\1"
+            r'<span class="visually-hidden">]</span></mark>',
+            escaped,
+        )
     )  # nosec B704
 
 
