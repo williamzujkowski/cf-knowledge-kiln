@@ -261,7 +261,7 @@ input:focus-visible,
   padding: 0.75rem 1rem 0.85rem;
   border-inline-start: var(--rule-mid) solid var(--oxblood);
   background: linear-gradient(to right, var(--oxblood-tint), transparent 65%);
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
   color: var(--ink-soft);
   line-height: 1.5;
   /* #407 A2: cap prose at the AAA 80-char measure so the notice
@@ -349,12 +349,12 @@ input:focus-visible,
   }
   .tagline {
     margin-block-start: 0.4rem;
-    font-size: 0.85rem;
+    font-size: var(--text-sm);
   }
   .notice {
     margin-block: 0.75rem 0.5rem;
     padding-block: 0.5rem 0.6rem;
-    font-size: 0.82rem;
+    font-size: var(--text-sm);
   }
 }
 
@@ -390,7 +390,7 @@ input:focus-visible,
   align-items: baseline;
   flex-wrap: wrap;
   gap: 1rem;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   color: var(--ink-faded);
 }
 

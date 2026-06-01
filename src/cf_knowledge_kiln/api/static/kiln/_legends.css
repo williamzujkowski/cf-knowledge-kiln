@@ -27,7 +27,7 @@
   color: var(--ink-faded);
   font-family: var(--serif);
   font-style: italic;
-  font-size: 0.88rem;
+  font-size: var(--text-sm);
   padding: 0.3em 0;
   display: inline-flex;
   align-items: baseline;
@@ -139,7 +139,7 @@
 
 .results-legend-text {
   font-family: var(--serif);
-  font-size: 0.88rem;
+  font-size: var(--text-sm);
   color: var(--ink);
   line-height: 1.35;
 }

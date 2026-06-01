@@ -69,7 +69,7 @@
   grid-template-columns: max-content 1fr;
   gap: 0.55rem 1.2rem;
   font-family: var(--serif);
-  font-size: 0.92rem;
+  font-size: var(--text-sm);
 }
 .cheatsheet-row { display: contents; }
 .cheatsheet-row dt {
@@ -102,7 +102,7 @@
   background: var(--ink);
   color: var(--paper);
   font-family: var(--serif);
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   font-style: italic;
   border-radius: 2px;
   box-shadow: 0 6px 20px -6px rgba(20, 18, 14, 0.4);

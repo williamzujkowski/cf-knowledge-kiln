@@ -26,7 +26,7 @@
   flex-wrap: wrap;
   gap: 0.5rem;
   color: var(--ink-faded);
-  font-size: 0.82rem;
+  font-size: var(--text-sm);
 }
 
 .source-line {
@@ -78,7 +78,7 @@ a.source-link:focus-visible {
    anchor without needing a bullet. */
 .owner {
   color: var(--ink-faded);
-  font-size: 0.82rem;
+  font-size: var(--text-sm);
 }
 
 .owner em {
@@ -96,7 +96,7 @@ a.source-link:focus-visible {
  */
 .chunk-index {
   color: var(--ink-faded);
-  font-size: 0.82rem;
+  font-size: var(--text-sm);
   margin-inline-start: 0.4rem;
 }
 
@@ -274,7 +274,7 @@ a.source-link:focus-visible {
   border-right: 1px solid var(--gold);
   font-family: "Fraunces", Georgia, serif;
   font-style: italic;
-  font-size: 0.84rem;
+  font-size: var(--text-sm);
   /* font-variant-caps draws on Fraunces' OpenType small-caps so the
      label reads as a deliberate editorial mark rather than a
      lowercase shout. Falls back to lowercase visually on fonts

@@ -72,7 +72,7 @@
 
 .query-submit {
   font-family: var(--serif);
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   text-transform: uppercase;
   letter-spacing: 0.22em;
   font-variant-caps: all-small-caps;
@@ -126,7 +126,7 @@
   border: 1px solid var(--rule);
   border-radius: 999px;
   background: transparent;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   font-family: var(--serif);
   color: var(--ink-soft);
   cursor: pointer;
@@ -325,7 +325,7 @@
 
 .filter-reset-button {
   font-family: var(--serif);
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   background: transparent;
   border: 0;
   color: var(--oxblood-deep);
@@ -398,7 +398,7 @@
 
 .rail-field-input[type="date"] {
   font-family: var(--mono);
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
 }
 /* ─── #120 Status region ───────────────────────────────────────── */
 

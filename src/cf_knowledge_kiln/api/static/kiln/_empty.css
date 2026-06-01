@@ -20,7 +20,7 @@
 
 .empty-suggestion {
   display: block;
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
   margin-block-start: 0.5rem;
   color: var(--ink-faded);
 }
@@ -54,7 +54,7 @@
   flex-wrap: wrap;
   gap: 0.55rem 1.1rem;
   font-family: var(--serif);
-  font-size: 0.92rem;
+  font-size: var(--text-sm);
 }
 .empty-exemplars li { margin: 0; }
 .empty-exemplar {
@@ -106,7 +106,7 @@
   flex-wrap: wrap;
   gap: 0.55rem 1rem;
   font-family: var(--serif);
-  font-size: 0.88rem;
+  font-size: var(--text-sm);
 }
 .empty-actions li { margin: 0; }
 .widen-form { display: inline; margin: 0; }
@@ -135,7 +135,7 @@
 }
 .empty-suggestion {
   margin: 0.5rem 0 0;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   font-style: italic;
   color: var(--ink-faded);
 }

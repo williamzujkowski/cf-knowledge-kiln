@@ -79,7 +79,7 @@
 }
 
 .onboarding-body.onboarding-secondary {
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   color: var(--ink-faded);
 }
 
@@ -103,7 +103,7 @@
 
 .onboarding-button {
   font-family: var(--serif);
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
   padding: 0.5rem 1.1rem;
   border: 1px solid var(--ink);
   background: transparent;
