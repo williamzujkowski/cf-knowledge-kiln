@@ -220,9 +220,7 @@ def test_no_orphan_legacy_font_size(target_var: str, legacy_value: str) -> None:
     :data:`_LEGACY_EXEMPTIONS`. Pinning legacy values separately
     gives a precise failure message when one regresses."""
     exemptions = _LEGACY_EXEMPTIONS.get(legacy_value, frozenset())
-    _assert_no_orphan_font_size(
-        legacy_value, target_var=target_var, exempted_partials=exemptions
-    )
+    _assert_no_orphan_font_size(legacy_value, target_var=target_var, exempted_partials=exemptions)
 
 
 def _assert_no_orphan_font_size(

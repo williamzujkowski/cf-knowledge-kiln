@@ -20,3 +20,9 @@
 # carried PEM marker test fixtures before the base64 rewrite landed.
 f3336c052abfb9f3d8bb4c1b994effa2b2cb1af7:tests/unit/test_git_credentials.py:private-key:31
 3ba28a63a861c2410c8bd702d18e3087e6c3b748:tests/unit/test_header_sanitize.py:generic-api-key:95
+
+# PR #424 (feat/406-migrate-remaining-clusters) — intermediate
+# review-fix commit had a ``target_token=target_token`` Python kwarg
+# that tripped the generic-api-key entropy rule. Subsequent commit
+# renamed to ``target_var``; this fingerprint pins the historical hit.
+600c0aaeb0d251c0a576210589bab1dd0e425bcd:tests/unit/test_type_scale_tokens.py:generic-api-key:224
