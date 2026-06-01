@@ -487,16 +487,29 @@ def test_search_result_card_drops_javascript_source_url(
 # ─── #117: card-shape parity (highlight + owner + badges + warning copy) ──
 
 
+def _marked(word: str) -> str:
+    """Render the bracket-wrapped <mark> string produced by
+    :func:`highlight_excerpt` after #407 A4. See
+    tests/unit/test_web_highlight.py for the unit-test version
+    of this helper."""
+    return (
+        '<mark><span class="visually-hidden">[</span>'
+        + word
+        + '<span class="visually-hidden">]</span></mark>'
+    )
+
+
 def test_search_excerpt_highlights_query_terms(
     client: TestClient, session: AsyncSession, small_corpus: Path
 ) -> None:
-    """#117: query terms are wrapped in <mark> server-side (no JS)."""
+    """#117: query terms are wrapped in <mark> server-side (no JS).
+    #407 A4: SR-only bracket sentinels live inside each <mark>."""
     asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
     response = client.post("/search", data={"query": "widgets", "status": ["active"]})
     assert response.status_code == 200
     # The term "widgets" appears in fixture corpus beta.md; it should
     # come back wrapped in <mark> in the rendered fragment.
-    assert "<mark>widgets</mark>" in response.text.lower()
+    assert _marked("widgets") in response.text.lower()
 
 
 def test_search_excerpt_highlight_dropped_for_stopwords(
@@ -506,9 +519,9 @@ def test_search_excerpt_highlight_dropped_for_stopwords(
     asyncio.get_event_loop().run_until_complete(_seed(session, small_corpus))
     response = client.post("/search", data={"query": "a the widgets", "status": ["active"]})
     # "a" and "the" must not be highlighted; "widgets" still is.
-    assert "<mark>widgets</mark>" in response.text.lower()
-    assert "<mark>a</mark>" not in response.text
-    assert "<mark>the</mark>" not in response.text
+    assert _marked("widgets") in response.text.lower()
+    assert _marked("a") not in response.text
+    assert _marked("the") not in response.text
 
 
 def test_search_excerpt_html_escapes_user_input(
