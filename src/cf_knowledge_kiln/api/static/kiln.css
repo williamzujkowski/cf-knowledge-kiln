@@ -2620,6 +2620,16 @@ a.source-link:focus-visible {
  *
  * Hover/focus shifts to oxblood matching the editorial accent on
  * other action surfaces (.feedback-link, .result-title-button).
+ *
+ * #407 A3 — WCAG 2.5.5 Enhanced tap-target review.
+ * Both `.card-action-copy` (alongside other source-line controls,
+ * not within sentence flow) and `.card-action-expand` (own line)
+ * need to meet the 44×44 bar. Rather than inflating the visible
+ * editorial typography, the base rule gets a ::before pseudo that
+ * extends the clickable hit area outward by ~11–13px in each
+ * direction. The visible glyph stays small; the target meets AAA.
+ * The position: relative anchor is set on the button so the absolute
+ * pseudo lays out against it.
  */
 .card-action {
   appearance: none;
@@ -2634,6 +2644,21 @@ a.source-link:focus-visible {
   cursor: pointer;
   border-block-end: 1px solid transparent;
   transition: color 120ms ease, border-color 120ms ease;
+  /* #407 A3: anchor for the ::before hit-area pseudo. */
+  position: relative;
+}
+
+.card-action::before {
+  /* Invisible 44×44 hit-area for WCAG 2.5.5 Enhanced. Symmetric
+     -0.85rem (-13.6px) slop on every side meets the bar even on
+     the shortest label ("copy" at 0.82rem ≈ 50px inline, ~18px
+     block) and stays consistent with .preview-close::before and
+     .feedback-link::before so a future contributor can reason
+     about all three at once. Visible glyph and surrounding layout
+     untouched. */
+  content: "";
+  position: absolute;
+  inset: -0.85rem;
 }
 
 .card-action-expand {
@@ -2781,6 +2806,16 @@ a.source-link:focus-visible {
   gap: 0;
 }
 
+/* #407 A3 — WCAG 2.5.5 Enhanced (AAA) tap-target sweep.
+   `.feedback-link` sits as single-word options ("yes" / "no") within
+   the feedback-row sentence ("Did this answer your question? yes
+   no"). The 2.5.5 inline exception applies — target size constrained
+   by the line-height of surrounding non-target text — so the visible
+   editorial typography is safe to keep small. The ::before pseudo
+   below still extends the clickable hit area to ≥ 44×44 as
+   defence-in-depth: even if a future audit re-reads the inline
+   exception narrowly, the target meets AAA regardless. Visible
+   layout untouched. */
 .feedback-link {
   appearance: none;
   background: transparent;
@@ -2793,6 +2828,18 @@ a.source-link:focus-visible {
   cursor: pointer;
   border-block-end: 1px solid transparent;
   transition: color 120ms ease, border-color 120ms ease;
+  /* #407 A3: anchor for the ::before hit-area pseudo below. */
+  position: relative;
+}
+
+.feedback-link::before {
+  /* Invisible 44×44 hit-area extension. Symmetric -0.85rem
+     (-13.6px) slop matches .preview-close::before and
+     .card-action::before — three-letter labels ("yes" ≈ 21px
+     inline) need the inline slop too. */
+  content: "";
+  position: absolute;
+  inset: -0.85rem;
 }
 .feedback-link:hover {
   color: var(--oxblood-deep);
@@ -2892,6 +2939,14 @@ a.source-link:focus-visible {
   color: var(--ink-soft);
 }
 
+/* #407 A3: WCAG 2.5.5 Enhanced (AAA) requires a 44×44 CSS-pixel
+   target. The bare × glyph renders at ~22×26 — well under the bar
+   and the inline exception doesn't apply (standalone control on its
+   own header row, not a single-word option within a sentence). The
+   visible glyph stays editorial-quiet; the ::before pseudo extends
+   the clickable hit area to 44×44 without disturbing the
+   preview-head baseline. WCAG measures the size of the target, which
+   is the clickable area — not the painted glyph. */
 .preview-close {
   background: transparent;
   border: 0;
@@ -2910,11 +2965,34 @@ a.source-link:focus-visible {
   position: relative;
   z-index: 3;
 }
-.preview-close:hover,
-.preview-close:focus-visible {
+.preview-close::before {
+  /* Invisible hit-area extension — 13.6px of slop in each direction
+     turns the ~22×26 visible button into a ~49×53 clickable target,
+     clearing WCAG 2.5.5's 44×44 bar on both axes. The pseudo sits
+     above any siblings via the close button's own z-index: 3 stack
+     context, so it doesn't intercept clicks on the preview-title;
+     the title's own .preview-title rule has no z-index and sits in
+     the normal flow. */
+  content: "";
+  position: absolute;
+  inset: -0.85rem;
+}
+.preview-close:hover {
   color: var(--ink);
   background: var(--rule);
-  outline: none;
+}
+/* #407 A3: focus-visible split from hover. The pre-existing
+   `background: var(--rule)` at #c8d2e0 against `--paper-soft`
+   #ffffff is 1.53:1 — fails WCAG 2.4.13 Focus Appearance's 3:1
+   bar. Switched to the same oxblood outline + offset that
+   .card-action and .feedback-link use for editorial consistency
+   and verified-AAA contrast (--oxblood at 5.31:1 already clears
+   the 3:1 non-text bar; the outline shape is the indicator). */
+.preview-close:focus-visible {
+  color: var(--ink);
+  outline: 2px solid var(--oxblood);
+  outline-offset: 2px;
+  background: transparent;
 }
 
 .preview-title {

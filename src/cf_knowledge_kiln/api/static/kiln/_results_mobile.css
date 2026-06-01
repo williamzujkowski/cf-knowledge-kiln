@@ -148,6 +148,16 @@
  *
  * Hover/focus shifts to oxblood matching the editorial accent on
  * other action surfaces (.feedback-link, .result-title-button).
+ *
+ * #407 A3 — WCAG 2.5.5 Enhanced tap-target review.
+ * Both `.card-action-copy` (alongside other source-line controls,
+ * not within sentence flow) and `.card-action-expand` (own line)
+ * need to meet the 44×44 bar. Rather than inflating the visible
+ * editorial typography, the base rule gets a ::before pseudo that
+ * extends the clickable hit area outward by ~11–13px in each
+ * direction. The visible glyph stays small; the target meets AAA.
+ * The position: relative anchor is set on the button so the absolute
+ * pseudo lays out against it.
  */
 .card-action {
   appearance: none;
@@ -162,6 +172,21 @@
   cursor: pointer;
   border-block-end: 1px solid transparent;
   transition: color 120ms ease, border-color 120ms ease;
+  /* #407 A3: anchor for the ::before hit-area pseudo. */
+  position: relative;
+}
+
+.card-action::before {
+  /* Invisible 44×44 hit-area for WCAG 2.5.5 Enhanced. Symmetric
+     -0.85rem (-13.6px) slop on every side meets the bar even on
+     the shortest label ("copy" at 0.82rem ≈ 50px inline, ~18px
+     block) and stays consistent with .preview-close::before and
+     .feedback-link::before so a future contributor can reason
+     about all three at once. Visible glyph and surrounding layout
+     untouched. */
+  content: "";
+  position: absolute;
+  inset: -0.85rem;
 }
 
 .card-action-expand {
