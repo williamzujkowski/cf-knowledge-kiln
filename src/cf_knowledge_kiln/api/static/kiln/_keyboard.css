@@ -56,7 +56,7 @@
   background: transparent;
   border: 0;
   font-family: var(--serif);
-  font-size: 1.4rem;
+  font-size: var(--text-xl);
   line-height: 1;
   color: var(--ink-soft);
   cursor: pointer;

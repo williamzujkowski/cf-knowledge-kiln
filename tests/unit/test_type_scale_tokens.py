@@ -179,32 +179,40 @@ def test_body_line_height_uses_leading_body_token() -> None:
 _KILN_DIR = _REPO / "src" / "cf_knowledge_kiln" / "api" / "static" / "kiln"
 
 
-_TEXT_XS_LEGACY = ("0.7rem", "0.72rem", "0.78rem")
-_TEXT_SM_LEGACY = (
-    "0.82rem",
-    "0.84rem",
-    "0.85rem",
-    "0.86rem",
-    "0.88rem",
-    "0.9rem",
-    "0.92rem",
-)
+_CLUSTERS: dict[str, tuple[str, ...]] = {
+    "--text-2xs": ("0.65rem",),
+    "--text-xs": ("0.7rem", "0.72rem", "0.78rem"),
+    "--text-sm": (
+        "0.82rem",
+        "0.84rem",
+        "0.85rem",
+        "0.86rem",
+        "0.88rem",
+        "0.9rem",
+        "0.92rem",
+    ),
+    "--text-base": ("0.95rem",),
+    "--text-md": ("1.15rem",),
+    "--text-xl": ("1.32rem", "1.35rem", "1.4rem"),
+}
+
+_CLUSTER_PARAMS = [
+    pytest.param(token, legacy, id=f"{legacy}->{token}")
+    for token, legacies in _CLUSTERS.items()
+    for legacy in legacies
+]
 
 
-@pytest.mark.parametrize("legacy_value", _TEXT_XS_LEGACY)
-def test_no_orphan_text_xs_cluster(legacy_value: str) -> None:
-    """The --text-xs cluster (0.7 / 0.72 / 0.78 → 0.75) has been
-    fully migrated. Pin each legacy value separately for clearer
-    output when a regression sneaks one in."""
-    _assert_no_orphan_font_size(legacy_value, target_token="--text-xs")
+@pytest.mark.parametrize("target_token,legacy_value", _CLUSTER_PARAMS)
+def test_no_orphan_legacy_font_size(target_token: str, legacy_value: str) -> None:
+    """Every legacy ad-hoc font-size value has been migrated to its
+    cluster token. The mapping table (see _CLUSTERS) is the contract:
+    a new entry here without a corresponding sweep gets caught.
 
-
-@pytest.mark.parametrize("legacy_value", _TEXT_SM_LEGACY)
-def test_no_orphan_text_sm_cluster(legacy_value: str) -> None:
-    """The --text-sm cluster (0.82 / 0.84 / 0.85 / 0.86 / 0.88 / 0.9
-    / 0.92 → 0.875) has been fully migrated. Same shape as the
-    --text-xs guard."""
-    _assert_no_orphan_font_size(legacy_value, target_token="--text-sm")
+    Pinning legacy values separately gives a precise failure message
+    when one regresses, rather than a generic 'some font-size is
+    ad-hoc somewhere' report."""
+    _assert_no_orphan_font_size(legacy_value, target_token=target_token)
 
 
 def _assert_no_orphan_font_size(legacy_value: str, *, target_token: str) -> None:

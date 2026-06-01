@@ -538,7 +538,7 @@ input:focus-visible,
 .tagline {
   margin: 0.65rem 0 0;
   color: var(--ink-soft);
-  font-size: 0.95rem;
+  font-size: var(--text-base);
   font-style: italic;
   font-variation-settings: "opsz" 14;
 }
@@ -888,7 +888,7 @@ a[data-tooltip]:not([data-tooltip=""]) {
 
 .query-input {
   font-family: var(--serif);
-  font-size: 1.4rem;
+  font-size: var(--text-xl);
   font-style: italic;
   font-variation-settings: "opsz" 60;
   color: var(--ink);
@@ -1237,7 +1237,7 @@ a[data-tooltip]:not([data-tooltip=""]) {
 
 .rail-field-input {
   font-family: var(--serif);
-  font-size: 0.95rem;
+  font-size: var(--text-base);
   color: var(--ink);
   background: transparent;
   border: 0;
@@ -1307,7 +1307,7 @@ a[data-tooltip]:not([data-tooltip=""]) {
   font-family: var(--serif);
   font-style: italic;
   color: var(--ink-faded);
-  font-size: 0.95rem;
+  font-size: var(--text-base);
   margin: 0 0 1rem;
   font-variation-settings: "opsz" 14;
 }
@@ -1398,7 +1398,7 @@ a[data-tooltip]:not([data-tooltip=""]) {
   /* #122: opsz contrast — push opsz to 96 + SOFT 30 + slightly tighter
      letter-spacing so titles read as display headings against the now-
      16px body. Size pulled to 1.35rem per the typographic-depth spec. */
-  font-size: 1.35rem;
+  font-size: var(--text-xl);
   line-height: 1.25;
   letter-spacing: -0.012em;
   color: var(--ink);
@@ -1812,7 +1812,7 @@ a.source-link:focus-visible {
 .score-label {
   text-transform: uppercase;
   letter-spacing: 0.16em;
-  font-size: 0.65rem;
+  font-size: var(--text-2xs);
   color: var(--ink-faded);
 }
 
@@ -2247,7 +2247,7 @@ a.source-link:focus-visible {
      h2 (result-title) > h3 (legend section) without skipping.
      Matches the ``.filters-legend`` voice. */
   font-family: var(--serif);
-  font-size: 0.95rem;
+  font-size: var(--text-base);
   font-style: italic;
   font-weight: 500;
   color: var(--ink-soft);
@@ -2630,7 +2630,7 @@ a.source-link:focus-visible {
     /* Soften — drop display-grade opsz, shrink to body-display size.
        Still italic Fraunces oldstyle nums; reads as quiet chapter
        mark, not editorial showpiece. */
-    font-size: 1.15rem;
+    font-size: var(--text-md);
     font-variation-settings: "opsz" 36;
     padding-block-start: 0.1rem;
   }
@@ -2641,7 +2641,7 @@ a.source-link:focus-visible {
   }
 
   .result-title {
-    font-size: 1.15rem;
+    font-size: var(--text-md);
     line-height: 1.22;
     /* Drop display-grade opsz at small sizes — text-grade curves
        carry better at body sizes. */
@@ -2858,7 +2858,7 @@ a.source-link:focus-visible {
   .result-index {
     /* opsz 72 between desktop's 144 and 640's 36 — chapter-mark
        character preserved at this width. */
-    font-size: 1.4rem;
+    font-size: var(--text-xl);
     font-variation-settings: "opsz" 72;
   }
 
@@ -3040,7 +3040,7 @@ a.source-link:focus-visible {
 
 .preview-empty {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: var(--text-base);
   color: var(--ink-soft);
 }
 
@@ -3073,7 +3073,7 @@ a.source-link:focus-visible {
   background: transparent;
   border: 0;
   font-family: var(--serif);
-  font-size: 1.4rem;
+  font-size: var(--text-xl);
   line-height: 1;
   color: var(--ink-soft);
   cursor: pointer;
@@ -3121,7 +3121,7 @@ a.source-link:focus-visible {
   margin: 0 0 0.3rem;
   font-family: var(--serif);
   font-weight: 500;
-  font-size: 1.32rem;
+  font-size: var(--text-xl);
   line-height: 1.2;
   letter-spacing: -0.01em;
   font-variation-settings: "opsz" 48;
@@ -3141,7 +3141,7 @@ a.source-link:focus-visible {
 .preview-source { word-break: break-all; }
 .preview-status {
   font-family: var(--serif);
-  font-size: 0.65rem;
+  font-size: var(--text-2xs);
   font-variant-caps: all-small-caps;
   letter-spacing: 0.18em;
   border: 1px solid currentColor;
@@ -3237,7 +3237,7 @@ a.source-link:focus-visible {
 
 .preview-missing {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: var(--text-base);
   color: var(--ink-soft);
 }
 
@@ -3745,7 +3745,7 @@ a.source-link:focus-visible {
   background: transparent;
   border: 0;
   font-family: var(--serif);
-  font-size: 1.4rem;
+  font-size: var(--text-xl);
   line-height: 1;
   color: var(--ink-soft);
   cursor: pointer;
@@ -4015,7 +4015,7 @@ a.source-link:focus-visible {
 .onboarding-body {
   margin: 0.65rem 0 0;
   font-family: var(--serif);
-  font-size: 0.95rem;
+  font-size: var(--text-base);
   line-height: 1.55;
   color: var(--ink-soft);
 }
