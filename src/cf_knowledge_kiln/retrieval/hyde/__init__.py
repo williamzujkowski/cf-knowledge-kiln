@@ -17,7 +17,7 @@ from cf_knowledge_kiln.retrieval.hyde.classifier import (
     should_hyde,
     token_count,
 )
-from cf_knowledge_kiln.retrieval.hyde.engine import HydeEngine
+from cf_knowledge_kiln.retrieval.hyde.engine import HydeEngine, HydeResult
 from cf_knowledge_kiln.retrieval.hyde.prompt import (
     HYDE_MAX_OUTPUT_TOKENS,
     HYDE_PROMPT_TEMPLATE,
@@ -29,6 +29,7 @@ __all__ = [
     "HYDE_PROMPT_TEMPLATE",
     "HydeCache",
     "HydeEngine",
+    "HydeResult",
     "cache_key",
     "jargon_density",
     "render_prompt",

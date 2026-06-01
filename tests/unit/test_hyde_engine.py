@@ -43,7 +43,7 @@ class TestClassifierGateOff:
             "decision in the operations log and now nobody can remember "
             "what was actually agreed upon"
         )
-        assert result is None
+        assert result.pseudo_doc is None
         assert gen.calls == [], "gate-off path must not invoke the generator"
 
 
@@ -56,7 +56,7 @@ class TestNoGeneratorConfigured:
         engine = HydeEngine(generator=None, cache=_make_cache())
         # Short query → gate WOULD fire if a generator existed.
         result = await engine.expand("offsite backup failed")
-        assert result is None
+        assert result.pseudo_doc is None
 
     @pytest.mark.asyncio
     async def test_no_warning_logged(self, caplog: pytest.LogCaptureFixture) -> None:
@@ -102,7 +102,7 @@ class TestGeneratorRaises:
         gen = _RaisingGenerator()
         engine = HydeEngine(generator=gen, cache=_make_cache())
         result = await engine.expand("offsite backup failed")
-        assert result is None
+        assert result.pseudo_doc is None
         assert gen.calls == 1
 
     @pytest.mark.asyncio
@@ -156,7 +156,7 @@ class TestEmptyGeneratorOutput:
     async def test_returns_none(self) -> None:
         engine = HydeEngine(generator=_EmptyGenerator(), cache=_make_cache())
         result = await engine.expand("offsite backup failed")
-        assert result is None
+        assert result.pseudo_doc is None
 
     @pytest.mark.asyncio
     async def test_does_not_cache(self) -> None:
@@ -177,8 +177,8 @@ class TestSuccessfulExpansion:
         gen = MockGeneratorProvider(response_template="PSEUDO_DOC_FOR[{prompt}]")
         engine = HydeEngine(generator=gen, cache=_make_cache())
         result = await engine.expand("offsite backup failed")
-        assert result is not None
-        assert result.startswith("PSEUDO_DOC_FOR[")
+        assert result.pseudo_doc is not None
+        assert result.pseudo_doc.startswith("PSEUDO_DOC_FOR[")
         assert gen.calls and "offsite backup failed" in gen.calls[0]["prompt"]
 
     @pytest.mark.asyncio
@@ -187,10 +187,10 @@ class TestSuccessfulExpansion:
         cache = _make_cache()
         engine = HydeEngine(generator=gen, cache=cache)
         first = await engine.expand("offsite backup failed")
-        assert first is not None
+        assert first.pseudo_doc is not None
         assert len(gen.calls) == 1
         second = await engine.expand("offsite backup failed")
-        assert second == first
+        assert second.pseudo_doc == first.pseudo_doc
         assert len(gen.calls) == 1, "cache hit should NOT invoke the generator"
 
     @pytest.mark.asyncio
@@ -212,8 +212,8 @@ class TestSuccessfulExpansion:
         engine = HydeEngine(generator=gen, cache=_make_cache())
         a = await engine.expand("offsite backup failed")
         b = await engine.expand("how to rotate credhub CA")
-        assert a is not None and b is not None
-        assert a != b
+        assert a.pseudo_doc is not None and b.pseudo_doc is not None
+        assert a.pseudo_doc != b.pseudo_doc
         assert len(gen.calls) == 2
 
 
