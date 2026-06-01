@@ -281,7 +281,7 @@ input:focus-visible,
   text-transform: uppercase;
   letter-spacing: 0.22em;
   font-variant-caps: all-small-caps;
-  font-size: 0.7rem;
+  font-size: var(--text-xs);
   color: var(--oxblood-deep);
   margin-inline-end: 0.5rem;
   font-weight: 600;
@@ -302,7 +302,7 @@ input:focus-visible,
 .shortcut-hint kbd {
   font-family: var(--mono);
   font-style: normal;
-  font-size: 0.7rem;
+  font-size: var(--text-xs);
   /* --paper-soft sits one shade lighter than --paper-dim (the banner
      background), so the chip reads as a raised tile in both light and
      dark mode (#138 reviewer LOW — kbd was invisible against banner). */

@@ -179,20 +179,25 @@ def test_body_line_height_uses_leading_body_token() -> None:
 _KILN_DIR = _REPO / "src" / "cf_knowledge_kiln" / "api" / "static" / "kiln"
 
 
-def test_no_orphan_0_78rem_font_size() -> None:
-    """First migration sweep (#406): the 0.78rem cluster collapses
-    to var(--text-xs). After the sweep, no partial should still
-    declare a literal ``font-size: 0.78rem`` — every one moved to
-    the token. A grep across all partials catches the regression
-    where a new rule sneaks in with the old ad-hoc value."""
+@pytest.mark.parametrize("legacy_value", ["0.7rem", "0.72rem", "0.78rem"])
+def test_no_orphan_text_xs_cluster(legacy_value: str) -> None:
+    """The complete --text-xs cluster (0.7 / 0.72 / 0.78 → 0.75)
+    has been migrated. After the sweeps, no partial should still
+    declare any of the three legacy values as a font-size. Pinning
+    each value separately gives clearer test output when a future
+    regression sneaks one in."""
     offenders: list[str] = []
+    needle = f"font-size: {legacy_value}"
     for partial in sorted(_KILN_DIR.glob("_*.css")):
         css = partial.read_text(encoding="utf-8")
-        if "font-size: 0.78rem" in css:
+        if needle in css:
             offenders.append(partial.name)
     assert not offenders, (
-        f"font-size: 0.78rem should have migrated to var(--text-xs) "
-        f"after #406 sweep 1. Still present in: {offenders}. The "
-        f"token collapses 0.7 / 0.72 / 0.78 into one value — adding "
-        f"a new 0.78rem rule defeats the point."
+        f"font-size: {legacy_value} should have migrated to "
+        f"var(--text-xs) under #406. Still present in: {offenders}."
     )
+
+
+# test_no_orphan_0_78rem_font_size from sweep 1 was replaced by the
+# parametrized test_no_orphan_text_xs_cluster above — same coverage,
+# clearer assertion when a single value regresses.

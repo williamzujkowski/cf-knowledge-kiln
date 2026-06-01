@@ -82,7 +82,7 @@
 .cheatsheet-row dd { margin: 0; color: var(--ink); }
 .cheatsheet kbd {
   font-family: var(--mono);
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   background: var(--paper-soft, var(--paper));
   border: 1px solid var(--rule);
   border-block-end-width: 2px;
