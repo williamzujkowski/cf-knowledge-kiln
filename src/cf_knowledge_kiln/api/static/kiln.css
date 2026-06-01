@@ -1357,9 +1357,21 @@ a[data-tooltip]:not([data-tooltip=""]) {
 
 /* Title is a button now (#119) — strip the UA chrome and keep the
    typographic treatment. The hairline underline on hover reads as
-   an editorial "open this" affordance without a link's color shift. */
+   an editorial "open this" affordance without a link's color shift.
+
+   #415 — WCAG 2.5.5 Enhanced (AAA) tap-target sweep. The single-
+   line title at font-size 1.35rem × line-height 1.25 = ~27px in the
+   block axis — below the 44px bar. Inline axis is the full title
+   text (always ≥ 44px in practice). The ::before pseudo extends the
+   hit area block-axis only by 0.65rem each side (10.4px), bringing
+   single-line titles to ~48px clickable while leaving multi-line
+   titles (~54+ px naturally) untouched. Inline insets stay at 0 so
+   the pseudo doesn't reach into the .status-badge / score-row
+   siblings that share the flex .result-header. ``display: inline-
+   block`` is required so the button has its own positioning context
+   for the absolute ::before. */
 .result-title-button {
-  display: inline;
+  display: inline-block;
   margin: 0;
   padding: 0;
   background: transparent;
@@ -1370,6 +1382,12 @@ a[data-tooltip]:not([data-tooltip=""]) {
   cursor: pointer;
   border-block-end: 1px solid transparent;
   transition: border-color 120ms ease, color 120ms ease;
+  position: relative;
+}
+.result-title-button::before {
+  content: "";
+  position: absolute;
+  inset: -0.65rem 0;
 }
 .result-title-button:hover,
 .result-title-button:focus-visible {
