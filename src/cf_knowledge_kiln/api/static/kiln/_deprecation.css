@@ -145,7 +145,7 @@
 .superseded-by-line {
   margin: 0.2rem 0 0.5rem;
   font-family: var(--serif);
-  font-size: 0.88rem;
+  font-size: var(--text-sm);
   font-style: italic;
   font-variation-settings: "opsz" 18;
   color: var(--ink-faded);

@@ -550,7 +550,7 @@ input:focus-visible,
   padding: 0.75rem 1rem 0.85rem;
   border-inline-start: var(--rule-mid) solid var(--oxblood);
   background: linear-gradient(to right, var(--oxblood-tint), transparent 65%);
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
   color: var(--ink-soft);
   line-height: 1.5;
   /* #407 A2: cap prose at the AAA 80-char measure so the notice
@@ -638,12 +638,12 @@ input:focus-visible,
   }
   .tagline {
     margin-block-start: 0.4rem;
-    font-size: 0.85rem;
+    font-size: var(--text-sm);
   }
   .notice {
     margin-block: 0.75rem 0.5rem;
     padding-block: 0.5rem 0.6rem;
-    font-size: 0.82rem;
+    font-size: var(--text-sm);
   }
 }
 
@@ -679,7 +679,7 @@ input:focus-visible,
   align-items: baseline;
   flex-wrap: wrap;
   gap: 1rem;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   color: var(--ink-faded);
 }
 
@@ -934,7 +934,7 @@ a[data-tooltip]:not([data-tooltip=""]) {
 
 .query-submit {
   font-family: var(--serif);
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   text-transform: uppercase;
   letter-spacing: 0.22em;
   font-variant-caps: all-small-caps;
@@ -988,7 +988,7 @@ a[data-tooltip]:not([data-tooltip=""]) {
   border: 1px solid var(--rule);
   border-radius: 999px;
   background: transparent;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   font-family: var(--serif);
   color: var(--ink-soft);
   cursor: pointer;
@@ -1187,7 +1187,7 @@ a[data-tooltip]:not([data-tooltip=""]) {
 
 .filter-reset-button {
   font-family: var(--serif);
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   background: transparent;
   border: 0;
   color: var(--oxblood-deep);
@@ -1260,7 +1260,7 @@ a[data-tooltip]:not([data-tooltip=""]) {
 
 .rail-field-input[type="date"] {
   font-family: var(--mono);
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
 }
 /* ─── #120 Status region ───────────────────────────────────────── */
 
@@ -1635,7 +1635,7 @@ a[data-tooltip]:not([data-tooltip=""]) {
 .superseded-by-line {
   margin: 0.2rem 0 0.5rem;
   font-family: var(--serif);
-  font-size: 0.88rem;
+  font-size: var(--text-sm);
   font-style: italic;
   font-variation-settings: "opsz" 18;
   color: var(--ink-faded);
@@ -1720,7 +1720,7 @@ a[data-tooltip]:not([data-tooltip=""]) {
   flex-wrap: wrap;
   gap: 0.5rem;
   color: var(--ink-faded);
-  font-size: 0.82rem;
+  font-size: var(--text-sm);
 }
 
 .source-line {
@@ -1772,7 +1772,7 @@ a.source-link:focus-visible {
    anchor without needing a bullet. */
 .owner {
   color: var(--ink-faded);
-  font-size: 0.82rem;
+  font-size: var(--text-sm);
 }
 
 .owner em {
@@ -1790,7 +1790,7 @@ a.source-link:focus-visible {
  */
 .chunk-index {
   color: var(--ink-faded);
-  font-size: 0.82rem;
+  font-size: var(--text-sm);
   margin-inline-start: 0.4rem;
 }
 
@@ -1968,7 +1968,7 @@ a.source-link:focus-visible {
   border-right: 1px solid var(--gold);
   font-family: "Fraunces", Georgia, serif;
   font-style: italic;
-  font-size: 0.84rem;
+  font-size: var(--text-sm);
   /* font-variant-caps draws on Fraunces' OpenType small-caps so the
      label reads as a deliberate editorial mark rather than a
      lowercase shout. Falls back to lowercase visually on fonts
@@ -2172,7 +2172,7 @@ a.source-link:focus-visible {
   color: var(--ink-faded);
   font-family: var(--serif);
   font-style: italic;
-  font-size: 0.88rem;
+  font-size: var(--text-sm);
   padding: 0.3em 0;
   display: inline-flex;
   align-items: baseline;
@@ -2284,7 +2284,7 @@ a.source-link:focus-visible {
 
 .results-legend-text {
   font-family: var(--serif);
-  font-size: 0.88rem;
+  font-size: var(--text-sm);
   color: var(--ink);
   line-height: 1.35;
 }
@@ -2398,7 +2398,7 @@ a.source-link:focus-visible {
      the warning visually grouped. */
   padding: 0.55rem 0.85rem;
   border-inline-start: 2px solid currentColor;
-  font-size: 0.92rem;
+  font-size: var(--text-sm);
   background: var(--paper-dim);
   color: var(--ink-soft);
   line-height: 1.45;
@@ -2549,7 +2549,7 @@ a.source-link:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
-  font-size: 0.82rem;
+  font-size: var(--text-sm);
   line-height: 1.45;
 }
 
@@ -2761,7 +2761,7 @@ a.source-link:focus-visible {
   margin: 0 0 0 0.6rem;
   font-family: var(--serif);
   font-style: italic;
-  font-size: 0.82rem;
+  font-size: var(--text-sm);
   color: var(--ink-faded);
   cursor: pointer;
   border-block-end: 1px solid transparent;
@@ -2906,7 +2906,7 @@ a.source-link:focus-visible {
   padding-block-start: 0.45rem;
   border-block-start: 1px dashed var(--rule);
   font-family: var(--serif);
-  font-size: 0.86rem;
+  font-size: var(--text-sm);
   color: var(--ink-soft);
   display: flex;
   flex-wrap: wrap;
@@ -2990,7 +2990,7 @@ a.source-link:focus-visible {
   color: var(--teal-deep);
   font-family: var(--serif);
   font-style: italic;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   border: 0;
   border-inline-start: 2px solid var(--teal);
 }
@@ -3155,7 +3155,7 @@ a.source-link:focus-visible {
    consistent voice. */
 .preview-owner {
   font-family: var(--serif);
-  font-size: 0.82rem;
+  font-size: var(--text-sm);
   color: var(--ink-faded);
 }
 .preview-owner em {
@@ -3165,7 +3165,7 @@ a.source-link:focus-visible {
 .preview-freshness {
   font-family: var(--serif);
   font-style: italic;
-  font-size: 0.82rem;
+  font-size: var(--text-sm);
   color: var(--ink-faded);
   font-variation-settings: "opsz" 14;
 }
@@ -3201,7 +3201,7 @@ a.source-link:focus-visible {
   white-space: pre-wrap;
   word-break: break-word;
   font-family: var(--mono);
-  font-size: 0.86rem;
+  font-size: var(--text-sm);
   line-height: 1.55;
   color: var(--ink);
   /* #407 A2: AAA WCAG 1.4.8 caps prose at 80 chars. The mono font
@@ -3453,7 +3453,7 @@ a.source-link:focus-visible {
 .markdown .codehilite,
 .preview-body .codehilite {
   font-family: var(--mono);
-  font-size: 0.88rem;
+  font-size: var(--text-sm);
   line-height: 1.55;
   background: var(--paper-soft, var(--paper-dim));
   color: var(--ink);
@@ -3758,7 +3758,7 @@ a.source-link:focus-visible {
   grid-template-columns: max-content 1fr;
   gap: 0.55rem 1.2rem;
   font-family: var(--serif);
-  font-size: 0.92rem;
+  font-size: var(--text-sm);
 }
 .cheatsheet-row { display: contents; }
 .cheatsheet-row dt {
@@ -3791,7 +3791,7 @@ a.source-link:focus-visible {
   background: var(--ink);
   color: var(--paper);
   font-family: var(--serif);
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   font-style: italic;
   border-radius: 2px;
   box-shadow: 0 6px 20px -6px rgba(20, 18, 14, 0.4);
@@ -3827,7 +3827,7 @@ a.source-link:focus-visible {
 
 .empty-suggestion {
   display: block;
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
   margin-block-start: 0.5rem;
   color: var(--ink-faded);
 }
@@ -3861,7 +3861,7 @@ a.source-link:focus-visible {
   flex-wrap: wrap;
   gap: 0.55rem 1.1rem;
   font-family: var(--serif);
-  font-size: 0.92rem;
+  font-size: var(--text-sm);
 }
 .empty-exemplars li { margin: 0; }
 .empty-exemplar {
@@ -3913,7 +3913,7 @@ a.source-link:focus-visible {
   flex-wrap: wrap;
   gap: 0.55rem 1rem;
   font-family: var(--serif);
-  font-size: 0.88rem;
+  font-size: var(--text-sm);
 }
 .empty-actions li { margin: 0; }
 .widen-form { display: inline; margin: 0; }
@@ -3942,7 +3942,7 @@ a.source-link:focus-visible {
 }
 .empty-suggestion {
   margin: 0.5rem 0 0;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   font-style: italic;
   color: var(--ink-faded);
 }
@@ -4027,7 +4027,7 @@ a.source-link:focus-visible {
 }
 
 .onboarding-body.onboarding-secondary {
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   color: var(--ink-faded);
 }
 
@@ -4051,7 +4051,7 @@ a.source-link:focus-visible {
 
 .onboarding-button {
   font-family: var(--serif);
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
   padding: 0.5rem 1.1rem;
   border: 1px solid var(--ink);
   background: transparent;

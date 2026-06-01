@@ -23,7 +23,7 @@
      the warning visually grouped. */
   padding: 0.55rem 0.85rem;
   border-inline-start: 2px solid currentColor;
-  font-size: 0.92rem;
+  font-size: var(--text-sm);
   background: var(--paper-dim);
   color: var(--ink-soft);
   line-height: 1.45;
@@ -174,7 +174,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
-  font-size: 0.82rem;
+  font-size: var(--text-sm);
   line-height: 1.45;
 }
 

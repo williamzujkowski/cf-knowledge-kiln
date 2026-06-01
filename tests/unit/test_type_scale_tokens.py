@@ -179,13 +179,35 @@ def test_body_line_height_uses_leading_body_token() -> None:
 _KILN_DIR = _REPO / "src" / "cf_knowledge_kiln" / "api" / "static" / "kiln"
 
 
-@pytest.mark.parametrize("legacy_value", ["0.7rem", "0.72rem", "0.78rem"])
+_TEXT_XS_LEGACY = ("0.7rem", "0.72rem", "0.78rem")
+_TEXT_SM_LEGACY = (
+    "0.82rem",
+    "0.84rem",
+    "0.85rem",
+    "0.86rem",
+    "0.88rem",
+    "0.9rem",
+    "0.92rem",
+)
+
+
+@pytest.mark.parametrize("legacy_value", _TEXT_XS_LEGACY)
 def test_no_orphan_text_xs_cluster(legacy_value: str) -> None:
-    """The complete --text-xs cluster (0.7 / 0.72 / 0.78 → 0.75)
-    has been migrated. After the sweeps, no partial should still
-    declare any of the three legacy values as a font-size. Pinning
-    each value separately gives clearer test output when a future
-    regression sneaks one in."""
+    """The --text-xs cluster (0.7 / 0.72 / 0.78 → 0.75) has been
+    fully migrated. Pin each legacy value separately for clearer
+    output when a regression sneaks one in."""
+    _assert_no_orphan_font_size(legacy_value, target_token="--text-xs")
+
+
+@pytest.mark.parametrize("legacy_value", _TEXT_SM_LEGACY)
+def test_no_orphan_text_sm_cluster(legacy_value: str) -> None:
+    """The --text-sm cluster (0.82 / 0.84 / 0.85 / 0.86 / 0.88 / 0.9
+    / 0.92 → 0.875) has been fully migrated. Same shape as the
+    --text-xs guard."""
+    _assert_no_orphan_font_size(legacy_value, target_token="--text-sm")
+
+
+def _assert_no_orphan_font_size(legacy_value: str, *, target_token: str) -> None:
     offenders: list[str] = []
     needle = f"font-size: {legacy_value}"
     for partial in sorted(_KILN_DIR.glob("_*.css")):
@@ -194,10 +216,5 @@ def test_no_orphan_text_xs_cluster(legacy_value: str) -> None:
             offenders.append(partial.name)
     assert not offenders, (
         f"font-size: {legacy_value} should have migrated to "
-        f"var(--text-xs) under #406. Still present in: {offenders}."
+        f"var({target_token}) under #406. Still present in: {offenders}."
     )
-
-
-# test_no_orphan_0_78rem_font_size from sweep 1 was replaced by the
-# parametrized test_no_orphan_text_xs_cluster above — same coverage,
-# clearer assertion when a single value regresses.
