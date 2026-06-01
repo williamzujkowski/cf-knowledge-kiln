@@ -78,7 +78,11 @@ class TestDeepTokensDefined:
     def test_ink_faded_lifted_to_aaa(self) -> None:
         """--ink-faded is text-only (every usage is body byline /
         meta text). The previous value (#5d6a7d) was 5.26:1 AA;
-        bumped to #4d586a (7.1:1 AAA)."""
+        bumped to #3f4a5e (8.32:1 AAA — also the prefers-contrast
+        value so the two modes converge for this token).
+
+        Reviewer caught an earlier attempt (#4d586a, 6.70:1) as
+        below the AAA bar; pinned the conservative choice now."""
         css = _TOKENS_CSS.read_text(encoding="utf-8")
         # Find the default light :root --ink-faded definition.
         m = re.search(r"--ink-faded:\s*(#[0-9a-fA-F]{6})", css)
@@ -88,12 +92,50 @@ class TestDeepTokensDefined:
         assert value != "#5d6a7d", (
             "--ink-faded still at AA value (5.26:1); should be lifted to AAA (≥7:1)"
         )
-        # The new AAA value is #4d586a.
-        assert value == "#4d586a", (
+        # The intermediate value (#4d586a, 6.70:1) is below AAA.
+        assert value != "#4d586a", "--ink-faded at #4d586a is 6.70:1 — below AAA's 7:1 bar"
+        # The conservative AAA value: #3f4a5e (8.32:1).
+        assert value == "#3f4a5e", (
             f"--ink-faded value {value} doesn't match the recorded AAA "
-            f"choice (#4d586a). If you re-tuned, update the test + "
-            f"verify against contrast checker."
+            f"choice (#3f4a5e). If you re-tuned, update the test + "
+            f"verify against contrast checker — must be ≥ 7:1 on --paper."
         )
+
+    def test_aaa_text_color_contrast_ratios(self) -> None:
+        """Independent contrast-ratio math for the pinned AAA tokens.
+        Catches any future hex tune that drops below 7:1 without the
+        contributor noticing."""
+
+        def _rl(hexv: str) -> float:
+            def f(c: float) -> float:
+                c = c / 255
+                return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+
+            r = f(int(hexv[1:3], 16))
+            g = f(int(hexv[3:5], 16))
+            b = f(int(hexv[5:7], 16))
+            return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+        def _contrast(fg: str, bg: str) -> float:
+            l1, l2 = _rl(fg), _rl(bg)
+            light, dark = max(l1, l2), min(l1, l2)
+            return (light + 0.05) / (dark + 0.05)
+
+        paper = "#f4f7fd"
+        # Pin every default-light token that's used as TEXT against
+        # the AAA bar. UI-only tokens (--rule, --paper-soft) excluded.
+        tokens = {
+            "--ink-faded": "#3f4a5e",
+            "--oxblood-deep": "#7e1820",
+            "--teal-deep": "#00475e",
+            "--gold-deep": "#6b3712",
+        }
+        for name, hexv in tokens.items():
+            ratio = _contrast(hexv, paper)
+            assert ratio >= 7.0, (
+                f"{name} ({hexv}) on --paper ({paper}) = {ratio:.2f}:1 — "
+                f"below AAA's 7:1 normal-text threshold."
+            )
 
     def test_dark_ink_faded_lifted_to_aaa(self) -> None:
         """Dark-palette --ink-faded was #8d8d8d (4.85:1 AA); bumped

@@ -32,13 +32,15 @@
   --ink:          #333e4f;
   --ink-soft:     #475365;
   /* #407 A1: --ink-faded was #5d6a7d (5.26:1, AA only). Lifted to
-     #4d586a (7.1:1, AAA). Every usage of --ink-faded in the
-     codebase is text (.freshness, .owner, .results-count,
-     .tagline, .colophon, .source-line, etc.) — for AAA normal-
-     text conformance the default must clear 7:1. Aesthetic shift
-     is minimal — body byline + meta text reads as slightly more
-     authoritative; the editorial voice is preserved. */
-  --ink-faded:    #4d586a;
+     #3f4a5e (8.32:1, AAA — same value the prefers-contrast: more
+     block uses, so the two modes now converge for this token).
+     Every usage of --ink-faded in the codebase is text (.freshness,
+     .owner, .results-count, .tagline, .colophon, .source-line,
+     etc.) — for AAA normal-text conformance the default must clear
+     7:1. An earlier review-fix tried #4d586a but a contrast-ratio
+     re-check landed it at 6.70:1 (below AAA); #3f4a5e is the
+     conservative AAA choice. */
+  --ink-faded:    #3f4a5e;
   --rule:         #c8d2e0;
   --rule-strong:  #9aa5b8;
 

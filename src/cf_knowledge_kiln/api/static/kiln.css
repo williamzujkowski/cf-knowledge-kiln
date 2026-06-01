@@ -36,13 +36,15 @@
   --ink:          #333e4f;
   --ink-soft:     #475365;
   /* #407 A1: --ink-faded was #5d6a7d (5.26:1, AA only). Lifted to
-     #4d586a (7.1:1, AAA). Every usage of --ink-faded in the
-     codebase is text (.freshness, .owner, .results-count,
-     .tagline, .colophon, .source-line, etc.) — for AAA normal-
-     text conformance the default must clear 7:1. Aesthetic shift
-     is minimal — body byline + meta text reads as slightly more
-     authoritative; the editorial voice is preserved. */
-  --ink-faded:    #4d586a;
+     #3f4a5e (8.32:1, AAA — same value the prefers-contrast: more
+     block uses, so the two modes now converge for this token).
+     Every usage of --ink-faded in the codebase is text (.freshness,
+     .owner, .results-count, .tagline, .colophon, .source-line,
+     etc.) — for AAA normal-text conformance the default must clear
+     7:1. An earlier review-fix tried #4d586a but a contrast-ratio
+     re-check landed it at 6.70:1 (below AAA); #3f4a5e is the
+     conservative AAA choice. */
+  --ink-faded:    #3f4a5e;
   --rule:         #c8d2e0;
   --rule-strong:  #9aa5b8;
 
@@ -1367,7 +1369,6 @@ a[data-tooltip]:not([data-tooltip=""]) {
 .status-badge.status-deprecated,
 .status-badge.status-archived,
 .status-badge.status-superseded { color: var(--oxblood-deep); }
-
 /* ─── Deprecation treatment for result cards.
  *
  * Extracted from _results.css per #342 (file-size cap split).
@@ -1569,7 +1570,6 @@ a[data-tooltip]:not([data-tooltip=""]) {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-
 /* ─── Excerpt highlighting + owner byline + score widget.
  *
  * Extracted from _results.css per #342 (file-size cap split).
@@ -1938,9 +1938,12 @@ a.source-link:focus-visible {
 
 .freshness-aging {
   /* Amber / warm tint. The dotted underline signals "the value is
-     graded" without claiming the doc is wrong. */
+     graded" without claiming the doc is wrong. Both color AND
+     text-decoration-color use --gold-deep (AAA 8.98:1 on --paper)
+     — when the decoration is the visual signal on body text, it
+     must hit AAA per WCAG 1.4.6. */
   color: var(--gold-deep);
-  text-decoration: underline dotted var(--gold);
+  text-decoration: underline dotted var(--gold-deep);
   text-underline-offset: 2px;
 }
 
@@ -1950,9 +1953,10 @@ a.source-link:focus-visible {
      (oxblood = caution) so users learn the editorial signal once.
      ``font-style: normal`` overrides the italic from the base
      ``.freshness`` rule in _excerpt_score.css so the stale chip
-     reads as a flag, not a quiet aside. */
+     reads as a flag, not a quiet aside. Both color AND
+     text-decoration-color at --oxblood-deep (AAA 9.60:1 on --paper). */
   color: var(--oxblood-deep);
-  text-decoration: underline solid var(--oxblood);
+  text-decoration: underline solid var(--oxblood-deep);
   text-underline-offset: 2px;
   font-style: normal;
   font-variation-settings: "opsz" 14, "wght" 450;
@@ -2466,7 +2470,6 @@ a.source-link:focus-visible {
      attention in a list scanned at 200ms per card. */
   font-weight: 600;
 }
-
 /* ─── Result-card mobile + card-action affordances + intermediate.
  *
  * Extracted from _results.css per #342 (file-size cap split).
