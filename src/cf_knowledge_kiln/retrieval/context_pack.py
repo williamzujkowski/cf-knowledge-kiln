@@ -23,8 +23,6 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from datetime import date
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from cf_knowledge_kiln.api.tracing import get_tracer
 from cf_knowledge_kiln.db.repositories._hybrid import SearchRow
 from cf_knowledge_kiln.retrieval._engine_helpers import (
@@ -55,8 +53,14 @@ from cf_knowledge_kiln.retrieval.types import (
 
 _TRACER = get_tracer(__name__)
 
+# The fetcher closes over its own session-handling (the retriever
+# wrapper captures ``session`` in its closure). build_context_pack
+# doesn't need to know about sessions — it just asks for rows.
+# Reviewer-flagged: dropping the explicit ``session=`` parameter from
+# the function signature lets the wrapper bind it once via closure
+# and removes an adapter layer.
 _FetcherSig = Callable[
-    [str, RetrievalFilters, AsyncSession | None],
+    [str, RetrievalFilters],
     Awaitable[list[SearchRow]],
 ]
 
@@ -72,7 +76,6 @@ async def build_context_pack(
     max_chunks: int = 8,
     max_tokens: int = 3000,
     embed_warnings_in_text: bool = False,
-    session: AsyncSession | None = None,
 ) -> ContextPackResponse:
     """Build a bounded, cited :class:`ContextPackResponse` for an agent.
 
@@ -116,7 +119,7 @@ async def build_context_pack(
         if removed_phrases and not cleaned:
             raise ValueError("query consists entirely of prompt-injection markers")
         effective = cleaned if removed_phrases else query
-        rows = await fetcher(effective, filters, session)
+        rows = await fetcher(effective, filters)
         with _TRACER.start_as_current_span("retrieval.apply_boosts") as boost_span:
             chunks = [_row_to_ranked_chunk(r) for r in rows]
             boosted = apply_boosts(chunks, config=config, today=date.today())

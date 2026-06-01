@@ -244,15 +244,15 @@ class HybridRetriever:
         its own session so retrieval + telemetry share one
         transaction (issue #74).
         """
-        # Lazy import — see TYPE_CHECKING block at top + the agent
-        # serializer pulls in heavier transitive deps that the human
-        # search() path doesn't need to load.
+        # Lazy import — the agent serializer pulls in heavier
+        # transitive deps that the human search() path doesn't need
+        # to load. Mirrors the prior in-method import shape.
         from cf_knowledge_kiln.retrieval.context_pack import build_context_pack
 
-        # Adapt _fetch_candidates' kw-only `session` to the fetcher
-        # protocol (positional-or-kw) declared in build_context_pack.
-        async def _fetcher(q: str, f: RetrievalFilters, s: AsyncSession | None) -> list[SearchRow]:
-            return await self._fetch_candidates(q, f, session=s)
+        # ``session`` is captured by closure here — build_context_pack
+        # doesn't model sessions; it just asks the fetcher for rows.
+        async def _fetcher(q: str, f: RetrievalFilters) -> list[SearchRow]:
+            return await self._fetch_candidates(q, f, session=session)
 
         return await build_context_pack(
             fetcher=_fetcher,
@@ -264,7 +264,6 @@ class HybridRetriever:
             max_chunks=max_chunks,
             max_tokens=max_tokens,
             embed_warnings_in_text=embed_warnings_in_text,
-            session=session,
         )
 
     async def _fetch_candidates(
