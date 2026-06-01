@@ -387,8 +387,19 @@ class HybridRetriever:
             return list(rows)
         with _TRACER.start_as_current_span("retrieval.hyde") as hyde_span:
             # #333: consult HyDE. None / no-expand → use raw query.
-            embed_text, used_hyde = await _embedding_text_for_vector_arm(query, self._hyde)
+            # #404: also capture cache_hit + generation_ms so operators
+            # can tune cache efficiency + LLM latency without instrumenting
+            # the engine separately.
+            (
+                embed_text,
+                used_hyde,
+                hyde_cache_hit,
+                hyde_generation_ms,
+            ) = await _embedding_text_for_vector_arm(query, self._hyde)
             hyde_span.set_attribute("retrieval.hyde.gated_on", used_hyde)
+            hyde_span.set_attribute("retrieval.hyde.cache_hit", hyde_cache_hit)
+            if hyde_generation_ms is not None:
+                hyde_span.set_attribute("retrieval.hyde.generation_ms", hyde_generation_ms)
         with _TRACER.start_as_current_span("retrieval.embed_query") as embed_span:
             embed_span.set_attribute("retrieval.embedding.provider", self._provider.provider)
             embed_span.set_attribute("retrieval.embedding.model", self._provider.model)

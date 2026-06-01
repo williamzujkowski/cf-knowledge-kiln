@@ -191,26 +191,39 @@ def require_nonempty(query: str) -> None:
         raise ValueError("query must be a non-empty string")
 
 
-async def embedding_text_for_vector_arm(query: str, hyde: object | None) -> tuple[str, bool]:
+async def embedding_text_for_vector_arm(
+    query: str, hyde: object | None
+) -> tuple[str, bool, bool, float | None]:
     """Decide what text the embedding provider should encode for the
     vector arm of hybrid retrieval (#333).
 
-    Returns ``(text, used_hyde)``. ``used_hyde=True`` means the engine
-    expanded the query into a pseudo-doc and embedded THAT instead of
-    the bare query; the FTS arm continues to use the original query.
+    Returns ``(text, used_hyde, cache_hit, generation_ms)``:
+
+    * ``text`` — what the embedding provider should encode. The
+      pseudo-doc when HyDE fired, the bare query otherwise.
+    * ``used_hyde`` — ``True`` when the pseudo-doc replaced the
+      query (FTS arm continues to use the original query).
+    * ``cache_hit`` — ``True`` when the cache short-circuited the
+      generator. ``False`` for skipped / generated / error paths.
+    * ``generation_ms`` — wall-clock ms of the generator call on a
+      cache miss. ``None`` otherwise.
+
+    The latter two flow into the ``retrieval.hyde`` OTel span (#404)
+    so operators can see cache efficiency + per-call latency.
 
     ``hyde`` is typed loosely as ``object | None`` to avoid pulling
     the hyde module into every consumer of this helper; the runtime
-    contract is :meth:`HydeEngine.expand` returning ``str | None``.
-    A ``None`` hyde (the common case — feature off, or no generator)
-    skips the call entirely.
+    contract is :meth:`HydeEngine.expand` returning a
+    :class:`HydeResult`. A ``None`` hyde (the common case — feature
+    off, or no generator) skips the call entirely with skip-safe
+    metadata zeros.
     """
     if hyde is None:
-        return query, False
-    expanded = await hyde.expand(query)  # type: ignore[attr-defined]
-    if not expanded:
-        return query, False
-    return expanded, True
+        return query, False, False, None
+    result = await hyde.expand(query)  # type: ignore[attr-defined]
+    if not result.pseudo_doc:
+        return query, False, result.cache_hit, result.generation_ms
+    return result.pseudo_doc, True, result.cache_hit, result.generation_ms
 
 
 __all__ = [
