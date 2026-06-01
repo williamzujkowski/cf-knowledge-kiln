@@ -196,6 +196,16 @@ _CLUSTERS: dict[str, tuple[str, ...]] = {
     "--text-xl": ("1.32rem", "1.35rem", "1.4rem"),
 }
 
+# Documented per-partial exemptions. ``.preview-close`` keeps
+# ``font-size: 1.4rem`` because promoting it to var(--text-xl) (24px)
+# made the close glyph visually heavy next to the preview-title -
+# caught by the #424 review. The rationale lives in the CSS comment
+# too; this allowlist is the test-side mirror so a future sweep
+# doesn't catch the deliberate exception.
+_LEGACY_EXEMPTIONS: dict[str, frozenset[str]] = {
+    "1.4rem": frozenset({"_preview.css"}),
+}
+
 _CLUSTER_PARAMS = [
     pytest.param(token, legacy, id=f"{legacy}->{token}")
     for token, legacies in _CLUSTERS.items()
@@ -206,19 +216,26 @@ _CLUSTER_PARAMS = [
 @pytest.mark.parametrize("target_token,legacy_value", _CLUSTER_PARAMS)
 def test_no_orphan_legacy_font_size(target_token: str, legacy_value: str) -> None:
     """Every legacy ad-hoc font-size value has been migrated to its
-    cluster token. The mapping table (see _CLUSTERS) is the contract:
-    a new entry here without a corresponding sweep gets caught.
+    cluster token, EXCEPT for the partial-specific exemptions in
+    :data:`_LEGACY_EXEMPTIONS`. Pinning legacy values separately
+    gives a precise failure message when one regresses."""
+    exemptions = _LEGACY_EXEMPTIONS.get(legacy_value, frozenset())
+    _assert_no_orphan_font_size(
+        legacy_value, target_token=target_token, exempted_partials=exemptions
+    )
 
-    Pinning legacy values separately gives a precise failure message
-    when one regresses, rather than a generic 'some font-size is
-    ad-hoc somewhere' report."""
-    _assert_no_orphan_font_size(legacy_value, target_token=target_token)
 
-
-def _assert_no_orphan_font_size(legacy_value: str, *, target_token: str) -> None:
+def _assert_no_orphan_font_size(
+    legacy_value: str,
+    *,
+    target_token: str,
+    exempted_partials: frozenset[str] = frozenset(),
+) -> None:
     offenders: list[str] = []
     needle = f"font-size: {legacy_value}"
     for partial in sorted(_KILN_DIR.glob("_*.css")):
+        if partial.name in exempted_partials:
+            continue
         css = partial.read_text(encoding="utf-8")
         if needle in css:
             offenders.append(partial.name)

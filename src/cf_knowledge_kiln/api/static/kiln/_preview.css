@@ -52,7 +52,13 @@
   background: transparent;
   border: 0;
   font-family: var(--serif);
-  font-size: var(--text-xl);
+  /* #406 — deliberately NOT migrated to var(--text-xl). The close
+     glyph sits in the preview-head alongside the preview-title
+     (which IS var(--text-xl)); promoting the × there made the
+     close button visually heavy. Held at 1.4rem (~22.4px) — the
+     pre-#406 value. If the title cluster gets a finer-grained
+     intermediate token in a future PR, swap this to that token. */
+  font-size: 1.4rem;
   line-height: 1;
   color: var(--ink-soft);
   cursor: pointer;
