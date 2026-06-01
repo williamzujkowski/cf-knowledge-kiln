@@ -15,9 +15,16 @@ body {
   font-feature-settings: "ss01", "ss02", "kern" 1, "liga" 1, "onum" 1;
   font-variant-numeric: oldstyle-nums proportional-nums;
   font-optical-sizing: auto;
-  /* #122: drop body to 16px so result-title pulls visually further away. */
-  font-size: 16px;
-  line-height: 1.6;
+  /* #406 Finding 4 — the prior body was pinned to a literal 16
+     CSS pixels, which ignored the user's browser default font
+     size. var(--text-base) = 1rem lets the whole UI scale when a
+     low-vision user bumps their browser preference. The previous
+     comment cited #122 (drop the body baseline so the result-title
+     pulls visually further away) — that proportional relationship
+     is preserved because the title sizes are also rem-based, so
+     the gap survives the scale change. */
+  font-size: var(--text-base);
+  line-height: var(--leading-body);
   color: var(--ink);
   background-color: var(--paper);
   /* Monospace-light atmospheric bloom — pale violet-blue from the
