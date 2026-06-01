@@ -20,6 +20,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from cf_knowledge_kiln.retrieval import context_pack as context_pack_module
 from cf_knowledge_kiln.retrieval import engine as engine_module
 from cf_knowledge_kiln.retrieval.config import RetrievalConfig
 from cf_knowledge_kiln.retrieval.engine import HybridRetriever
@@ -90,6 +91,10 @@ def _build_retriever() -> HybridRetriever:
 def recording_tracer(monkeypatch: pytest.MonkeyPatch) -> _RecordingTracer:
     tracer = _RecordingTracer()
     monkeypatch.setattr(engine_module, "_TRACER", tracer)
+    # #402: context_pack orchestration was extracted into a sibling
+    # module with its own module-scope _TRACER. Patch both so the
+    # recorder sees the full span tree of the agent path too.
+    monkeypatch.setattr(context_pack_module, "_TRACER", tracer)
     return tracer
 
 
