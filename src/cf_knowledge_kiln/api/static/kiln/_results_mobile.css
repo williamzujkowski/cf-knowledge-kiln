@@ -174,8 +174,8 @@
 
 .card-action:hover,
 .card-action:focus-visible {
-  color: var(--oxblood);
-  border-block-end-color: var(--oxblood);
+  color: var(--oxblood-deep);
+  border-block-end-color: var(--oxblood-deep);
 }
 
 .card-action:focus-visible {
@@ -207,7 +207,7 @@
      the visible label change rides on the card's data-expanded
      attribute. This rule keeps the button visible with the same
      letter hint; the change is purely the accent color. */
-  color: var(--oxblood);
+  color: var(--oxblood-deep);
 }
 
 /* ─── #289: intermediate breakpoint between desktop and 640 ─────────

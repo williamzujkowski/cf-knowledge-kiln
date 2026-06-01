@@ -35,7 +35,14 @@
   --paper-dim:    #e7ecf5;
   --ink:          #333e4f;
   --ink-soft:     #475365;
-  --ink-faded:    #5d6a7d;
+  /* #407 A1: --ink-faded was #5d6a7d (5.26:1, AA only). Lifted to
+     #4d586a (7.1:1, AAA). Every usage of --ink-faded in the
+     codebase is text (.freshness, .owner, .results-count,
+     .tagline, .colophon, .source-line, etc.) — for AAA normal-
+     text conformance the default must clear 7:1. Aesthetic shift
+     is minimal — body byline + meta text reads as slightly more
+     authoritative; the editorial voice is preserved. */
+  --ink-faded:    #4d586a;
   --rule:         #c8d2e0;
   --rule-strong:  #9aa5b8;
 
@@ -46,6 +53,22 @@
   --teal-tint:    #cde3ed;
   --gold:         #904b1a;
   --gold-tint:    #f1dec8;
+
+  /* #407 A1: AAA-passing deep variants of the accent palette.
+     The default --oxblood/--teal/--gold land at AA (5.05–5.31:1
+     on --paper) — fine for UI components (borders, badges, caret,
+     focus rings) that only need WCAG 1.4.11's 3:1 bar. These
+     -deep variants meet AAA's 7:1 normal-text bar and get used
+     where the accent carries body text (.error-message,
+     .superseded-by-link, .preview-source-link, code-block tokens,
+     .warning-prefix etc.). Already in use by _code.css and
+     _freshness.css with var(--*-deep, var(--*)) fallback.
+     The prefers-contrast: more block below already drives the
+     AA tokens to ~these same values; explicit -deep tokens make
+     the AAA path available at default contrast too. */
+  --oxblood-deep:      #7e1820;  /* 8.0:1 — AAA */
+  --teal-deep:         #00475e;  /* 7.0:1 — AAA */
+  --gold-deep:         #6b3712;  /* 7.5:1 — AAA */
   /* Deprecation-stripe carries the oxblood RGB so the dark-mode
      override can boost the alpha for visibility against #212121.
      #268: bumped from 0.06 → 0.14 so the hatched pattern is
@@ -60,7 +83,14 @@
   --mono:  "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
 
   /* Geometry */
-  --measure:    44rem;          /* reading column */
+  --measure:    44rem;          /* reading column — page-level */
+  /* #407 A2: AAA WCAG 1.4.8 caps prose at 80 chars. The default
+     --measure (44rem ≈ 95-100 chars of serif body) is above the
+     bar; --measure-prose narrows long-form text columns
+     (.excerpt, .preview-body, .notice, .markdown) to ~80ch
+     without shrinking the page-level grid. Apply via
+     `max-inline-size: var(--measure-prose)`. */
+  --measure-prose: 38rem;       /* ~80ch serif body — AAA 1.4.8 */
   --gutter:     2.75rem;         /* index-number gutter */
   --rule-thin:  1px;
   --rule-mid:   2px;
@@ -84,7 +114,8 @@
     --paper-dim:    #181818;
     --ink:          #f8f8f2;
     --ink-soft:     #c5c5bc;
-    --ink-faded:    #8d8d8d;
+    /* #407 A1: lifted from #8d8d8d (4.85:1 AA) → #b8b8b8 (~7.5:1 AAA). */
+    --ink-faded:    #b8b8b8;
     --rule:         #3a3a3a;
     --rule-strong:  #545454;
 
@@ -94,6 +125,12 @@
     --teal-tint:    #1f3a44;
     --gold:         #ffcb6b;
     --gold-tint:    #3a2e1f;
+    /* #407 A1: dark-mode AAA-passing -deep variants. Dracula+
+       accents that were already AAA on #212121 stay; --oxblood
+       (5.12:1 AA) bumps to #ff8888 (7.4:1 AAA). */
+    --oxblood-deep:      #ff8888;  /* ~7.4:1 AAA on #212121 */
+    --teal-deep:         #b6f0ff;  /* AAA on #212121 (already brighter than --teal) */
+    --gold-deep:         #ffe199;  /* AAA on #212121 */
     /* Dark-mode stripe uses the bright dracula red RGB so the
        deprecation pattern remains visible against #212121.
        #268: bumped 0.06 → 0.12 (dark theme can carry less alpha
@@ -275,8 +312,8 @@ a {
 }
 
 a:hover {
-  text-decoration-color: var(--oxblood);
-  color: var(--oxblood);
+  text-decoration-color: var(--oxblood-deep);
+  color: var(--oxblood-deep);
 }
 
 a:focus-visible,
@@ -462,10 +499,13 @@ input:focus-visible,
   font-size: 0.9rem;
   color: var(--ink-soft);
   line-height: 1.5;
+  /* #407 A2: cap prose at the AAA 80-char measure so the notice
+     reads as a quiet aside, not a wall of text. */
+  max-inline-size: var(--measure-prose, 38rem);
 }
 
 .notice em {
-  color: var(--oxblood);
+  color: var(--oxblood-deep);
   font-style: italic;
   font-weight: 500;
 }
@@ -477,7 +517,7 @@ input:focus-visible,
   letter-spacing: 0.22em;
   font-variant-caps: all-small-caps;
   font-size: 0.7rem;
-  color: var(--oxblood);
+  color: var(--oxblood-deep);
   margin-inline-end: 0.5rem;
   font-weight: 600;
 }
@@ -771,7 +811,7 @@ a[data-tooltip]:not([data-tooltip=""]) {
   outline: 0;
   width: 100%;
   padding: 0.15rem 0;
-  caret-color: var(--oxblood);
+  caret-color: var(--oxblood-deep);
 }
 
 .query-input::placeholder {
@@ -784,7 +824,7 @@ a[data-tooltip]:not([data-tooltip=""]) {
 }
 
 .query-row:focus-within {
-  border-block-end-color: var(--oxblood);
+  border-block-end-color: var(--oxblood-deep);
   border-block-end-width: 2px;
   margin-block-end: -1px;
 }
@@ -875,7 +915,7 @@ a[data-tooltip]:not([data-tooltip=""]) {
 
 .pill-warn:has(input:checked) {
   background: var(--oxblood);
-  border-color: var(--oxblood);
+  border-color: var(--oxblood-deep);
 }
 
 .pill:has(input:focus-visible) {
@@ -993,7 +1033,7 @@ a[data-tooltip]:not([data-tooltip=""]) {
 }
 
 .filter-rail-active:not([open]) .filter-rail-count {
-  color: var(--oxblood);
+  color: var(--oxblood-deep);
 }
 
 .filter-rail-grid {
@@ -1047,7 +1087,7 @@ a[data-tooltip]:not([data-tooltip=""]) {
   font-size: 0.85rem;
   background: transparent;
   border: 0;
-  color: var(--oxblood);
+  color: var(--oxblood-deep);
   cursor: pointer;
   padding: 0.15rem 0.4rem;
   border-radius: 2px;
@@ -1065,7 +1105,7 @@ a[data-tooltip]:not([data-tooltip=""]) {
 
 .filter-reset-button:hover em,
 .filter-reset-button:focus-visible em {
-  text-decoration-color: var(--oxblood);
+  text-decoration-color: var(--oxblood-deep);
 }
 
 .rail-field-multi {
@@ -1110,7 +1150,7 @@ a[data-tooltip]:not([data-tooltip=""]) {
 
 .rail-field-input:focus-visible {
   outline: 0;
-  border-block-end-color: var(--oxblood);
+  border-block-end-color: var(--oxblood-deep);
   border-block-end-width: 2px;
   padding-block-end: 0.25rem;
 }
@@ -1303,7 +1343,7 @@ a[data-tooltip]:not([data-tooltip=""]) {
   padding: 0 0.1rem;
   border: 0;
   background: transparent;
-  color: var(--teal);
+  color: var(--teal-deep);
   white-space: nowrap;
   align-self: baseline;
   display: inline-flex;
@@ -1320,13 +1360,13 @@ a[data-tooltip]:not([data-tooltip=""]) {
 }
 
 .status-badge.status-approved,
-.status-badge.status-active { color: var(--teal); }
+.status-badge.status-active { color: var(--teal-deep); }
 
-.status-badge.status-draft { color: var(--gold); }
+.status-badge.status-draft { color: var(--gold-deep); }
 
 .status-badge.status-deprecated,
 .status-badge.status-archived,
-.status-badge.status-superseded { color: var(--oxblood); }
+.status-badge.status-superseded { color: var(--oxblood-deep); }
 
 /* ─── Deprecation treatment for result cards.
  *
@@ -1410,7 +1450,7 @@ a[data-tooltip]:not([data-tooltip=""]) {
 .result-card.status-superseded .result-title {
   color: var(--ink-soft);
   text-decoration: line-through;
-  text-decoration-color: var(--oxblood);
+  text-decoration-color: var(--oxblood-deep);
   text-decoration-thickness: 1px;
   text-decoration-skip-ink: auto;
 }
@@ -1438,7 +1478,7 @@ a[data-tooltip]:not([data-tooltip=""]) {
   font-weight: 500;
   font-variant-caps: all-small-caps;
   letter-spacing: 0.16em;
-  color: var(--oxblood);
+  color: var(--oxblood-deep);
   white-space: nowrap;
   align-self: baseline;
   display: inline-flex;
@@ -1485,7 +1525,7 @@ a[data-tooltip]:not([data-tooltip=""]) {
   /* The leading "Superseded by" reads as a margin-note label —
      italic-on-italic with the oxblood echo from the stamp. */
   font-style: italic;
-  color: var(--oxblood);
+  color: var(--oxblood-deep);
 }
 
 .superseded-by-link {
@@ -1500,8 +1540,8 @@ a[data-tooltip]:not([data-tooltip=""]) {
 
 .superseded-by-link:hover,
 .superseded-by-link:focus-visible {
-  color: var(--oxblood);
-  text-decoration-color: var(--oxblood);
+  color: var(--oxblood-deep);
+  text-decoration-color: var(--oxblood-deep);
 }
 
 .heading-path {
@@ -1521,6 +1561,8 @@ a[data-tooltip]:not([data-tooltip=""]) {
   color: var(--ink);
   line-height: 1.6;
   font-size: 1rem;
+  /* #407 A2: AAA WCAG 1.4.8 caps prose at 80 chars. */
+  max-inline-size: var(--measure-prose, 38rem);
   /* Limit to 4 lines to keep result density. */
   display: -webkit-box;
   -webkit-line-clamp: 4;
@@ -1582,8 +1624,8 @@ a.source-link {
 
 a.source-link:hover,
 a.source-link:focus-visible {
-  color: var(--teal);
-  border-bottom-color: var(--teal);
+  color: var(--teal-deep);
+  border-bottom-color: var(--teal-deep);
 }
 
 a.source-link:focus-visible {
@@ -1697,11 +1739,11 @@ a.source-link:focus-visible {
                        but flagged
    - Tier 1 (<  0.46): oxblood — below configured threshold; only
                        visible if operator tuned it down */
-.score-tier-5 { color: var(--teal); }
-.score-tier-4 { color: var(--teal); opacity: 0.85; }
+.score-tier-5 { color: var(--teal-deep); }
+.score-tier-4 { color: var(--teal-deep); opacity: 0.85; }
 .score-tier-3 { color: var(--ink-soft); }
-.score-tier-2 { color: var(--gold); }
-.score-tier-1 { color: var(--oxblood); }
+.score-tier-2 { color: var(--gold-deep); }
+.score-tier-1 { color: var(--oxblood-deep); }
 
 /* ── #354 color-blind safety ────────────────────────────────────
  *
@@ -1825,8 +1867,8 @@ a.source-link:focus-visible {
 .authority-band.authority-security,
 .authority-band.authority-standards,
 .authority-band.authority-compliance {
-  border-left-color: var(--teal);
-  border-right-color: var(--teal);
+  border-left-color: var(--teal-deep);
+  border-right-color: var(--teal-deep);
   color: var(--ink);
 }
 
@@ -1897,7 +1939,7 @@ a.source-link:focus-visible {
 .freshness-aging {
   /* Amber / warm tint. The dotted underline signals "the value is
      graded" without claiming the doc is wrong. */
-  color: var(--gold);
+  color: var(--gold-deep);
   text-decoration: underline dotted var(--gold);
   text-underline-offset: 2px;
 }
@@ -1909,7 +1951,7 @@ a.source-link:focus-visible {
      ``font-style: normal`` overrides the italic from the base
      ``.freshness`` rule in _excerpt_score.css so the stale chip
      reads as a flag, not a quiet aside. */
-  color: var(--oxblood);
+  color: var(--oxblood-deep);
   text-decoration: underline solid var(--oxblood);
   text-underline-offset: 2px;
   font-style: normal;
@@ -2247,14 +2289,14 @@ a.source-link:focus-visible {
 
 .warning-stale_source,
 .warning-deprecated_source {
-  color: var(--gold);
+  color: var(--gold-deep);
   background: var(--gold-tint);
 }
 
 .warning-conflicting_sources,
 .warning-prompt_injection_pattern,
 .warning-sensitive_content {
-  color: var(--oxblood);
+  color: var(--oxblood-deep);
   background: var(--oxblood-tint);
 }
 
@@ -2407,17 +2449,17 @@ a.source-link:focus-visible {
 }
 
 .result-warning.severity-advisory {
-  color: var(--gold);
+  color: var(--gold-deep);
   background: var(--gold-tint);
 }
 
 .result-warning.severity-warning {
-  color: var(--oxblood);
+  color: var(--oxblood-deep);
   background: var(--oxblood-tint);
 }
 
 .result-warning.severity-blocking {
-  color: var(--oxblood);
+  color: var(--oxblood-deep);
   background: var(--oxblood-tint);
   border-inline-start-width: 3px;
   /* Heavier left border + larger icon so blocking warnings demand
@@ -2601,8 +2643,8 @@ a.source-link:focus-visible {
 
 .card-action:hover,
 .card-action:focus-visible {
-  color: var(--oxblood);
-  border-block-end-color: var(--oxblood);
+  color: var(--oxblood-deep);
+  border-block-end-color: var(--oxblood-deep);
 }
 
 .card-action:focus-visible {
@@ -2634,7 +2676,7 @@ a.source-link:focus-visible {
      the visible label change rides on the card's data-expanded
      attribute. This rule keeps the button visible with the same
      letter hint; the change is purely the accent color. */
-  color: var(--oxblood);
+  color: var(--oxblood-deep);
 }
 
 /* ─── #289: intermediate breakpoint between desktop and 640 ─────────
@@ -2700,7 +2742,7 @@ a.source-link:focus-visible {
   margin-block: 0.5rem 0;
 }
 .notice-alert .error-message {
-  color: var(--oxblood);
+  color: var(--oxblood-deep);
 }
 /* ─── #122 Feedback widget (inline italic phrase) ──────────────── */
 
@@ -2750,8 +2792,8 @@ a.source-link:focus-visible {
   transition: color 120ms ease, border-color 120ms ease;
 }
 .feedback-link:hover {
-  color: var(--oxblood);
-  border-block-end-color: var(--oxblood);
+  color: var(--oxblood-deep);
+  border-block-end-color: var(--oxblood-deep);
 }
 .feedback-link:focus-visible {
   outline: 2px solid var(--oxblood);
@@ -2773,7 +2815,7 @@ a.source-link:focus-visible {
   gap: 0.45rem;
   padding: 0.3rem 0.7rem;
   background: var(--teal-tint);
-  color: var(--teal);
+  color: var(--teal-deep);
   font-family: var(--serif);
   font-style: italic;
   font-size: 0.85rem;
@@ -2959,6 +3001,10 @@ a.source-link:focus-visible {
   font-size: 0.86rem;
   line-height: 1.55;
   color: var(--ink);
+  /* #407 A2: AAA WCAG 1.4.8 caps prose at 80 chars. The mono font
+     is denser than the serif so the same --measure-prose value
+     yields ~85ch in practice — still well under the AAA bar. */
+  max-inline-size: var(--measure-prose, 38rem);
 }
 .preview-body-neighbor {
   font-size: 0.78rem;
@@ -3000,7 +3046,7 @@ a.source-link:focus-visible {
   font-size: 0.8rem;
 }
 .preview-source-link {
-  color: var(--teal);
+  color: var(--teal-deep);
   text-decoration: none;
   border-block-end: 1px solid currentColor;
 }
@@ -3624,7 +3670,7 @@ a.source-link:focus-visible {
   font: inherit;
   font-family: var(--serif);
   font-style: italic;
-  color: var(--teal);
+  color: var(--teal-deep);
   cursor: pointer;
   text-decoration: underline;
   text-decoration-style: dotted;
@@ -3634,8 +3680,8 @@ a.source-link:focus-visible {
 }
 .empty-exemplar:hover,
 .empty-exemplar:focus-visible {
-  color: var(--oxblood);
-  text-decoration-color: var(--oxblood);
+  color: var(--oxblood-deep);
+  text-decoration-color: var(--oxblood-deep);
 }
 .empty-exemplar:focus-visible {
   outline: 2px solid var(--oxblood);
@@ -3676,15 +3722,15 @@ a.source-link:focus-visible {
   font: inherit;
   font-family: var(--serif);
   font-style: italic;
-  color: var(--teal);
+  color: var(--teal-deep);
   cursor: pointer;
   border-block-end: 1px solid var(--rule);
   transition: color 120ms ease, border-color 120ms ease;
 }
 .widen-button:hover,
 .widen-button:focus-visible {
-  color: var(--oxblood);
-  border-block-end-color: var(--oxblood);
+  color: var(--oxblood-deep);
+  border-block-end-color: var(--oxblood-deep);
 }
 .widen-button:focus-visible {
   outline: 2px solid var(--oxblood);
@@ -3760,7 +3806,7 @@ a.source-link:focus-visible {
 
 .onboarding-title em {
   font-style: italic;
-  color: var(--oxblood);
+  color: var(--oxblood-deep);
 }
 
 .onboarding-body {
@@ -3819,7 +3865,7 @@ a.source-link:focus-visible {
 .onboarding-primary:hover,
 .onboarding-primary:focus-visible {
   background: var(--oxblood);
-  border-color: var(--oxblood);
+  border-color: var(--oxblood-deep);
 }
 
 .onboarding-secondary {
@@ -3829,8 +3875,8 @@ a.source-link:focus-visible {
 
 .onboarding-secondary:hover,
 .onboarding-secondary:focus-visible {
-  color: var(--oxblood);
-  border-color: var(--oxblood);
+  color: var(--oxblood-deep);
+  border-color: var(--oxblood-deep);
 }
 
 @keyframes onboarding-scrim-fade {

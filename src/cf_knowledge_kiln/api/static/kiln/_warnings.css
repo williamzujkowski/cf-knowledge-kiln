@@ -40,14 +40,14 @@
 
 .warning-stale_source,
 .warning-deprecated_source {
-  color: var(--gold);
+  color: var(--gold-deep);
   background: var(--gold-tint);
 }
 
 .warning-conflicting_sources,
 .warning-prompt_injection_pattern,
 .warning-sensitive_content {
-  color: var(--oxblood);
+  color: var(--oxblood-deep);
   background: var(--oxblood-tint);
 }
 
@@ -200,21 +200,20 @@
 }
 
 .result-warning.severity-advisory {
-  color: var(--gold);
+  color: var(--gold-deep);
   background: var(--gold-tint);
 }
 
 .result-warning.severity-warning {
-  color: var(--oxblood);
+  color: var(--oxblood-deep);
   background: var(--oxblood-tint);
 }
 
 .result-warning.severity-blocking {
-  color: var(--oxblood);
+  color: var(--oxblood-deep);
   background: var(--oxblood-tint);
   border-inline-start-width: 3px;
   /* Heavier left border + larger icon so blocking warnings demand
      attention in a list scanned at 200ms per card. */
   font-weight: 600;
 }
-

@@ -30,7 +30,7 @@
 .freshness-aging {
   /* Amber / warm tint. The dotted underline signals "the value is
      graded" without claiming the doc is wrong. */
-  color: var(--gold);
+  color: var(--gold-deep);
   text-decoration: underline dotted var(--gold);
   text-underline-offset: 2px;
 }
@@ -42,7 +42,7 @@
      ``font-style: normal`` overrides the italic from the base
      ``.freshness`` rule in _excerpt_score.css so the stale chip
      reads as a flag, not a quiet aside. */
-  color: var(--oxblood);
+  color: var(--oxblood-deep);
   text-decoration: underline solid var(--oxblood);
   text-underline-offset: 2px;
   font-style: normal;
