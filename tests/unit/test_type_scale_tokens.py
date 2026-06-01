@@ -99,10 +99,11 @@ _EXPECTED_LEADING_TOKENS: dict[str, str] = {
     # Snug: subhead / preview titles where 2-3-line wrap is possible
     # and the lines should sit close enough to read as a unit.
     "--leading-snug": "1.3",
-    # Body: long-form serif prose. The audit recommended ~1.55 over
-    # the current 1.6 for a more book-like reading rhythm on the
-    # 38rem prose measure.
-    "--leading-body": "1.55",
+    # Body: long-form serif prose. Pinned to 1.6 to match the
+    # pre-token visual; the audit's 1.55 recommendation is a
+    # deliberate follow-up tune (separate PR — the foundation
+    # slice shouldn't introduce a visible reflow).
+    "--leading-body": "1.6",
     # Mono: code blocks need extra leading so the descenders and
     # ascenders of a monospaced font don't collide; 1.6 is the
     # community consensus for editor-grade readability.

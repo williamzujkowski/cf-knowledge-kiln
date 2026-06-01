@@ -189,7 +189,10 @@
 .excerpt {
   margin: 0.3rem 0 0.65rem;
   color: var(--ink);
-  line-height: 1.6;
+  /* #406: was a hard-coded 1.6; --leading-body is also 1.6 so the
+     migration is value-neutral. A future tune of --leading-body
+     to 1.55 lands here in one place. */
+  line-height: var(--leading-body);
   font-size: 1rem;
   /* #407 A2: AAA WCAG 1.4.8 caps prose at 80 chars. */
   max-inline-size: var(--measure-prose, 38rem);
