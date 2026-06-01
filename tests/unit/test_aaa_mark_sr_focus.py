@@ -25,6 +25,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
 from cf_knowledge_kiln.api.result_cards import highlight_excerpt
 
 _REPO = Path(__file__).resolve().parents[2]
@@ -128,24 +130,39 @@ def test_query_input_focus_relies_on_query_row_indicator() -> None:
     )
 
 
-def test_query_row_focus_within_uses_aaa_token_at_2px() -> None:
-    """The actual focus indicator: .query-row:focus-within shifts
-    border-block-end to ``var(--oxblood-deep)`` at 2px. Pin both:
-    - The token MUST be the AAA-deep variant (--oxblood at AA would
-      drop the indicator from 7.4:1 contrast vs --rule to ~3.2:1, just
-      above 2.4.13's 3:1 floor but well below the safety margin).
-    - The thickness MUST be 2px, not 1px — 2.4.13 requires either a
-      2 CSS-pixel perimeter or a 2 CSS-pixel line along a long side."""
+@pytest.mark.parametrize(
+    "selector",
+    [
+        ".query-row:focus-within",
+        ".rail-field-input:focus-visible",
+    ],
+)
+def test_focus_indicator_uses_aaa_token_at_2px(selector: str) -> None:
+    """The two focus indicators in the search column share the same
+    pattern: border-block-end shifts to ``var(--oxblood-deep)`` at
+    2px. Pin both:
+    - The token MUST be the AAA-deep variant (--oxblood at AA
+      #a52430 = 5.31:1 vs --paper, which would still meet 2.4.13's
+      3:1 floor but only by ~2x margin; --oxblood-deep #7e1820 =
+      9.60:1 vs --paper, 6.75:1 vs --rule, the comfortable AAA
+      bracket).
+    - The thickness MUST be 2px — 2.4.13 requires either a 2
+      CSS-pixel perimeter or a 2 CSS-pixel line along a long side.
+    Both .query-row:focus-within and .rail-field-input:focus-visible
+    use the same pattern; the test covers them together so a future
+    refactor that only updates one selector is caught."""
     css = _SEARCH_CSS.read_text(encoding="utf-8")
-    m = re.search(r"\.query-row:focus-within\s*\{[^}]*\}", css)
-    assert m is not None, ".query-row:focus-within rule missing"
+    pattern = re.escape(selector) + r"\s*\{[^}]*\}"
+    m = re.search(pattern, css)
+    assert m is not None, f"{selector} rule missing"
     block = m.group(0)
     assert "var(--oxblood-deep)" in block, (
-        "query-row:focus-within border color should use --oxblood-deep "
-        "(AAA, 10.8:1 on --paper); switching to --oxblood (AA, 5.31:1) "
-        "would drop contrast against adjacent surfaces."
+        f"{selector} border color should use --oxblood-deep "
+        f"(AAA, 9.60:1 on --paper); switching to --oxblood (AA, "
+        f"5.31:1) would drop contrast against adjacent surfaces."
     )
     assert "2px" in block, (
-        "query-row:focus-within border thickness should be 2px to clear "
-        "WCAG 2.4.13's minimum-area requirement for a single-side indicator."
+        f"{selector} border thickness should be 2px to clear "
+        f"WCAG 2.4.13's minimum-area requirement for a single-side "
+        f"indicator."
     )

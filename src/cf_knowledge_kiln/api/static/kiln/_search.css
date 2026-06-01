@@ -51,11 +51,14 @@
    - Minimum area: 2 CSS-pixel-thick solid line along the longest
      side of the input's bounding box meets the "2 px perimeter OR
      equal-area line along the long side" alternative.
-   - Minimum contrast: --oxblood-deep #7e1820 against --paper
-     #f4f7fd is 10.8:1, well above the 3:1 floor; vs the prior
-     unfocused indicator --rule #c8d2e0 it is 7.4:1, also above 3:1.
-   Tests in test_aaa_mark_sr_focus.py pin the selectors, thickness,
-   and token so a future tune (e.g. switching to --oxblood AA or
+   - Minimum contrast (verified via WCAG luminance formula):
+     --oxblood-deep #7e1820 vs --paper #f4f7fd = 9.60:1, well above
+     the 3:1 floor. Vs the prior unfocused --rule #c8d2e0 = 6.75:1,
+     also above 3:1.
+   The same indicator pattern is reused by .rail-field-input:focus-
+   visible (see line 389) — same AAA properties hold. Tests in
+   test_aaa_mark_sr_focus.py pin BOTH selectors, the thickness, and
+   the token so a future tune (e.g. switching to --oxblood AA or
    dropping to 1px) fails CI. */
 .query-input:focus-visible {
   outline: 0;
