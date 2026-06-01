@@ -74,7 +74,7 @@
 .cheatsheet-row { display: contents; }
 .cheatsheet-row dt {
   font-family: var(--mono);
-  font-size: 0.78rem;
+  font-size: var(--text-xs);
   color: var(--ink-soft);
   text-align: end;
   align-self: center;

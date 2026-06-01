@@ -85,7 +85,7 @@
 
 .onboarding-body kbd {
   font-family: var(--mono);
-  font-size: 0.78rem;
+  font-size: var(--text-xs);
   background: var(--paper-dim, var(--paper));
   border: 1px solid var(--rule);
   border-block-end-width: 2px;
