@@ -776,6 +776,38 @@ a[data-tooltip]:not([data-tooltip=""]) {
     transition: none;
   }
 }
+/* ─── Shared utility classes ─────────────────────────────────────── */
+
+/* #407 A4 — visually-hidden utility for screen-reader-only text.
+ *
+ * Used by ``highlight_excerpt`` to wrap each ``<mark>`` highlight
+ * with bracket sentinels: NVDA / VoiceOver / JAWS announce
+ * ``"[ highlighted text ]"`` so the boundary of the query match is
+ * audible. The brackets themselves are off-screen (1×1 clipped box)
+ * but remain in the accessibility tree.
+ *
+ * The exact recipe is the canonical "clip-1px" pattern published by
+ * Scott O'Hara / Steve Faulkner: clip via ``clip-path: inset(50%)``
+ * with a 1×1 box and negative margin, padding 0, no border. Do NOT
+ * replace this with ``display: none`` or ``visibility: hidden`` —
+ * both remove the element from the accessibility tree, defeating
+ * the SR-boundary purpose. ``aria-hidden="true"`` would do the same.
+ *
+ * The class is intentionally global (defined here, not scoped to one
+ * component) so future a11y work — column-header announcements,
+ * decorative-icon labels, status-region prefixes — can reuse it. */
+.visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
 /* ─── Search form ──────────────────────────────────────────────── */
 
 .search-form {
@@ -821,8 +853,22 @@ a[data-tooltip]:not([data-tooltip=""]) {
   font-style: italic;
 }
 
+/* #407 A5 — WCAG 2.4.13 Focus Appearance (AAA) audit.
+   .query-input deliberately sets ``outline: 0`` because the parent
+   .query-row carries the visible focus indicator: a solid
+   border-block-end that thickens from 1px var(--rule) to 2px
+   var(--oxblood-deep) via :focus-within. That indicator clears 2.4.13:
+   - Minimum area: 2 CSS-pixel-thick solid line along the longest
+     side of the input's bounding box meets the "2 px perimeter OR
+     equal-area line along the long side" alternative.
+   - Minimum contrast: --oxblood-deep #7e1820 against --paper
+     #f4f7fd is 10.8:1, well above the 3:1 floor; vs the prior
+     unfocused indicator --rule #c8d2e0 it is 7.4:1, also above 3:1.
+   Tests in test_aaa_mark_sr_focus.py pin the selectors, thickness,
+   and token so a future tune (e.g. switching to --oxblood AA or
+   dropping to 1px) fails CI. */
 .query-input:focus-visible {
-  outline: 0;          /* underline IS the focus indicator on this row */
+  outline: 0;
 }
 
 .query-row:focus-within {

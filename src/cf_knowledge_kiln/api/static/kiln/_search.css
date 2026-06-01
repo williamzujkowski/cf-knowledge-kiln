@@ -43,8 +43,22 @@
   font-style: italic;
 }
 
+/* #407 A5 — WCAG 2.4.13 Focus Appearance (AAA) audit.
+   .query-input deliberately sets ``outline: 0`` because the parent
+   .query-row carries the visible focus indicator: a solid
+   border-block-end that thickens from 1px var(--rule) to 2px
+   var(--oxblood-deep) via :focus-within. That indicator clears 2.4.13:
+   - Minimum area: 2 CSS-pixel-thick solid line along the longest
+     side of the input's bounding box meets the "2 px perimeter OR
+     equal-area line along the long side" alternative.
+   - Minimum contrast: --oxblood-deep #7e1820 against --paper
+     #f4f7fd is 10.8:1, well above the 3:1 floor; vs the prior
+     unfocused indicator --rule #c8d2e0 it is 7.4:1, also above 3:1.
+   Tests in test_aaa_mark_sr_focus.py pin the selectors, thickness,
+   and token so a future tune (e.g. switching to --oxblood AA or
+   dropping to 1px) fails CI. */
 .query-input:focus-visible {
-  outline: 0;          /* underline IS the focus indicator on this row */
+  outline: 0;
 }
 
 .query-row:focus-within {

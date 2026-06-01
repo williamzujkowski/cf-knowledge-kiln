@@ -107,6 +107,7 @@ build-css: ## Concatenate the static/kiln/*.css partials into static/kiln.css.
 	@cat src/cf_knowledge_kiln/api/static/kiln/_tokens.css \
 	     src/cf_knowledge_kiln/api/static/kiln/_fonts.css \
 	     src/cf_knowledge_kiln/api/static/kiln/_base.css \
+	     src/cf_knowledge_kiln/api/static/kiln/_utilities.css \
 	     src/cf_knowledge_kiln/api/static/kiln/_search.css \
 	     src/cf_knowledge_kiln/api/static/kiln/_results.css \
 	     src/cf_knowledge_kiln/api/static/kiln/_deprecation.css \

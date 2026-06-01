@@ -6,6 +6,23 @@ from cf_knowledge_kiln.api.result_cards import highlight_excerpt as _highlight_e
 from cf_knowledge_kiln.api.views import humanize_warning as _humanize_warning
 
 
+def _marked(word: str) -> str:
+    """Render the bracket-wrapped <mark> string produced by
+    :func:`highlight_excerpt` after #407 A4. SR users hear "[ X ]"
+    because the brackets are inside visually-hidden spans.
+
+    Test assertions use this helper rather than hard-coding the
+    full bracket-wrapper format so a future tweak only edits one
+    place. See test_aaa_mark_sr_focus.py for the semantic pins
+    (what AT actually announces).
+    """
+    return (
+        '<mark><span class="visually-hidden">[</span>'
+        + word
+        + '<span class="visually-hidden">]</span></mark>'
+    )
+
+
 class TestHighlightExcerpt:
     def test_no_query_returns_escaped_text(self) -> None:
         out = _highlight_excerpt("plain text", "")
@@ -13,23 +30,23 @@ class TestHighlightExcerpt:
 
     def test_wraps_matching_term(self) -> None:
         out = _highlight_excerpt("hello widgets world", "widgets")
-        assert "<mark>widgets</mark>" in str(out)
+        assert _marked("widgets") in str(out)
 
     def test_case_insensitive_match(self) -> None:
         out = _highlight_excerpt("Hello Widgets World", "widgets")
-        assert "<mark>Widgets</mark>" in str(out)
+        assert _marked("Widgets") in str(out)
 
     def test_short_terms_dropped(self) -> None:
         """Single-letter terms are dropped to avoid stopword noise."""
         out = _highlight_excerpt("a stand-alone widgets", "a widgets")
-        assert "<mark>a</mark>" not in str(out)
-        assert "<mark>widgets</mark>" in str(out)
+        assert _marked("a") not in str(out)
+        assert _marked("widgets") in str(out)
 
     def test_two_letter_acronym_highlighted(self) -> None:
         """#125 reviewer: drop threshold to 2 so CF/DB/OS/AI work."""
         out = _highlight_excerpt("the CF foundation runs DB workloads", "CF DB")
-        assert "<mark>CF</mark>" in str(out)
-        assert "<mark>DB</mark>" in str(out)
+        assert _marked("CF") in str(out)
+        assert _marked("DB") in str(out)
 
     def test_stopwords_dropped(self) -> None:
         """Common 2-letter stopwords don't pollute the highlight."""
@@ -44,7 +61,7 @@ class TestHighlightExcerpt:
         assert "<script>" not in text
         assert "&lt;script&gt;" in text
         # The term we did highlight is still wrapped.
-        assert "<mark>hello</mark>" in text
+        assert _marked("hello") in text
 
     def test_html_in_query_term_is_escaped(self) -> None:
         """A query term containing HTML metachars can't smuggle a tag.
@@ -63,7 +80,7 @@ class TestHighlightExcerpt:
         out = _highlight_excerpt("foo & bar widgets", "widgets")
         text = str(out)
         assert "&amp;" in text
-        assert "<mark>widgets</mark>" in text
+        assert _marked("widgets") in text
 
     # ─── #291: phrase-level highlighting when terms co-occur ─────────
 
@@ -79,7 +96,7 @@ class TestHighlightExcerpt:
         )
         text = str(out)
         # Exact phrase wrapped as a single mark.
-        assert "<mark>postgres connection pool</mark>" in text
+        assert _marked("postgres connection pool") in text
         # And explicitly NOT split into three sibling marks.
         assert "<mark>postgres</mark> <mark>connection</mark> <mark>pool</mark>" not in text
 
@@ -95,7 +112,7 @@ class TestHighlightExcerpt:
         text = str(out)
         # One mark covering 'postgres   connection\tpool' with the
         # original whitespace preserved between the terms.
-        assert "<mark>postgres   connection\tpool</mark>" in text
+        assert _marked("postgres   connection\tpool") in text
 
     def test_partial_subsequence_marks_subsequence_only(self) -> None:
         """If the full phrase isn't present but a 2-of-3 contiguous
@@ -109,9 +126,9 @@ class TestHighlightExcerpt:
         )
         text = str(out)
         # 'Postgres' (single term, separately) wrapped.
-        assert "<mark>Postgres</mark>" in text
+        assert _marked("Postgres") in text
         # 'connection pool' (2-term subsequence) wrapped as ONE mark.
-        assert "<mark>connection pool</mark>" in text
+        assert _marked("connection pool") in text
 
     def test_phrase_absent_falls_back_to_per_term(self) -> None:
         """Backward-compat: when no contiguous subsequence of ≥2 terms
@@ -123,9 +140,9 @@ class TestHighlightExcerpt:
             "postgres connection pool",
         )
         text = str(out)
-        assert "<mark>postgres</mark>" in text
-        assert "<mark>connection</mark>" in text
-        assert "<mark>pool</mark>" in text
+        assert _marked("postgres") in text
+        assert _marked("connection") in text
+        assert _marked("pool") in text
 
     def test_single_term_query_unchanged_behavior(self) -> None:
         """A 1-term query has no phrase semantics — the new pass
@@ -134,7 +151,7 @@ class TestHighlightExcerpt:
         out = _highlight_excerpt("the widgets are here", "widgets")
         text = str(out)
         assert text.count("<mark>") == 1
-        assert "<mark>widgets</mark>" in text
+        assert _marked("widgets") in text
 
     def test_phrase_with_regex_metachars_is_escaped(self) -> None:
         """A query phrase containing regex metachars (., +, *, etc.)
@@ -147,7 +164,7 @@ class TestHighlightExcerpt:
         text = str(out)
         # Literal '.' and '+' are matched; nothing weird like the
         # regex `.` matching any char or `+` causing quantifier errors.
-        assert "<mark>file.ext+suffix</mark>" in text
+        assert _marked("file.ext+suffix") in text
 
     def test_phrase_html_safety_property(self) -> None:
         """End-to-end XSS guard: a query and a text BOTH carrying
@@ -201,12 +218,12 @@ class TestHighlightExcerpt:
         result = str(out)
         # Every term still gets a per-term mark (per-term path is
         # always taken regardless of the cap).
-        assert "<mark>alpha</mark>" in result
-        assert "<mark>tango</mark>" in result
+        assert _marked("alpha") in result
+        assert _marked("tango") in result
         # And NO multi-term phrase-wrapping mark appears (the phrase
         # pass was skipped past the cap). A wrapping mark would look
-        # like "<mark>alpha bravo</mark>" — assert it's absent.
-        assert "<mark>alpha bravo</mark>" not in result
+        # like _marked("alpha bravo") — assert it's absent.
+        assert _marked("alpha bravo") not in result
 
 
 class TestHumanizeWarning:
