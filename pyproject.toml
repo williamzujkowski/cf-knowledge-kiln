@@ -36,7 +36,7 @@ dependencies = [
   # form-encoded body parser. The HTMX search form posts as
   # application/x-www-form-urlencoded. Floor >=0.0.27 closes 3
   # CVEs (GHSA-wp53/mj87/pp6c) — see `.security-discoveries.jsonl`.
-  "python-multipart>=0.0.27,<1.0",
+  "python-multipart>=0.0.31,<1.0",
   # Direct starlette pin to lift the transitive floor above the
   # CVE window. fastapi 0.135.x only requires `starlette>=0.46.0`
   # (no upper bound), so bumping fastapi alone wouldn't move the
