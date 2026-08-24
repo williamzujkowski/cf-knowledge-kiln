@@ -87,7 +87,7 @@ embeddings = [
   # the `openai-compatible` and `mock` providers work without this
   # extra. Kept as an alias for back-compat — see `real-embeddings`
   # below.
-  "sentence-transformers>=5.5,<6.0",
+  "sentence-transformers>=5.5,<7.0",
 ]
 real-embeddings = [
   # Canonical name for the heavy local-inference extra. Mirrors
@@ -110,7 +110,7 @@ real-embeddings = [
   # positive top-1 scores spanned 0.484 → 0.977 with median 0.500,
   # comfortably above the configured `weak_evidence_score_threshold`
   # of 0.46. Calibration preserved.
-  "sentence-transformers>=5.5,<6.0",
+  "sentence-transformers>=5.5,<7.0",
   "transformers>=5.0,<6",
   "torch>=2.9,<3",
 ]
